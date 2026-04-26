@@ -27,6 +27,45 @@ const ForkliftAssembly = ({ distance }) => {
   const blackMat = <meshStandardMaterial color="#111111" roughness={0.9} />;
   const chassisMat = <meshStandardMaterial color="#16191a" metalness={0.6} roughness={0.4} />;
   
+  const renderWheel = (pos, isRear, isRight) => {
+    const tireRadius = isRear ? 0.25 : 0.3;
+    const tireWidth = isRear ? 0.2 : 0.25;
+    const rimRadius = isRear ? 0.15 : 0.18;
+    const zFlip = isRight ? -1 : 1; // Orientación hacia afuera
+    const yOffset = (tireWidth * 0.4) * zFlip;
+    
+    return (
+      <group position={pos} rotation={[0, 0, Math.PI / 2]}>
+        {/* Tire Main */}
+        <mesh><cylinderGeometry args={[tireRadius, tireRadius, tireWidth, 32]} />{blackMat}</mesh>
+        
+        {/* Tire Rounded Edges */}
+        <mesh position={[0, tireWidth/2, 0]}><torusGeometry args={[tireRadius-0.02, 0.02, 16, 32]} rotation={[Math.PI/2, 0, 0]} />{blackMat}</mesh>
+        <mesh position={[0, -tireWidth/2, 0]}><torusGeometry args={[tireRadius-0.02, 0.02, 16, 32]} rotation={[Math.PI/2, 0, 0]} />{blackMat}</mesh>
+        
+        {/* Outer Rim */}
+        <mesh position={[0, yOffset, 0]}><cylinderGeometry args={[rimRadius, rimRadius, 0.06, 32]} />{steelMat}</mesh>
+        
+        {/* Inner Hub Depression */}
+        <mesh position={[0, yOffset + (0.01 * zFlip), 0]}><cylinderGeometry args={[rimRadius * 0.7, rimRadius * 0.7, 0.08, 32]} />{darkMat}</mesh>
+        
+        {/* Central Axle Cap */}
+        <mesh position={[0, yOffset + (0.04 * zFlip), 0]}><cylinderGeometry args={[0.04, 0.04, 0.05, 16]} />{chassisMat}</mesh>
+        
+        {/* Lug Nuts (Tuercas) */}
+        {[0, 1, 2, 3, 4, 5].map((i) => {
+          const angle = (i / 6) * Math.PI * 2;
+          const radius = rimRadius * 0.45;
+          return (
+            <mesh key={i} position={[Math.cos(angle) * radius, yOffset + (0.03 * zFlip), Math.sin(angle) * radius]}>
+              <cylinderGeometry args={[0.015, 0.015, 0.06, 6]} />{steelMat}
+            </mesh>
+          );
+        })}
+      </group>
+    );
+  };
+
   return (
     <group position={[0, 0, 0]}>
       {/* --- CHASSIS --- */}
@@ -57,26 +96,10 @@ const ForkliftAssembly = ({ distance }) => {
 
       {/* --- WHEELS --- */}
       <group>
-        {/* Front Left */}
-        <group position={[-0.65, 0.3, 0.3]} rotation={[0, 0, Math.PI / 2]}>
-          <cylinderGeometry args={[0.3, 0.3, 0.25, 32]} />{blackMat}
-          <mesh position={[0, 0.13, 0]}><cylinderGeometry args={[0.15, 0.15, 0.02, 32]} />{steelMat}</mesh>
-        </group>
-        {/* Front Right */}
-        <group position={[0.65, 0.3, 0.3]} rotation={[0, 0, Math.PI / 2]}>
-          <cylinderGeometry args={[0.3, 0.3, 0.25, 32]} />{blackMat}
-          <mesh position={[0, -0.13, 0]}><cylinderGeometry args={[0.15, 0.15, 0.02, 32]} />{steelMat}</mesh>
-        </group>
-        {/* Rear Left */}
-        <group position={[-0.45, 0.25, -1.35]} rotation={[0, 0, Math.PI / 2]}>
-          <cylinderGeometry args={[0.25, 0.25, 0.2, 32]} />{blackMat}
-          <mesh position={[0, 0.1, 0]}><cylinderGeometry args={[0.12, 0.12, 0.02, 32]} />{steelMat}</mesh>
-        </group>
-        {/* Rear Right */}
-        <group position={[0.45, 0.25, -1.35]} rotation={[0, 0, Math.PI / 2]}>
-          <cylinderGeometry args={[0.25, 0.25, 0.2, 32]} />{blackMat}
-          <mesh position={[0, -0.1, 0]}><cylinderGeometry args={[0.12, 0.12, 0.02, 32]} />{steelMat}</mesh>
-        </group>
+        {renderWheel([-0.65, 0.3, 0.3], false, false)} {/* Front Left */}
+        {renderWheel([0.65, 0.3, 0.3], false, true)}   {/* Front Right */}
+        {renderWheel([-0.45, 0.25, -1.35], true, false)} {/* Rear Left */}
+        {renderWheel([0.45, 0.25, -1.35], true, true)}   {/* Rear Right */}
       </group>
 
       {/* --- CABIN --- */}

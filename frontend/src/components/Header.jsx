@@ -1,16 +1,19 @@
 import React from 'react';
 import { Activity, Database, Camera, Server, Settings, Zap } from 'lucide-react';
 
-const StatusLED = ({ active, label, icon: Icon }) => (
-  <div className="flex flex-col items-center justify-center gap-1 min-w-[60px] relative group">
-    <Icon size={18} className={`transition-all duration-300 ${active ? 'text-logisnext-magenta drop-shadow-[0_0_5px_rgba(221,40,118,0.8)]' : 'text-logisnext-slate opacity-50'}`} />
+const StatusLED = ({ active, label, icon: Icon, onClick }) => (
+  <div
+    className={`flex flex-col items-center justify-center gap-1 min-w-[60px] relative group ${onClick ? 'cursor-pointer' : ''}`}
+    onClick={onClick}
+  >
+    <Icon size={18} className={`transition-all duration-300 ${active ? 'text-logisnext-magenta drop-shadow-[0_0_5px_rgba(221,40,118,0.8)]' : 'text-logisnext-slate opacity-50'} ${onClick ? 'group-hover:opacity-100 group-hover:scale-110' : ''}`} />
     <span className={`text-[9px] font-bold tracking-wider uppercase transition-colors duration-300 ${active ? 'text-white' : 'text-gray-500'}`}>{label}</span>
     {/* Status Indicator Bar */}
     <div className={`absolute -bottom-2 w-full h-[2px] rounded-full transition-all duration-500 ${active ? 'bg-logisnext-magenta shadow-[0_0_8px_#dd2876]' : 'bg-transparent'}`}></div>
   </div>
 );
 
-const Header = ({ status }) => {
+const Header = ({ status, onErpClick }) => {
   return (
     <header className="h-20 bg-gradient-to-b from-[#151f25] to-[#11191e] border-b border-[#2e404a] flex items-center justify-between px-8 shrink-0 z-20 relative">
       {/* Accent Top Border */}
@@ -40,7 +43,7 @@ const Header = ({ status }) => {
           <StatusLED active={status.opc} label="OPC UA" icon={Activity} />
           <StatusLED active={status.basler} label="BASLER" icon={Camera} />
           <StatusLED active={status.db} label="SQL DB" icon={Database} />
-          <StatusLED active={status.erp} label="ERP" icon={Server} />
+          <StatusLED active={status.erp} label="ERP" icon={Server} onClick={onErpClick} />
         </div>
 
         {/* User Profile */}

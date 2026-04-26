@@ -1,5 +1,6 @@
 import React from 'react';
 import { ClipboardList, AlertCircle, FileText, LayoutTemplate, SlidersHorizontal } from 'lucide-react';
+import ErpSearch from './ErpSearch';
 
 const DataRow = ({ label, value, highlight = false }) => (
   <div className="flex justify-between items-center py-2.5 border-b border-[#2e404a]/50 last:border-0 group hover:bg-[#2e404a]/30 px-2 rounded-sm transition-colors">
@@ -10,7 +11,7 @@ const DataRow = ({ label, value, highlight = false }) => (
   </div>
 );
 
-const LeftPanel = ({ data }) => {
+const LeftPanel = ({ data, onErpData }) => {
   return (
     <aside className="w-80 bg-gradient-to-b from-[#151f25] to-[#0a0f12] h-full flex flex-col border-r border-[#2e404a] z-10 shrink-0 relative overflow-hidden">
       {/* Decorative Background Element */}
@@ -29,6 +30,9 @@ const LeftPanel = ({ data }) => {
         {data && <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e] animate-pulse"></div>}
       </div>
 
+      {/* Búsqueda de Bastidor */}
+      <ErpSearch onErpData={onErpData} />
+
       <div className="flex-1 overflow-y-auto p-5 custom-scrollbar relative z-10">
         {!data ? (
           <div className="h-full flex flex-col items-center justify-center text-logisnext-slate space-y-6">
@@ -41,8 +45,20 @@ const LeftPanel = ({ data }) => {
             </p>
           </div>
         ) : (
-          <div className="space-y-6">
-            
+          <div className="space-y-4">
+
+            {/* Fuente de datos */}
+            {data.fuente && (
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-widest border ${
+                data.fuente === 'JAULA_ERP'
+                  ? 'bg-green-900/20 border-green-500/30 text-green-400'
+                  : 'bg-blue-900/20 border-blue-500/30 text-blue-400'
+              }`}>
+                <div className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                {data.fuente === 'JAULA_ERP' ? 'DAT sincronizado' : 'DAFEED en directo'}
+              </div>
+            )}
+
             {/* Sección: Identificación */}
             <div className="bg-[#1d2930]/60 backdrop-blur-sm rounded-lg p-4 border border-[#2e404a] shadow-lg relative overflow-hidden group hover:border-[#5d7a8a] transition-colors">
               <div className="absolute top-0 left-0 w-1 h-full bg-logisnext-magenta group-hover:shadow-[0_0_15px_#dd2876] transition-shadow"></div>
@@ -52,38 +68,48 @@ const LeftPanel = ({ data }) => {
               </div>
               <DataRow label="BASTIDOR" value={data.bastidor} highlight />
               <DataRow label="MODELO" value={data.modelo} />
-              <DataRow label="MASTIL" value={data.mastil} />
+              <DataRow label="MÁSTIL" value={data.mastil} />
               <DataRow label="SECUENCIA" value={data.secuencia} />
-              <DataRow label="FECHA MONTAJE" value={data.fecha_montaje} />
+              {data.fecha_montaje && <DataRow label="FEC. MONTAJE" value={data.fecha_montaje} />}
+              {data.maquina && <DataRow label="MÁQUINA" value={data.maquina} />}
+              {data.tonelaje && <DataRow label="TONELAJE" value={data.tonelaje} />}
             </div>
 
-            {/* Sección: Parámetros Carga */}
+            {/* Sección: Capacidades */}
             <div className="bg-[#1d2930]/60 backdrop-blur-sm rounded-lg p-4 border border-[#2e404a] shadow-lg group hover:border-[#5d7a8a] transition-colors">
               <div className="flex items-center gap-2 mb-3 border-b border-[#2e404a] pb-2">
                 <LayoutTemplate size={14} className="text-logisnext-lightslate" />
-                <h3 className="text-[10px] text-logisnext-lightslate font-black uppercase tracking-widest">Estructural</h3>
+                <h3 className="text-[10px] text-logisnext-lightslate font-black uppercase tracking-widest">Parámetros</h3>
               </div>
-              <DataRow label="ALT. MAX INTERM." value={`${data.altura_max_interm} mm`} highlight />
-              <DataRow label="CAPAC. INTERM." value={`${data.capac_interm_1} kg`} />
+              <DataRow label="ALT. MAX INTERM." value={data.altura_max_interm != null ? `${data.altura_max_interm} mm` : null} highlight />
+              <DataRow label="CAPAC. INTERM. 1" value={data.capac_interm_1 != null ? `${data.capac_interm_1} kg` : null} />
+              <DataRow label="CAPAC. INTERM. 2" value={data.capac_interm_2 != null ? `${data.capac_interm_2} kg` : null} />
+              <DataRow label="CAPAC. INTERM. 3" value={data.capac_interm_3 != null ? `${data.capac_interm_3} kg` : null} />
             </div>
 
-            {/* Sección: Tolerancias */}
+            {/* Sección: Tolerancias CON CARGA */}
             <div className="bg-[#1d2930]/60 backdrop-blur-sm rounded-lg p-4 border border-[#2e404a] shadow-lg group hover:border-[#5d7a8a] transition-colors">
               <div className="flex items-center gap-2 mb-3 border-b border-[#2e404a] pb-2">
                 <SlidersHorizontal size={14} className="text-logisnext-lightslate" />
-                <h3 className="text-[10px] text-logisnext-lightslate font-black uppercase tracking-widest">Tolerancias de Prueba</h3>
+                <h3 className="text-[10px] text-logisnext-lightslate font-black uppercase tracking-widest">Tolerancias</h3>
               </div>
-              <div className="mt-2 mb-1">
-                <span className="text-[9px] text-logisnext-magenta font-bold uppercase tracking-widest">Con Carga</span>
+              <div className="mb-2">
+                <span className="text-[9px] text-logisnext-magenta font-black uppercase tracking-widest">Con Carga</span>
               </div>
-              <DataRow label="ELEVAC. RANGO" value={`${data.tpo_elevac_min}s - ${data.tpo_elevac_max}s`} />
-              <DataRow label="DESCENSO RANGO" value={`${data.tpo_descenso_min}s - ${data.tpo_descenso_max}s`} />
-              
-              <div className="mt-4 mb-1">
-                <span className="text-[9px] text-logisnext-magenta font-bold uppercase tracking-widest">Sin Carga</span>
+              <DataRow label="ELEVAC." value={data.tpo_elevac_min != null ? `${data.tpo_elevac_min}s — ${data.tpo_elevac_max}s` : null} />
+              <DataRow label="DESCENSO" value={data.tpo_descenso_min != null ? `${data.tpo_descenso_min}s — ${data.tpo_descenso_max}s` : null} />
+              <DataRow label="INCL. ADELANTE" value={data.tpo_incl_adel_max != null ? `≤ ${data.tpo_incl_adel_max}s` : null} />
+              <DataRow label="INCL. ATRÁS" value={data.tpo_incl_atras_max != null ? `≤ ${data.tpo_incl_atras_max}s` : null} />
+              <div className="mt-3 mb-2">
+                <span className="text-[9px] text-logisnext-magenta font-black uppercase tracking-widest">Sin Carga</span>
               </div>
-              <DataRow label="ELEVAC. RANGO" value={`${data.tpo_elev_min_scarga}s - ${data.tpo_elev_max_scarga}s`} />
-              <DataRow label="DESCENSO RANGO" value={`${data.tpo_desc_min_scarga}s - ${data.tpo_desc_max_scarga}s`} />
+              <DataRow label="ELEVAC." value={data.tpo_elev_min_scarga != null ? `${data.tpo_elev_min_scarga}s — ${data.tpo_elev_max_scarga}s` : null} />
+              <DataRow label="DESCENSO" value={data.tpo_desc_min_scarga != null ? `${data.tpo_desc_min_scarga}s — ${data.tpo_desc_max_scarga}s` : null} />
+
+              {/* Aviso si no hay datos del DAT */}
+              {data.tpo_elevac_min == null && (
+                <p className="mt-2 text-[9px] text-yellow-500/70 italic">Sincroniza el DAT para ver tiempos reales</p>
+              )}
             </div>
 
           </div>

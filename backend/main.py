@@ -1,11 +1,50 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 import asyncio
-import json
 import random
 import time
+import os
+import sys
 
-app = FastAPI()
+from database.database import engine, get_db
+from database.models import init_db, PruebaElevacion, ErpCarretilla
+from database.crud import create_prueba, update_prueba_resultado, get_pruebas_by_bastidor
+from erp_sync import parse_and_sync_dat
+
+# ─────────────────────────────────────────────────────────────
+# Resolución de rutas (compatible con PyInstaller --onefile)
+# ─────────────────────────────────────────────────────────────
+def resource_path(relative_path: str) -> str:
+    """Devuelve la ruta absoluta, funciona tanto en dev como en .exe PyInstaller."""
+    if hasattr(sys, '_MEIPASS'):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, relative_path)
+
+# ─────────────────────────────────────────────────────────────
+# Inicialización de la aplicación
+# ─────────────────────────────────────────────────────────────
+
+app = FastAPI(
+    title="HMI Jaula Elevación – API",
+    description="Backend para el sistema HMI de pruebas de elevación de carretillas Logisnext.",
+    version="2.0.0",
+)
+
+@app.on_event("startup")
+def on_startup():
+    """Inicializa las tablas de BD al arrancar el servidor."""
+    try:
+        init_db()
+        print("[OK] Base de datos lista.")
+    except Exception as e:
+        print(f"[WARN] No se pudo inicializar la BD: {e}")
+        print("   El servidor arrancara en modo solo-simulacion.")
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,46 +54,345 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Datos de prueba del ERP (Mock NG6OF1)
-mock_erp_data = {
-    "fecha_montaje": "20260424",
-    "secuencia": "0001",
-    "modelo": "FB16A-12",
-    "bastidor": "LOG-1234567890-ESP",
-    "mastil": "TF500",
-    "altura_max_interm": 5000,
-    "capac_interm_1": 1600,
-    "tpo_elevac_min": 5.0,
-    "tpo_elevac_max": 7.0,
-    "tpo_descenso_min": 4.5,
-    "tpo_descenso_max": 6.0,
-    "tpo_incl_adel_max": 2.5,
-    "tpo_incl_atras_max": 3.0,
-    "tpo_elev_min_scarga": 4.0,
-    "tpo_elev_max_scarga": 5.5,
-    "tpo_desc_min_scarga": 3.5,
-    "tpo_desc_max_scarga": 5.0
-}
+
+# ─────────────────────────────────────────────────────────────
+# ERP REST Endpoints — tablas reales DAFEED
+# ─────────────────────────────────────────────────────────────
+
+@app.get("/erp/bastidor/{bastidor}")
+def buscar_bastidor(bastidor: str, db: Session = Depends(get_db)):
+    """
+    Busca una carretilla por BASTIDOR.
+    Prioridad: JAULA_ERP (datos completos del DAT) -> Secuencia_Mastiles (DAFEED live).
+    """
+    bastidor_q = bastidor.strip()
+
+    # ── 1. Buscar en JAULA_ERP (caché del DAT con todos los tiempos) ──
+    erp = db.query(ErpCarretilla).filter(
+        ErpCarretilla.bastidor.ilike(f"%{bastidor_q}%")
+    ).first()
+
+    if erp:
+        return {
+            "status": "found",
+            "fuente": "JAULA_ERP",
+            "bastidor": erp.bastidor,
+            "secuencia": erp.secuencia,
+            "modelo": erp.modelo,
+            "mastil": erp.mastil,
+            "fecha_montaje": erp.fecha_montaje,
+            "descripcion": erp.modelo,
+            "referencia_mastil": erp.mastil,
+            "longitud_mm": erp.altura_max_interm,
+            "maquina": None,
+            "familia": None,
+            "tonelaje": None,
+            # Parámetros de prueba — datos reales del DAT
+            "altura_max_interm": erp.altura_max_interm,
+            "capac_interm_1": erp.capac_interm_1,
+            "capac_interm_2": erp.capac_interm_2,
+            "capac_interm_3": erp.capac_interm_3,
+            "tpo_elevac_min": erp.tpo_elevac_min,
+            "tpo_elevac_max": erp.tpo_elevac_max,
+            "tpo_descenso_min": erp.tpo_descenso_min,
+            "tpo_descenso_max": erp.tpo_descenso_max,
+            "tpo_incl_adel_max": erp.tpo_incl_adel_max,
+            "tpo_incl_atras_max": erp.tpo_incl_atras_max,
+            "tpo_elev_min_scarga": erp.tpo_elev_min_scarga,
+            "tpo_elev_max_scarga": erp.tpo_elev_max_scarga,
+            "tpo_desc_min_scarga": erp.tpo_desc_min_scarga,
+            "tpo_desc_max_scarga": erp.tpo_desc_max_scarga,
+        }
+
+
+    # ── 2. Fallback: Secuencia_Mastiles (DAFEED live) ──
+    try:
+        bast_like = f"%{bastidor_q}%"
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("""
+                    SELECT TOP 1
+                        TRIM(SECUENCIA)   AS secuencia,
+                        TRIM(REFERENCIA)  AS referencia,
+                        TRIM(DESCRIPCION) AS descripcion,
+                        TRIM(BASTIDOR)    AS bastidor
+                    FROM Secuencia_Mastiles
+                    WHERE BASTIDOR LIKE :bast
+                    ORDER BY SECUENCIA DESC
+                """),
+                {"bast": bast_like}
+            ).fetchone()
+
+            if not row:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Bastidor '{bastidor}' no encontrado. Sincroniza el DAT o verifica DAFEED."
+                )
+
+            data = dict(row._mapping)
+            referencia = data["referencia"].strip()
+
+            ref_row = conn.execute(
+                text("""
+                    SELECT TOP 1
+                        [DESCRIPCION MASTIL] AS mastil_desc,
+                        [LONGITUD _MASTIL (m)] AS longitud_mm,
+                        [REF# MASTIL] AS ref_mastil,
+                        MAQUINA, PISTA, FAM, Ton
+                    FROM REFERENCIAS_MASTILES
+                    WHERE [REF# MASTIL] = :ref
+                """),
+                {"ref": referencia}
+            ).fetchone()
+
+            ref_data = dict(ref_row._mapping) if ref_row else {}
+
+        longitud = ref_data.get("longitud_mm")
+        return {
+            "status": "found",
+            "fuente": "DAFEED",
+            "bastidor": data["bastidor"],
+            "secuencia": data["secuencia"],
+            "modelo": ref_data.get("mastil_desc") or data["descripcion"],
+            "mastil": ref_data.get("ref_mastil") or referencia,
+            "fecha_montaje": None,
+            "descripcion": data["descripcion"],
+            "referencia_mastil": referencia,
+            "longitud_mm": longitud,
+            "maquina": ref_data.get("MAQUINA"),
+            "familia": ref_data.get("FAM"),
+            "tonelaje": ref_data.get("Ton"),
+            "altura_max_interm": int(longitud) if longitud else None,
+            "capac_interm_1": None, "capac_interm_2": None, "capac_interm_3": None,
+            "tpo_elevac_min": None, "tpo_elevac_max": None,
+            "tpo_descenso_min": None, "tpo_descenso_max": None,
+            "tpo_incl_adel_max": None, "tpo_incl_atras_max": None,
+            "tpo_elev_min_scarga": None, "tpo_elev_max_scarga": None,
+            "tpo_desc_min_scarga": None, "tpo_desc_max_scarga": None,
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Bastidor '{bastidor}' no encontrado en JAULA_ERP ni en DAFEED."
+        )
+
+
+# ─────────────────────────────────────────────────────────────
+# Búsqueda por SECUENCIA
+# ─────────────────────────────────────────────────────────────
+
+def _erp_row_to_dict(erp) -> dict:
+    """Serializa un objeto ErpCarretilla al formato de respuesta estándar."""
+    return {
+        "status": "found",
+        "fuente": "JAULA_ERP",
+        "bastidor":          erp.bastidor,
+        "secuencia":         erp.secuencia,
+        "modelo":            erp.modelo,
+        "mastil":            erp.mastil,
+        "fecha_montaje":     erp.fecha_montaje,
+        "descripcion":       erp.modelo,
+        "referencia_mastil": erp.mastil,
+        "longitud_mm":       erp.altura_max_interm,
+        "maquina": None, "familia": None, "tonelaje": None,
+        "altura_max_interm":     erp.altura_max_interm,
+        "capac_interm_1":        erp.capac_interm_1,
+        "capac_interm_2":        erp.capac_interm_2,
+        "capac_interm_3":        erp.capac_interm_3,
+        "tpo_elevac_min":        erp.tpo_elevac_min,
+        "tpo_elevac_max":        erp.tpo_elevac_max,
+        "tpo_descenso_min":      erp.tpo_descenso_min,
+        "tpo_descenso_max":      erp.tpo_descenso_max,
+        "tpo_incl_adel_max":     erp.tpo_incl_adel_max,
+        "tpo_incl_atras_max":    erp.tpo_incl_atras_max,
+        "tpo_elev_min_scarga":   erp.tpo_elev_min_scarga,
+        "tpo_elev_max_scarga":   erp.tpo_elev_max_scarga,
+        "tpo_desc_min_scarga":   erp.tpo_desc_min_scarga,
+        "tpo_desc_max_scarga":   erp.tpo_desc_max_scarga,
+    }
+
+
+@app.get("/erp/secuencia/{secuencia}")
+def buscar_secuencia(secuencia: str, db: Session = Depends(get_db)):
+    """
+    Busca una carretilla por número de SECUENCIA (4 dígitos) en JAULA_ERP.
+    Acepta búsqueda parcial — p.ej. '210' encuentra '0210'.
+    """
+    seq_q = secuencia.strip().zfill(4)   # rellena con ceros a la izquierda
+
+    erp = db.query(ErpCarretilla).filter(
+        ErpCarretilla.secuencia.ilike(f"%{seq_q}%")
+    ).first()
+
+    if erp:
+        return _erp_row_to_dict(erp)
+
+    raise HTTPException(
+        status_code=404,
+        detail=f"Secuencia '{secuencia}' no encontrada en JAULA_ERP. Verifica el número o sincroniza el DAT."
+    )
+
+
+
+@app.get("/erp/carretillas")
+def listar_carretillas(limit: int = 500, db: Session = Depends(get_db)):
+    """
+    Lista todas las carretillas de JAULA_ERP con todos sus campos técnicos.
+    Fallback: Secuencia_Mastiles en DAFEED si está disponible.
+    """
+    erp_rows = (
+        db.query(ErpCarretilla)
+        .order_by(ErpCarretilla.secuencia.desc())
+        .limit(limit)
+        .all()
+    )
+    if erp_rows:
+        items = [
+            {
+                # ── Identificación ──────────────────────────────
+                "bastidor":         r.bastidor or "",
+                "secuencia":        r.secuencia or "",
+                "descripcion":      r.modelo or "",
+                "referencia":       r.mastil or "",
+                "modelo":           r.modelo or "",
+                "mastil":           r.mastil or "",
+                "fecha_montaje":    r.fecha_montaje or "",
+                "fecha_importacion": str(r.fecha_importacion)[:10] if r.fecha_importacion else "",
+                # ── Geometría ───────────────────────────────────
+                "altura_max_interm": r.altura_max_interm,
+                # ── Capacidades intermedias (kg) ─────────────────
+                "capac_interm_1":   r.capac_interm_1,
+                "capac_interm_2":   r.capac_interm_2,
+                "capac_interm_3":   r.capac_interm_3,
+                # ── Tiempos CON CARGA (décimas de segundo) ───────
+                "tpo_elevac_min":   r.tpo_elevac_min,
+                "tpo_elevac_max":   r.tpo_elevac_max,
+                "tpo_descenso_min": r.tpo_descenso_min,
+                "tpo_descenso_max": r.tpo_descenso_max,
+                "tpo_incl_adel_max":  r.tpo_incl_adel_max,
+                "tpo_incl_atras_max": r.tpo_incl_atras_max,
+                # ── Tiempos SIN CARGA (décimas de segundo) ───────
+                "tpo_elev_min_scarga":  r.tpo_elev_min_scarga,
+                "tpo_elev_max_scarga":  r.tpo_elev_max_scarga,
+                "tpo_desc_min_scarga":  r.tpo_desc_min_scarga,
+                "tpo_desc_max_scarga":  r.tpo_desc_max_scarga,
+            }
+            for r in erp_rows
+        ]
+        return {"total": len(items), "items": items, "fuente": "JAULA_ERP"}
+
+    # — Fallback DAFEED —
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text("""
+                    SELECT TOP :lim
+                        TRIM(SECUENCIA)   AS secuencia,
+                        TRIM(REFERENCIA)  AS referencia,
+                        TRIM(DESCRIPCION) AS descripcion,
+                        TRIM(BASTIDOR)    AS bastidor
+                    FROM Secuencia_Mastiles
+                    ORDER BY SECUENCIA DESC
+                """),
+                {"lim": limit}
+            ).fetchall()
+        items = [dict(r._mapping) for r in rows]
+        return {"total": len(items), "items": items, "fuente": "DAFEED"}
+    except Exception:
+        pass
+
+    return {"total": 0, "items": [], "fuente": "ninguna", "mensaje": "Importa el fichero DATOSMAST.DAT con SYNC DAT"}
+
+
+
+@app.post("/erp/sync")
+def sincronizar_erp():
+    """
+    Importa el fichero DATOSMAST.DAT a la tabla local JAULA_ERP (caché de ERP).
+    Los datos en tiempo real se consultan directamente desde DAFEED.
+    """
+    resultado = parse_and_sync_dat()
+    if resultado["status"] == "error":
+        raise HTTPException(status_code=500, detail=resultado["message"])
+    return resultado
+
+
+@app.get("/erp/status")
+def estado_erp():
+    """Verifica la conexión a DAFEED y devuelve el número de registros."""
+    try:
+        with engine.connect() as conn:
+            count = conn.execute(
+                text("SELECT COUNT(*) FROM Secuencia_Mastiles")
+            ).scalar()
+        return {"connected": True, "total_registros": count, "fuente": "DAFEED/Secuencia_Mastiles"}
+    except Exception as e:
+        return {"connected": False, "error": str(e)}
+
+
+# ─────────────────────────────────────────────────────────────
+# Pruebas Endpoints
+# ─────────────────────────────────────────────────────────────
+
+@app.get("/pruebas/bastidor/{bastidor}")
+def historial_pruebas(bastidor: str, db: Session = Depends(get_db)):
+    """Devuelve el historial de pruebas de elevación de un bastidor."""
+    pruebas = get_pruebas_by_bastidor(db, bastidor)
+    return {
+        "bastidor": bastidor,
+        "total": len(pruebas),
+        "historial": [
+            {
+                "id": p.id,
+                "estado": p.estado_final,
+                "tiempo_real": p.tiempo_real_elevacion,
+                "fecha": str(p.fecha_creacion),
+            }
+            for p in pruebas
+        ]
+    }
+
+
+@app.post("/pruebas/nueva")
+def nueva_prueba(prueba_data: dict, db: Session = Depends(get_db)):
+    """Registra una nueva prueba de elevación en la base de datos."""
+    prueba = create_prueba(db, prueba_data)
+    return {"status": "created", "id": prueba.id}
+
+
+@app.put("/pruebas/{prueba_id}/resultado")
+def finalizar_prueba(prueba_id: int, resultado: dict, db: Session = Depends(get_db)):
+    """Actualiza el resultado final de una prueba (tiempo real + estado OK/KO)."""
+    prueba = update_prueba_resultado(
+        db,
+        prueba_id,
+        resultado.get("tiempo_real", 0.0),
+        resultado.get("estado", "KO"),
+    )
+    if not prueba:
+        raise HTTPException(status_code=404, detail="Prueba no encontrada.")
+    return {"status": "updated", "estado": prueba.estado_final}
+
+
+# ─────────────────────────────────────────────────────────────
+# WebSocket — Telemetría en tiempo real
+# ─────────────────────────────────────────────────────────────
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    
-    # Send ERP data immediately
-    await websocket.send_json({
-        "type": "erp",
-        "data": mock_erp_data
-    })
-    
+
     start_time = time.time()
     distance = 0.0
-    direction = 1 # 1 para subir, -1 para bajar
+    direction = 1  # 1 = subir, -1 = bajar
     state = "ASCENDIENDO"
 
     try:
         while True:
             # Simular telemetría del láser (0 a 5000mm)
-            distance += (random.uniform(50, 150) * direction)
+            distance += random.uniform(50, 150) * direction
             if distance >= 5000:
                 distance = 5000
                 direction = -1
@@ -63,22 +401,74 @@ async def websocket_endpoint(websocket: WebSocket):
                 distance = 0
                 direction = 1
                 state = "ASCENDIENDO"
-                
+
             elapsed = time.time() - start_time
-            
+
             await websocket.send_json({
                 "type": "telemetry",
-                "distance": distance,
-                "timer": elapsed,
-                "state": state
+                "distance": round(distance, 1),
+                "timer": round(elapsed, 2),
+                "state": state,
             })
-            
-            # 10 Hz refresh rate for smooth animation
-            await asyncio.sleep(0.1)
-            
+
+            await asyncio.sleep(0.1)  # 10 Hz
+
     except WebSocketDisconnect:
-        print("Client disconnected")
+        print("[WS] Cliente desconectado.")
+
+
+# ─────────────────────────────────────────────────────────────
+# Health check
+# ─────────────────────────────────────────────────────────────
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "version": "2.0.0"}
+
+
+@app.get("/health/db")
+def health_db():
+    """
+    Comprueba la conexión real a la base de datos.
+    Devuelve connected=true si el engine puede ejecutar SELECT 1.
+    """
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        # Contar registros en tablas clave
+        with engine.connect() as conn:
+            n_erp    = conn.execute(text("SELECT COUNT(*) FROM JAULA_ERP")).scalar()
+            n_pruebas = conn.execute(text("SELECT COUNT(*) FROM pruebas_elevacion")).scalar()
+        return {
+            "connected": True,
+            "jaula_erp": n_erp,
+            "pruebas":   n_pruebas,
+        }
+    except Exception as e:
+        return {"connected": False, "error": str(e)}
+
+
+
+# ─────────────────────────────────────────────────────────────
+# Servir frontend compilado (Vite dist/) como archivos estáticos
+# ─────────────────────────────────────────────────────────────
+_frontend_dist = resource_path("dist")
+if os.path.isdir(_frontend_dist):
+    app.mount("/assets", StaticFiles(directory=os.path.join(_frontend_dist, "assets")), name="assets")
+
+    @app.get("/", include_in_schema=False)
+    async def serve_root():
+        return FileResponse(os.path.join(_frontend_dist, "index.html"))
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        """Catch-all: sirve el index.html para rutas del SPA que no sean /api."""
+        file_path = os.path.join(_frontend_dist, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(_frontend_dist, "index.html"))
+
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
