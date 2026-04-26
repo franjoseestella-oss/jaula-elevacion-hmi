@@ -1,6 +1,5 @@
 import React from 'react';
 import { ClipboardList, AlertCircle, FileText, LayoutTemplate, SlidersHorizontal } from 'lucide-react';
-import ErpSearch from './ErpSearch';
 
 const DataRow = ({ label, value, highlight = false }) => (
   <div className="flex justify-between items-center py-2.5 border-b border-[#2e404a]/50 last:border-0 group hover:bg-[#2e404a]/30 px-2 rounded-sm transition-colors">
@@ -30,8 +29,6 @@ const LeftPanel = ({ data, onErpData }) => {
         {data && <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_#22c55e] animate-pulse"></div>}
       </div>
 
-      {/* Búsqueda de Bastidor */}
-      <ErpSearch onErpData={onErpData} />
 
       <div className="flex-1 overflow-y-auto p-5 custom-scrollbar relative z-10">
         {!data ? (

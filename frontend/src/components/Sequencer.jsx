@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Layers, Barcode, ArrowUpDown, Timer, Weight,
   CheckCircle2, AlertTriangle, SkipForward, Loader2,
-  RotateCcw, Ruler, Lock
+  RotateCcw, Ruler, Lock, Hash
 } from 'lucide-react';
 
 
@@ -119,7 +119,9 @@ const Sequencer = ({ erpData, onErpData }) => {
   const [seqInput, setSeqInput]     = useState('');
   const [seqLoading, setSeqLoading] = useState(false);
   const [seqError, setSeqError]     = useState('');
-  const [scannedSeq, setScannedSeq] = useState(null); // { raw, digits } — pendiente de confirmar
+  const [scannedSeq, setScannedSeq] = useState(null);
+  const [inputMode, setInputMode]   = useState('scanner'); // 'scanner' | 'manual'
+  const [manualDigits, setManualDigits] = useState('');    // dígitos teclados a mano
   const [timer5min, setTimer5min]   = useState(null);
   const [visionOk, setVisionOk]     = useState(false);
   const inputRef = useRef(null);
@@ -131,8 +133,25 @@ const Sequencer = ({ erpData, onErpData }) => {
     setSeqInput('');
     setSeqError('');
     setScannedSeq(null);
+    setManualDigits('');
     setTimer5min(null);
     setVisionOk(false);
+  };
+
+  // ── Teclado numérico manual ───────────────────────────────────────────────
+  const handleNumpadPress = (key) => {
+    setSeqError('');
+    if (key === 'DEL') {
+      setManualDigits(prev => prev.slice(0, -1));
+    } else if (key === 'OK') {
+      if (manualDigits.length > 0) {
+        const digits = manualDigits.padStart(4, '0');
+        setScannedSeq({ raw: manualDigits, digits });
+        setManualDigits('');
+      }
+    } else if (manualDigits.length < 4) {
+      setManualDigits(prev => prev + key);
+    }
   };
 
   // ── Avanzar paso ──────────────────────────────────────────────────────────
@@ -271,31 +290,55 @@ const Sequencer = ({ erpData, onErpData }) => {
         <StepCard num={1} icon={Barcode} title="Identificar carretilla" status={stepStatus[0]}>
           {stepStatus[0] === STEP_STATUS.ACTIVE && (
             <>
-              {/* Input oculto — captura el escáner de código de barras */}
-              <form
-                onSubmit={(e) => { e.preventDefault(); handleLeerSecuencia(); }}
-                onClick={handleStepClick}
-              >
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={seqInput}
-                  onChange={(e) => {
-                    const v = e.target.value;          // el lector puede mandar todo tipo de chars
-                    setSeqInput(v);
-                    setSeqError('');
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') { e.preventDefault(); handleLeerSecuencia(); }
-                  }}
-                  className="sr-only"
-                  autoFocus
-                  tabIndex={0}
-                />
-              </form>
+              {/* ── Selector de modo ── */}
+              {!scannedSeq && !seqLoading && (
+                <div className="flex rounded-lg overflow-hidden border border-[#2e404a] mb-2">
+                  <button
+                    onClick={() => { setInputMode('scanner'); setManualDigits(''); setSeqError(''); setTimeout(() => inputRef.current?.focus(), 50); }}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${
+                      inputMode === 'scanner'
+                        ? 'bg-logisnext-magenta/20 text-logisnext-magenta border-r border-logisnext-magenta/30'
+                        : 'bg-transparent text-logisnext-slate hover:text-white border-r border-[#2e404a]'
+                    }`}
+                  >
+                    <Barcode size={10} /> Escáner
+                  </button>
+                  <button
+                    onClick={() => { setInputMode('manual'); setSeqInput(''); setSeqError(''); }}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${
+                      inputMode === 'manual'
+                        ? 'bg-logisnext-magenta/20 text-logisnext-magenta'
+                        : 'bg-transparent text-logisnext-slate hover:text-white'
+                    }`}
+                  >
+                    <Hash size={10} /> Manual
+                  </button>
+                </div>
+              )}
 
-              {/* ── Estado: esperando lectura ── */}
-              {!scannedSeq && (
+              {/* Input oculto — solo activo en modo escáner */}
+              {inputMode === 'scanner' && (
+                <form
+                  onSubmit={(e) => { e.preventDefault(); handleLeerSecuencia(); }}
+                  onClick={handleStepClick}
+                >
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={seqInput}
+                    onChange={(e) => { setSeqInput(e.target.value); setSeqError(''); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); handleLeerSecuencia(); }
+                    }}
+                    className="sr-only"
+                    autoFocus
+                    tabIndex={0}
+                  />
+                </form>
+              )}
+
+              {/* ── Estado: esperando lectura (Modo Escáner) ── */}
+              {!scannedSeq && inputMode === 'scanner' && (
                 <div
                   onClick={handleStepClick}
                   className={`relative flex flex-col items-center justify-center gap-3 py-5 px-4 rounded-xl border-2 border-dashed cursor-text transition-all ${
@@ -327,6 +370,44 @@ const Sequencer = ({ erpData, onErpData }) => {
                       {seqInput.replace(/\D/g, '').padEnd(4, '·')}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* ── Estado: teclado manual (Modo Manual) ── */}
+              {!scannedSeq && inputMode === 'manual' && (
+                <div className="flex flex-col gap-3">
+                  <div className={`p-3 rounded-lg border flex items-center justify-center bg-[#0a0f12] shadow-inner ${seqError ? 'border-red-500/50' : 'border-[#2e404a]'}`}>
+                    <div className="font-mono text-3xl font-black text-white tracking-[0.4em] h-9">
+                      {manualDigits.padEnd(4, '·')}
+                    </div>
+                  </div>
+                  {seqError && (
+                    <div className="flex items-center justify-center gap-1 text-red-400 mt-[-4px]">
+                      <AlertTriangle size={10} />
+                      <span className="text-[9px] font-medium">{seqError}</span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-3 gap-2">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
+                      <button key={n} onClick={() => handleNumpadPress(n.toString())} className="h-10 bg-[#1d2930] hover:bg-[#2e404a] text-white font-mono text-lg rounded-lg transition-colors border border-[#2e404a]">
+                        {n}
+                      </button>
+                    ))}
+                    <button onClick={() => handleNumpadPress('DEL')} className="h-10 bg-[#1d2930] hover:bg-red-900/40 text-red-400 font-bold text-xs rounded-lg transition-colors border border-[#2e404a]">
+                      DEL
+                    </button>
+                    <button onClick={() => handleNumpadPress('0')} className="h-10 bg-[#1d2930] hover:bg-[#2e404a] text-white font-mono text-lg rounded-lg transition-colors border border-[#2e404a]">
+                      0
+                    </button>
+                    <button 
+                      onClick={() => handleNumpadPress('OK')} 
+                      disabled={manualDigits.length === 0}
+                      className="h-10 bg-logisnext-magenta hover:bg-logisnext-magenta/80 text-white font-bold text-xs rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-logisnext-magenta border border-logisnext-magenta/50"
+                    >
+                      OK
+                    </button>
+                  </div>
                 </div>
               )}
 
