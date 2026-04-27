@@ -1,10 +1,238 @@
 import React, { useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Grid, Environment, RoundedBox } from '@react-three/drei';
+import { OrbitControls, Grid, Environment, RoundedBox, Text } from '@react-three/drei';
 import * as THREE from 'three';
 
 // Constantes físicas simuladas
 const MAX_MAST_HEIGHT = 5000; // 5000mm
+
+// Componente auxiliar para crear barras con franjas amarillas y negras
+const StripedBar = ({ args, position, rotation, isVertical }) => {
+  const numStripes = 10;
+  const length = isVertical ? args[1] : args[0];
+  const thickness = isVertical ? args[0] : args[1];
+  const depth = args[2];
+  
+  return (
+    <group position={position} rotation={rotation || [0, 0, 0]}>
+      <mesh>
+        <boxGeometry args={args} />
+        <meshStandardMaterial color="#ffcc00" roughness={0.8} />
+      </mesh>
+      {Array.from({ length: numStripes }).map((_, i) => {
+        const offset = (i / numStripes) * length - length / 2 + (length / numStripes) / 2;
+        const pos = isVertical ? [0, offset, 0] : [offset, 0, 0];
+        const blackArgs = isVertical 
+          ? [thickness * 1.05, length / numStripes / 2, depth * 1.05]
+          : [length / numStripes / 2, thickness * 1.05, depth * 1.05];
+        return (
+          <mesh key={i} position={pos}>
+            <boxGeometry args={blackArgs} />
+            <meshStandardMaterial color="#111111" roughness={0.9} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+};
+
+// ── COMPONENTE LÁSER WENGLOR ──
+const WenglorLaser = ({ position, beamLength }) => {
+  return (
+    <group position={position}>
+      {/* Cuerpo principal (Azul Wenglor) */}
+      <mesh position={[0, 0.075, 0]}>
+        <boxGeometry args={[0.05, 0.15, 0.12]} />
+        <meshStandardMaterial color="#1f618d" roughness={0.3} metalness={0.2} />
+      </mesh>
+      {/* Cara óptica (Negro brillante, apuntando hacia ABAJO) */}
+      <mesh position={[0, -0.001, 0]}>
+        <boxGeometry args={[0.04, 0.005, 0.10]} />
+        <meshStandardMaterial color="#111" roughness={0.1} metalness={0.8} />
+      </mesh>
+      {/* Conector M12 (Plateado, en la parte superior) */}
+      <mesh position={[0, 0.16, 0]}>
+        <cylinderGeometry args={[0.01, 0.01, 0.02]} />
+        <meshStandardMaterial color="#ccc" metalness={0.8} roughness={0.2} />
+      </mesh>
+
+      {/* Haz de luz Láser (Rojo) */}
+      <mesh position={[0, -beamLength / 2, 0]}>
+        <cylinderGeometry args={[0.005, 0.005, beamLength]} />
+        <meshBasicMaterial color="#ff0000" transparent opacity={0.6} />
+      </mesh>
+
+      {/* Punto de impacto láser (Suelo u objeto) */}
+      <mesh position={[0, -beamLength + 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.04, 16]} />
+        <meshBasicMaterial color="#ff0000" />
+      </mesh>
+    </group>
+  );
+};
+
+const CageAssembly = () => {
+  const gateRef = useRef();
+  const frontGateRef = useRef();
+
+  useFrame((state) => {
+    if (gateRef.current) {
+      // La valla neumática trasera
+      gateRef.current.position.y = 5.0 + Math.sin(state.clock.elapsedTime * 0.5) * 1.4;
+    }
+    if (frontGateRef.current) {
+      // La valla neumática frontal (baja solo hasta la altura del pallet más alto)
+      frontGateRef.current.position.y = 6.5 + Math.sin(state.clock.elapsedTime * 0.5 + Math.PI) * 1.0;
+    }
+  });
+
+  return (
+    <group>
+      {/* ── ESTRUCTURA BLANCA (JAULA) ── */}
+      <group>
+        {/* Pilares verticales */}
+        <mesh position={[-1.2, 4, -0.5]}><boxGeometry args={[0.3, 8, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[1.2, 4, -0.5]}><boxGeometry args={[0.3, 8, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[-1.2, 4, 3.0]}><boxGeometry args={[0.3, 8, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[1.2, 4, 3.0]}><boxGeometry args={[0.3, 8, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+
+        {/* Vigas superiores */}
+        <mesh position={[0, 7.85, -0.5]}><boxGeometry args={[2.7, 0.3, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[0, 7.85, 3.0]}><boxGeometry args={[2.7, 0.3, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[-1.2, 7.85, 1.25]}><boxGeometry args={[0.3, 0.3, 3.5]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[1.2, 7.85, 1.25]}><boxGeometry args={[0.3, 0.3, 3.5]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+
+        {/* Vigas medias laterales */}
+        <mesh position={[-1.2, 4, 1.25]}><boxGeometry args={[0.15, 0.15, 3.5]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[1.2, 4, 1.25]}><boxGeometry args={[0.15, 0.15, 3.5]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        
+        {/* Tirantes diagonales */}
+        <mesh position={[-1.2, 6, 1.25]} rotation={[0.7188, 0, 0]}><boxGeometry args={[0.1, 5.315, 0.1]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[-1.2, 6, 1.25]} rotation={[-0.7188, 0, 0]}><boxGeometry args={[0.1, 5.315, 0.1]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[1.2, 6, 1.25]} rotation={[0.7188, 0, 0]}><boxGeometry args={[0.1, 5.315, 0.1]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[1.2, 6, 1.25]} rotation={[-0.7188, 0, 0]}><boxGeometry args={[0.1, 5.315, 0.1]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+
+        {/* Base negra del suelo */}
+        <mesh position={[0, 0.01, 1.25]} rotation={[-Math.PI/2, 0, 0]}>
+          <planeGeometry args={[2.4, 4.5]} />
+          <meshStandardMaterial color="#222222" />
+        </mesh>
+      </group>
+
+      {/* ── CARGAS (PESOS DE PRUEBA) EN EL FRENTE (Z=2.2) ── */}
+      <group position={[0, 0, 2.2]}>
+        {Array.from({ length: 18 }).map((_, i) => {
+          const weight = 4500 - (i * 250);
+          return (
+            <group key={i} position={[0, 0.1 + i * 0.22, 0]}>
+              {/* Estructura principal del peso */}
+              <mesh><boxGeometry args={[1.6, 0.2, 1.0]} /><meshStandardMaterial color="#cccccc" metalness={0.2} roughness={0.8} /></mesh>
+              
+              {/* Huecos para las horquillas en la parte FRONTAL (-Z) */}
+              <mesh position={[-0.35, 0, -0.51]}><boxGeometry args={[0.25, 0.1, 0.05]} /><meshBasicMaterial color="#111111" /></mesh>
+              <mesh position={[0.35, 0, -0.51]}><boxGeometry args={[0.25, 0.1, 0.05]} /><meshBasicMaterial color="#111111" /></mesh>
+              
+              {/* Pegatina de texto Frontal (orientada hacia la carretilla) */}
+              <mesh position={[0, 0, -0.505]} rotation={[0, Math.PI, 0]}><planeGeometry args={[0.3, 0.1]} /><meshBasicMaterial color="#ffffff" /></mesh>
+              <Text position={[0, 0, -0.51]} rotation={[0, Math.PI, 0]} fontSize={0.07} color="#000000" fontWeight="bold" anchorX="center" anchorY="middle">
+                {weight}
+              </Text>
+
+              {/* Pegatina de texto Lateral Izquierdo */}
+              <mesh position={[-0.805, 0, 0]} rotation={[0, -Math.PI/2, 0]}><planeGeometry args={[0.3, 0.1]} /><meshBasicMaterial color="#ffffff" /></mesh>
+              <Text position={[-0.81, 0, 0]} rotation={[0, -Math.PI/2, 0]} fontSize={0.07} color="#000000" fontWeight="bold" anchorX="center" anchorY="middle">
+                {weight}
+              </Text>
+
+              {/* Pegatina de texto Lateral Derecho */}
+              <mesh position={[0.805, 0, 0]} rotation={[0, Math.PI/2, 0]}><planeGeometry args={[0.3, 0.1]} /><meshBasicMaterial color="#ffffff" /></mesh>
+              <Text position={[0.81, 0, 0]} rotation={[0, Math.PI/2, 0]} fontSize={0.07} color="#000000" fontWeight="bold" anchorX="center" anchorY="middle">
+                {weight}
+              </Text>
+            </group>
+          );
+        })}
+      </group>
+
+      {/* ── VALLA NEUMÁTICA (Z=-0.5) ── */}
+      <group ref={gateRef} position={[0, 4, -0.5]}>
+        {/* Marco exterior */}
+        <StripedBar args={[2.0, 0.1, 0.05]} position={[0, 1.5, 0]} isVertical={false} />
+        <StripedBar args={[2.0, 0.1, 0.05]} position={[0, -1.5, 0]} isVertical={false} />
+        <StripedBar args={[0.1, 3.0, 0.05]} position={[-0.95, 0, 0]} isVertical={true} />
+        <StripedBar args={[0.1, 3.0, 0.05]} position={[0.95, 0, 0]} isVertical={true} />
+        
+        {/* Rejilla interior */}
+        <StripedBar args={[1.8, 0.05, 0.05]} position={[0, 0.5, 0]} isVertical={false} />
+        <StripedBar args={[1.8, 0.05, 0.05]} position={[0, -0.5, 0]} isVertical={false} />
+        <StripedBar args={[0.05, 3.0, 0.05]} position={[-0.3, 0, 0]} isVertical={true} />
+        <StripedBar args={[0.05, 3.0, 0.05]} position={[0.3, 0, 0]} isVertical={true} />
+        
+        {/* Vástagos móviles (unidos a la valla) */}
+        <mesh position={[-0.6, 3.25, 0]}>
+          <cylinderGeometry args={[0.03, 0.03, 3.5]} />
+          <meshStandardMaterial color="#7a8288" />
+        </mesh>
+        <mesh position={[0.6, 3.25, 0]}>
+          <cylinderGeometry args={[0.03, 0.03, 3.5]} />
+          <meshStandardMaterial color="#7a8288" />
+        </mesh>
+      </group>
+
+      {/* ── VALLA NEUMÁTICA FRONTAL (Z=1.3, delante de los pallets) ── */}
+      <group ref={frontGateRef} position={[0, 4, 1.3]}>
+        {/* Marco exterior */}
+        <StripedBar args={[2.0, 0.1, 0.05]} position={[0, 1.5, 0]} isVertical={false} />
+        <StripedBar args={[2.0, 0.1, 0.05]} position={[0, -1.5, 0]} isVertical={false} />
+        <StripedBar args={[0.1, 3.0, 0.05]} position={[-0.95, 0, 0]} isVertical={true} />
+        <StripedBar args={[0.1, 3.0, 0.05]} position={[0.95, 0, 0]} isVertical={true} />
+        
+        {/* Rejilla interior */}
+        <StripedBar args={[1.8, 0.05, 0.05]} position={[0, 0.5, 0]} isVertical={false} />
+        <StripedBar args={[1.8, 0.05, 0.05]} position={[0, -0.5, 0]} isVertical={false} />
+        <StripedBar args={[0.05, 3.0, 0.05]} position={[-0.3, 0, 0]} isVertical={true} />
+        <StripedBar args={[0.05, 3.0, 0.05]} position={[0.3, 0, 0]} isVertical={true} />
+        
+        {/* Vástagos móviles (unidos a la valla) */}
+        <mesh position={[-0.6, 3.0, 0]}>
+          <cylinderGeometry args={[0.03, 0.03, 3.0]} />
+          <meshStandardMaterial color="#7a8288" />
+        </mesh>
+        <mesh position={[0.6, 3.0, 0]}>
+          <cylinderGeometry args={[0.03, 0.03, 3.0]} />
+          <meshStandardMaterial color="#7a8288" />
+        </mesh>
+      </group>
+
+      {/* ── CILINDROS NEUMÁTICOS FIJOS (VALLA TRASERA Z=-0.5) ── */}
+      <mesh position={[-0.6, 9.0, -0.5]}>
+        <cylinderGeometry args={[0.06, 0.06, 3.0]} />
+        <meshStandardMaterial color="#444" />
+      </mesh>
+      <mesh position={[0.6, 9.0, -0.5]}>
+        <cylinderGeometry args={[0.06, 0.06, 3.0]} />
+        <meshStandardMaterial color="#444" />
+      </mesh>
+
+      {/* ── CILINDROS NEUMÁTICOS FIJOS (VALLA FRONTAL Z=1.3) ── */}
+      <mesh position={[-0.6, 9.0, 1.3]}>
+        <cylinderGeometry args={[0.06, 0.06, 3.0]} />
+        <meshStandardMaterial color="#444" />
+      </mesh>
+      <mesh position={[0.6, 9.0, 1.3]}>
+        <cylinderGeometry args={[0.06, 0.06, 3.0]} />
+        <meshStandardMaterial color="#444" />
+      </mesh>
+
+      {/* ── SENSORES LÁSER WENGLOR ── */}
+      {/* Láser 1: Apuntando entre las horquillas de la carretilla */}
+      <WenglorLaser position={[0, 7.8, 0.8]} beamLength={7.8} />
+      {/* Láser 2: Apuntando al centro de la torre de pallets (altura del pallet superior Y=3.94) */}
+      <WenglorLaser position={[0, 7.8, 2.0]} beamLength={7.8 - 3.94} />
+
+    </group>
+  );
+};
 
 const ForkliftAssembly = ({ distance }) => {
   const carriageRef = useRef();
@@ -251,6 +479,7 @@ const DigitalTwin = ({ distance }) => {
         <pointLight position={[-10, -10, -10]} intensity={0.5} />
         <Environment preset="warehouse" blur={0.8} />
         
+        <CageAssembly />
         <ForkliftAssembly distance={distance} />
         
         {/* Suelo Industrial */}
