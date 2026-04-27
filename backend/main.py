@@ -4,6 +4,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
+import socket
 import asyncio
 import random
 import time
@@ -236,6 +238,41 @@ def buscar_secuencia(secuencia: str, db: Session = Depends(get_db)):
 
 
 
+@app.get("/erp/operarios/{query}")
+def buscar_operario(query: str):
+    """
+    Busca un operario en la tabla DAFEED.dbo.Operarios por CODIGO o APELLIDOS.
+    """
+    try:
+        with engine.connect() as conn:
+            query_str = f"%{query}%"
+            if query.isnumeric():
+                q_code = query.zfill(8)
+                rows = conn.execute(
+                    text("SELECT CODIGO, APELLIDOS, TARJETA FROM Operarios WHERE CODIGO = :c OR CODIGO = :q_raw OR APELLIDOS LIKE :q"),
+                    {"c": q_code, "q_raw": query, "q": query_str}
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    text("SELECT CODIGO, APELLIDOS, TARJETA FROM Operarios WHERE CODIGO = :q_raw OR APELLIDOS LIKE :q"),
+                    {"q_raw": query, "q": query_str}
+                ).fetchall()
+            
+            if not rows:
+                raise HTTPException(status_code=404, detail="Operario no encontrado")
+            
+            results = []
+            for r in rows:
+                d = dict(r._mapping)
+                if d.get("CODIGO"):
+                    d["CODIGO"] = d["CODIGO"].lstrip("0") or "0"
+                results.append(d)
+            return results
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/erp/carretillas")
 def listar_carretillas(limit: int = 500, db: Session = Depends(get_db)):
     """
@@ -249,6 +286,17 @@ def listar_carretillas(limit: int = 500, db: Session = Depends(get_db)):
         .all()
     )
     if erp_rows:
+        bastidores = [r.bastidor for r in erp_rows if r.bastidor]
+        from database.models import PruebaElevacion
+        pruebas = db.query(PruebaElevacion.bastidor, PruebaElevacion.estado_final)\
+            .filter(PruebaElevacion.bastidor.in_(bastidores))\
+            .order_by(PruebaElevacion.id.asc())\
+            .all()
+        
+        estado_por_bastidor = {}
+        for b, e in pruebas:
+            estado_por_bastidor[b] = e
+
         items = [
             {
                 # ── Identificación ──────────────────────────────
@@ -260,6 +308,8 @@ def listar_carretillas(limit: int = 500, db: Session = Depends(get_db)):
                 "mastil":           r.mastil or "",
                 "fecha_montaje":    r.fecha_montaje or "",
                 "fecha_importacion": str(r.fecha_importacion)[:10] if r.fecha_importacion else "",
+                # ── Estado de Prueba ────────────────────────────
+                "estado_prueba":    estado_por_bastidor.get(r.bastidor, "PENDIENTE"),
                 # ── Geometría ───────────────────────────────────
                 "altura_max_interm": r.altura_max_interm,
                 # ── Capacidades intermedias (kg) ─────────────────
@@ -375,6 +425,41 @@ def finalizar_prueba(prueba_id: int, resultado: dict, db: Session = Depends(get_
         raise HTTPException(status_code=404, detail="Prueba no encontrada.")
     return {"status": "updated", "estado": prueba.estado_final}
 
+
+# ─────────────────────────────────────────────────────────────
+# Configuración Dispositivos (Datalogic)
+# ─────────────────────────────────────────────────────────────
+
+class DatalogicConfig(BaseModel):
+    connType: str
+    ip: str
+    port: str
+    comPort: str
+    baudRate: str
+
+@app.post("/config/datalogic/test")
+def test_datalogic_connection(config: DatalogicConfig):
+    """Prueba la conexión al escáner Datalogic por TCP o Serial."""
+    if config.connType == "tcp":
+        try:
+            port_int = int(config.port)
+            s = socket.create_connection((config.ip, port_int), timeout=2)
+            s.close()
+            return {"status": "ok", "message": f"Conexión TCP exitosa a {config.ip}:{port_int}"}
+        except Exception as e:
+            return {"status": "error", "message": f"Fallo TCP ({config.ip}:{config.port}): {str(e)}"}
+    elif config.connType == "serial":
+        try:
+            import serial
+            baud_int = int(config.baudRate)
+            ser = serial.Serial(config.comPort, baud_int, timeout=2)
+            ser.close()
+            return {"status": "ok", "message": f"Conexión Serial exitosa en {config.comPort}"}
+        except ImportError:
+            return {"status": "error", "message": "Falta la librería pyserial. Ejecuta: pip install pyserial"}
+        except Exception as e:
+            return {"status": "error", "message": f"Fallo Serial ({config.comPort}): {str(e)}"}
+    return {"status": "error", "message": "Tipo de conexión inválido."}
 
 # ─────────────────────────────────────────────────────────────
 # WebSocket — Telemetría en tiempo real

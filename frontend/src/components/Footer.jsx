@@ -35,13 +35,7 @@ const Footer = () => {
         </div>
       </div>
 
-      {/* Abort Action */}
-      <button className="group relative flex items-center gap-3 bg-gradient-to-b from-logisnext-red to-[#990000] hover:from-[#ff1a1a] hover:to-[#cc0000] text-white font-black py-4 px-10 rounded-xl shadow-[0_5px_15px_rgba(224,0,0,0.4)] transition-all duration-300 active:scale-95 active:shadow-inner border border-[#ff4d4d] overflow-hidden">
-        {/* Gloss Effect */}
-        <div className="absolute top-0 left-0 w-full h-1/2 bg-white opacity-10 pointer-events-none rounded-t-xl"></div>
-        <AlertTriangle size={22} className="text-yellow-300 group-hover:scale-110 transition-transform" />
-        <span className="text-lg tracking-widest drop-shadow-md">E M E R G E N C I A</span>
-      </button>
+
 
     </footer>
   );

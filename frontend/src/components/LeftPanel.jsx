@@ -10,6 +10,8 @@ const DataRow = ({ label, value, highlight = false }) => (
   </div>
 );
 
+const cs2s = (v) => (v != null ? (v / 100).toFixed(2).replace('.', ',') : null);
+
 const LeftPanel = ({ data, onErpData }) => {
   return (
     <aside className="w-80 bg-gradient-to-b from-[#151f25] to-[#0a0f12] h-full flex flex-col border-r border-[#2e404a] z-10 shrink-0 relative overflow-hidden">
@@ -93,15 +95,14 @@ const LeftPanel = ({ data, onErpData }) => {
               <div className="mb-2">
                 <span className="text-[9px] text-logisnext-magenta font-black uppercase tracking-widest">Con Carga</span>
               </div>
-              <DataRow label="ELEVAC." value={data.tpo_elevac_min != null ? `${data.tpo_elevac_min}s — ${data.tpo_elevac_max}s` : null} />
-              <DataRow label="DESCENSO" value={data.tpo_descenso_min != null ? `${data.tpo_descenso_min}s — ${data.tpo_descenso_max}s` : null} />
-              <DataRow label="INCL. ADELANTE" value={data.tpo_incl_adel_max != null ? `≤ ${data.tpo_incl_adel_max}s` : null} />
-              <DataRow label="INCL. ATRÁS" value={data.tpo_incl_atras_max != null ? `≤ ${data.tpo_incl_atras_max}s` : null} />
+              <DataRow label="ELEVAC." value={data.tpo_elevac_min != null ? `${cs2s(data.tpo_elevac_min)}s — ${cs2s(data.tpo_elevac_max)}s` : null} />
+              <DataRow label="DESCENSO" value={data.tpo_descenso_min != null ? `${cs2s(data.tpo_descenso_min)}s — ${cs2s(data.tpo_descenso_max)}s` : null} />
+
               <div className="mt-3 mb-2">
                 <span className="text-[9px] text-logisnext-magenta font-black uppercase tracking-widest">Sin Carga</span>
               </div>
-              <DataRow label="ELEVAC." value={data.tpo_elev_min_scarga != null ? `${data.tpo_elev_min_scarga}s — ${data.tpo_elev_max_scarga}s` : null} />
-              <DataRow label="DESCENSO" value={data.tpo_desc_min_scarga != null ? `${data.tpo_desc_min_scarga}s — ${data.tpo_desc_max_scarga}s` : null} />
+              <DataRow label="ELEVAC." value={data.tpo_elev_min_scarga != null ? `${cs2s(data.tpo_elev_min_scarga)}s — ${cs2s(data.tpo_elev_max_scarga)}s` : null} />
+              <DataRow label="DESCENSO" value={data.tpo_desc_min_scarga != null ? `${cs2s(data.tpo_desc_min_scarga)}s — ${cs2s(data.tpo_desc_max_scarga)}s` : null} />
 
               {/* Aviso si no hay datos del DAT */}
               {data.tpo_elevac_min == null && (

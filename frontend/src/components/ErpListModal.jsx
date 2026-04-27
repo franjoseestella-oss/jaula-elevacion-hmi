@@ -9,7 +9,7 @@ const API_BASE = 'http://localhost:8000';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = (v, decimals = 1) =>
-  v !== null && v !== undefined ? Number(v).toFixed(decimals) : '—';
+  v !== null && v !== undefined ? Number(v).toFixed(decimals).replace('.', ',') : '—';
 
 const fmtDate = (s) => {
   if (!s) return '—';
@@ -18,8 +18,8 @@ const fmtDate = (s) => {
   return s;
 };
 
-// Convierte décimas de segundo a "s" con 1 decimal
-const ds2s = (v) => (v !== null && v !== undefined ? `${(v / 10).toFixed(1)} s` : '—');
+// Convierte centésimas de segundo a "s" con 2 decimales
+const cs2s = (v) => (v !== null && v !== undefined ? `${(v / 100).toFixed(2).replace('.', ',')} s` : '—');
 
 // ── Badge de fuente ───────────────────────────────────────────────────────────
 const SourceBadge = ({ fuente }) => {
@@ -99,19 +99,18 @@ const DetallePanel = ({ item, onClose, onVincular }) => {
           </Section>
 
           <Section title="Tiempos con carga" icon={Clock}>
-            <Field label="Elevación mín"   value={ds2s(item.tpo_elevac_min)} />
-            <Field label="Elevación máx"   value={ds2s(item.tpo_elevac_max)} />
-            <Field label="Descenso mín"    value={ds2s(item.tpo_descenso_min)} />
-            <Field label="Descenso máx"    value={ds2s(item.tpo_descenso_max)} />
-            <Field label="Inclin. adelante máx" value={ds2s(item.tpo_incl_adel_max)} />
-            <Field label="Inclin. atrás máx"    value={ds2s(item.tpo_incl_atras_max)} />
+            <Field label="Elevación mín"   value={cs2s(item.tpo_elevac_min)} />
+            <Field label="Elevación máx"   value={cs2s(item.tpo_elevac_max)} />
+            <Field label="Descenso mín"    value={cs2s(item.tpo_descenso_min)} />
+            <Field label="Descenso máx"    value={cs2s(item.tpo_descenso_max)} />
+
           </Section>
 
           <Section title="Tiempos sin carga" icon={RotateCcw}>
-            <Field label="Elevación mín"   value={ds2s(item.tpo_elev_min_scarga)} />
-            <Field label="Elevación máx"   value={ds2s(item.tpo_elev_max_scarga)} />
-            <Field label="Descenso mín"    value={ds2s(item.tpo_desc_min_scarga)} />
-            <Field label="Descenso máx"    value={ds2s(item.tpo_desc_max_scarga)} />
+            <Field label="Elevación mín"   value={cs2s(item.tpo_elev_min_scarga)} />
+            <Field label="Elevación máx"   value={cs2s(item.tpo_elev_max_scarga)} />
+            <Field label="Descenso mín"    value={cs2s(item.tpo_desc_min_scarga)} />
+            <Field label="Descenso máx"    value={cs2s(item.tpo_desc_max_scarga)} />
           </Section>
         </div>
 
@@ -124,7 +123,7 @@ const DetallePanel = ({ item, onClose, onVincular }) => {
             onClick={() => onVincular(item)}
             className="flex items-center gap-2 px-5 py-2 bg-logisnext-magenta hover:bg-logisnext-magenta/80 text-white text-xs font-black uppercase tracking-wider rounded-lg transition-all shadow-[0_0_20px_rgba(221,40,118,0.4)]"
           >
-            Vincular al HMI <ChevronRight size={13} />
+            Cargar secuencia <ChevronRight size={13} />
           </button>
         </div>
       </div>
@@ -194,11 +193,15 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
   // ── Filtro + orden ────────────────────────────────────────────────────────
   const filtered = items
     .filter(item => {
+      // Excluir si el modelo (descripcion) está vacío
+      const desc = item.descripcion?.trim() || '';
+      if (!desc || desc === '-' || desc === '—') return false;
+
       const q = filter.toLowerCase();
       return (
         item.bastidor?.toLowerCase().includes(q) ||
         item.secuencia?.toLowerCase().includes(q) ||
-        item.descripcion?.toLowerCase().includes(q) ||
+        desc.toLowerCase().includes(q) ||
         item.referencia?.toLowerCase().includes(q)
       );
     })
@@ -333,7 +336,13 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
                 <div
                   key={idx}
                   onClick={() => setDetalle(item)}
-                  className="grid gap-0 px-4 py-2.5 border-b border-[#1a262d]/60 hover:bg-logisnext-magenta/5 hover:border-logisnext-magenta/20 cursor-pointer transition-all group"
+                  className={`grid gap-0 px-4 py-2.5 border-b cursor-pointer transition-all group ${
+                    item.estado_prueba === 'FINALIZADO_OK'
+                      ? 'bg-green-900/10 border-green-500/30 hover:bg-green-900/20'
+                      : item.estado_prueba === 'ERROR'
+                      ? 'bg-red-900/10 border-red-500/30 hover:bg-red-900/20'
+                      : 'border-[#1a262d]/60 hover:bg-logisnext-magenta/5 hover:border-logisnext-magenta/20'
+                  }`}
                   style={{ gridTemplateColumns: '1.6fr 0.7fr 1.2fr 0.9fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 40px' }}
                 >
                   {/* Bastidor */}
@@ -366,19 +375,19 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
                   </span>
                   {/* Tpo elevac min c/carga */}
                   <span className="font-mono text-xs text-emerald-400/80">
-                    {item.tpo_elevac_min != null ? (item.tpo_elevac_min / 10).toFixed(1) : '—'}
+                    {item.tpo_elevac_min != null ? (item.tpo_elevac_min / 100).toFixed(2).replace('.', ',') : '—'}
                   </span>
                   {/* Tpo elevac max c/carga */}
                   <span className="font-mono text-xs text-emerald-400/60">
-                    {item.tpo_elevac_max != null ? (item.tpo_elevac_max / 10).toFixed(1) : '—'}
+                    {item.tpo_elevac_max != null ? (item.tpo_elevac_max / 100).toFixed(2).replace('.', ',') : '—'}
                   </span>
                   {/* Tpo descenso min c/carga */}
                   <span className="font-mono text-xs text-violet-400/80">
-                    {item.tpo_descenso_min != null ? (item.tpo_descenso_min / 10).toFixed(1) : '—'}
+                    {item.tpo_descenso_min != null ? (item.tpo_descenso_min / 100).toFixed(2).replace('.', ',') : '—'}
                   </span>
                   {/* Tpo descenso max c/carga */}
                   <span className="font-mono text-xs text-violet-400/60">
-                    {item.tpo_descenso_max != null ? (item.tpo_descenso_max / 10).toFixed(1) : '—'}
+                    {item.tpo_descenso_max != null ? (item.tpo_descenso_max / 100).toFixed(2).replace('.', ',') : '—'}
                   </span>
                   {/* Fecha montaje */}
                   <span className="font-mono text-[10px] text-logisnext-slate/70">

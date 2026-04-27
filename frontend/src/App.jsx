@@ -6,14 +6,18 @@ import Sequencer from './components/Sequencer';
 import Footer from './components/Footer';
 import TelemetryHUD from './components/TelemetryHUD';
 import ErpListModal from './components/ErpListModal';
+import SettingsModal from './components/SettingsModal';
+import OperatorLoginModal from './components/OperatorLoginModal';
 
 const API_BASE = 'http://localhost:8000';
 
 function App() {
   const [erpData, setErpData]           = useState(null);
   const [erpModalOpen, setErpModalOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [telemetry, setTelemetry]       = useState({ distance: 0, timer: 0.0, state: 'IDLE' });
   const [networkStatus, setNetworkStatus] = useState({ opc: false, basler: false, db: false, erp: true });
+  const [operario, setOperario]         = useState(null);
 
 
   // Cargar datos completos de un bastidor seleccionado (desde el modal o ErpSearch)
@@ -63,6 +67,10 @@ function App() {
       <Header
         status={networkStatus}
         onErpClick={() => setErpModalOpen(true)}
+        onSettingsClick={() => setSettingsOpen(true)}
+        operario={operario}
+        canChangeOperator={!erpData}
+        onOperatorClick={() => setOperario(null)}
       />
 
       <div className="flex-1 flex flex-row overflow-hidden">
@@ -73,7 +81,7 @@ function App() {
           <DigitalTwin distance={telemetry.distance} />
         </div>
 
-        <Sequencer erpData={erpData} onErpData={setErpData} />
+        <Sequencer erpData={erpData} onErpData={setErpData} onOpenErp={() => setErpModalOpen(true)} />
       </div>
 
       <Footer />
@@ -84,6 +92,11 @@ function App() {
         onClose={() => setErpModalOpen(false)}
         onSelect={handleBastidorSelect}
       />
+
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      {/* Identificación de operario al inicio */}
+      {!operario && <OperatorLoginModal onLogin={setOperario} />}
     </div>
   );
 }

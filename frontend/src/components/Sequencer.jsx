@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Layers, Barcode, ArrowUpDown, Timer, Weight,
   CheckCircle2, AlertTriangle, SkipForward, Loader2,
-  RotateCcw, Ruler, Lock, Hash
+  RotateCcw, Ruler, Lock, Hash, Database, XCircle
 } from 'lucide-react';
 
 
@@ -31,19 +31,19 @@ const statusStyle = {
   pending: { ring: 'border-[#2e404a]/50',  bg: 'bg-[#0d1a20]',   num: 'bg-[#1d2930] text-gray-400',       label: 'text-gray-500' },
   active:  { ring: 'border-logisnext-magenta/80', bg: 'bg-[#1d2930]/80', num: 'bg-logisnext-magenta text-white shadow-[0_0_10px_#dd2876]', label: 'text-white' },
   ok:      { ring: 'border-green-500/50',  bg: 'bg-green-900/10', num: 'bg-green-600 text-white',           label: 'text-green-400' },
-  skip:    { ring: 'border-yellow-600/30', bg: 'bg-[#0d1a20]',   num: 'bg-yellow-700/50 text-yellow-400',  label: 'text-yellow-500' },
+  skip:    { ring: 'border-gray-800/50', bg: 'bg-[#0a0f12] opacity-50 grayscale',   num: 'bg-[#1d2930] text-gray-600',  label: 'text-gray-600 line-through' },
   error:   { ring: 'border-red-500/60',   bg: 'bg-red-900/10',   num: 'bg-red-700 text-white',             label: 'text-red-400' },
 };
 
 const StatusIcon = ({ status }) => {
   if (status === STEP_STATUS.OK)    return <CheckCircle2 size={14} className="text-green-400" />;
-  if (status === STEP_STATUS.SKIP)  return <SkipForward  size={14} className="text-yellow-500" />;
+  if (status === STEP_STATUS.SKIP)  return <XCircle size={14} className="text-gray-600" />;
   if (status === STEP_STATUS.ERROR) return <AlertTriangle size={14} className="text-red-400" />;
   if (status === STEP_STATUS.ACTIVE) return <Loader2 size={14} className="animate-spin text-logisnext-magenta" />;
   return null;
 };
 
-const StepCard = ({ num, icon: Icon, title, status, children, action }) => {
+const StepCard = ({ num, icon: Icon, title, status, children, action, canSkip, onToggleSkip }) => {
   const s = statusStyle[status] || statusStyle.pending;
   const isActive = status === STEP_STATUS.ACTIVE;
 
@@ -52,16 +52,27 @@ const StepCard = ({ num, icon: Icon, title, status, children, action }) => {
       {/* Barra lateral activa */}
       {isActive && <div className="absolute left-0 top-0 w-[3px] h-full bg-logisnext-magenta shadow-[0_0_8px_#dd2876]" />}
       {status === STEP_STATUS.OK && <div className="absolute left-0 top-0 w-[3px] h-full bg-green-500" />}
-      {status === STEP_STATUS.SKIP && <div className="absolute left-0 top-0 w-[3px] h-full bg-yellow-600" />}
+      {status === STEP_STATUS.SKIP && <div className="absolute left-0 top-0 w-[3px] h-full bg-gray-800" />}
 
       <div className="pl-4 pr-4 pt-3.5 pb-3">
         {/* Header del paso */}
         <div className="flex items-center gap-2.5 mb-2">
           <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 transition-all duration-300 ${s.num}`}>
-            {status === STEP_STATUS.OK ? <CheckCircle2 size={13} /> : status === STEP_STATUS.SKIP ? <SkipForward size={12} /> : num}
+            {status === STEP_STATUS.OK ? <CheckCircle2 size={13} /> : status === STEP_STATUS.SKIP ? <XCircle size={12} /> : num}
           </div>
           <Icon size={13} className={isActive ? 'text-logisnext-magenta' : 'text-logisnext-slate'} />
           <span className={`font-black text-[10px] uppercase tracking-widest flex-1 ${s.label}`}>{title}</span>
+          
+          {canSkip && status !== STEP_STATUS.OK && (
+            <button
+              onClick={onToggleSkip}
+              className={`p-1 mr-1 rounded transition-colors ${status === STEP_STATUS.SKIP ? 'text-gray-500 hover:text-gray-300 bg-gray-800/50' : 'text-logisnext-slate hover:text-white'}`}
+              title={status === STEP_STATUS.SKIP ? "Restaurar etapa" : "Deshabilitar etapa"}
+            >
+              {status === STEP_STATUS.SKIP ? <RotateCcw size={12} /> : <XCircle size={12} />}
+            </button>
+          )}
+
           <StatusIcon status={status} />
         </div>
 
@@ -107,8 +118,7 @@ const ActionBtn = ({ onClick, children, disabled = false, variant = 'primary' })
 
 // ─── Componente principal ────────────────────────────────────────────────────
 
-const Sequencer = ({ erpData, onErpData }) => {
-  const [currentStep, setCurrentStep] = useState(0);
+const Sequencer = ({ erpData, onErpData, onOpenErp }) => {
   const [stepStatus, setStepStatus]   = useState([
     STEP_STATUS.ACTIVE,
     STEP_STATUS.PENDING,
@@ -116,6 +126,9 @@ const Sequencer = ({ erpData, onErpData }) => {
     STEP_STATUS.PENDING,
     STEP_STATUS.PENDING,
   ]);
+  const currentStep = stepStatus.findIndex(s => s === STEP_STATUS.ACTIVE);
+  const isSequenceFinished = stepStatus[0] === STEP_STATUS.OK && !stepStatus.includes(STEP_STATUS.ACTIVE) && !stepStatus.includes(STEP_STATUS.PENDING);
+
   const [seqInput, setSeqInput]     = useState('');
   const [seqLoading, setSeqLoading] = useState(false);
   const [seqError, setSeqError]     = useState('');
@@ -124,11 +137,11 @@ const Sequencer = ({ erpData, onErpData }) => {
   const [manualDigits, setManualDigits] = useState('');    // dígitos teclados a mano
   const [timer5min, setTimer5min]   = useState(null);
   const [visionOk, setVisionOk]     = useState(false);
+  const [pruebaId, setPruebaId]     = useState(null);
   const inputRef = useRef(null);
 
   // ── Reset cuando no hay datos ERP (ej. sesión nueva) ────────────────────
   const resetSequence = () => {
-    setCurrentStep(0);
     setStepStatus([STEP_STATUS.ACTIVE, STEP_STATUS.PENDING, STEP_STATUS.PENDING, STEP_STATUS.PENDING, STEP_STATUS.PENDING]);
     setSeqInput('');
     setSeqError('');
@@ -136,7 +149,51 @@ const Sequencer = ({ erpData, onErpData }) => {
     setManualDigits('');
     setTimer5min(null);
     setVisionOk(false);
+    setPruebaId(null);
+    if (onErpData) onErpData(null);
   };
+
+  const handleAbort = async () => {
+    if (pruebaId) {
+      try {
+        await fetch(`${API_BASE}/pruebas/${pruebaId}/resultado`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tiempo_real: 0, estado: 'ERROR' })
+        });
+      } catch (e) { console.error("Error aborting test:", e); }
+    }
+    resetSequence();
+  };
+
+  // ── Auto-Avanzar PASO 1 si se carga desde ERP Modal ───────────────
+  useEffect(() => {
+    if (erpData && stepStatus[0] === STEP_STATUS.ACTIVE) {
+      setScannedSeq(null);
+      markOk(0);
+      
+      // Crear nueva prueba en BD
+      fetch(`${API_BASE}/pruebas/nueva`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fecha_montaje: erpData.fecha_montaje || "",
+          secuencia: erpData.secuencia || "",
+          modelo: erpData.modelo || "",
+          bastidor: erpData.bastidor || "",
+          mastil: erpData.mastil || "",
+          altura_max_interm: erpData.altura_max_interm || 0,
+          tpo_elevac_min: erpData.tpo_elevac_min || 0,
+          tpo_elevac_max: erpData.tpo_elevac_max || 0
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.id) setPruebaId(data.id);
+      })
+      .catch(e => console.error("Error creating test:", e));
+    }
+  }, [erpData, stepStatus]);
 
   // ── Teclado numérico manual ───────────────────────────────────────────────
   const handleNumpadPress = (key) => {
@@ -155,25 +212,40 @@ const Sequencer = ({ erpData, onErpData }) => {
   };
 
   // ── Avanzar paso ──────────────────────────────────────────────────────────
-  const markOk = (idx, skipNext = false) => {
-    setStepStatus(prev => {
-      const s = [...prev];
-      s[idx] = STEP_STATUS.OK;
-      if (skipNext && idx + 1 < s.length) s[idx + 1] = STEP_STATUS.SKIP;
-      if (idx + 1 < s.length && s[idx + 1] === STEP_STATUS.PENDING) s[idx + 1] = STEP_STATUS.ACTIVE;
-      return s;
-    });
-    setCurrentStep(idx + 1);
+  const recalculateActive = (statuses) => {
+    const s = [...statuses];
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === STEP_STATUS.ACTIVE) s[i] = STEP_STATUS.PENDING;
+    }
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === STEP_STATUS.PENDING) {
+        s[i] = STEP_STATUS.ACTIVE;
+        break;
+      }
+    }
+    return s;
   };
 
-  const markSkip = (idx) => {
+  const markOk = (idx, skipNext = false) => {
     setStepStatus(prev => {
-      const s = [...prev];
-      s[idx] = STEP_STATUS.SKIP;
-      if (idx + 1 < s.length) s[idx + 1] = STEP_STATUS.ACTIVE;
-      return s;
+      let s = [...prev];
+      s[idx] = STEP_STATUS.OK;
+      if (skipNext && idx + 1 < s.length) s[idx + 1] = STEP_STATUS.SKIP;
+      return recalculateActive(s);
     });
-    setCurrentStep(idx + 1);
+  };
+
+  const toggleSkip = (idx) => {
+    if (idx === 0) return;
+    setStepStatus(prev => {
+      let s = [...prev];
+      if (s[idx] === STEP_STATUS.SKIP) {
+        s[idx] = STEP_STATUS.PENDING;
+      } else if (s[idx] === STEP_STATUS.PENDING || s[idx] === STEP_STATUS.ACTIVE) {
+        s[idx] = STEP_STATUS.SKIP;
+      }
+      return recalculateActive(s);
+    });
   };
 
   // ── PASO 1A: El lector envía el código → extraer dígitos → mostrar confirmación
@@ -237,7 +309,7 @@ const Sequencer = ({ erpData, onErpData }) => {
       const altura = erpData.altura_max_interm;
       if (!altura || altura === 0) {
         // Sin multiload → saltar
-        setTimeout(() => markSkip(1), 600);
+        setTimeout(() => toggleSkip(1), 600);
       }
     }
   }, [currentStep, stepStatus, erpData]);
@@ -246,7 +318,7 @@ const Sequencer = ({ erpData, onErpData }) => {
   useEffect(() => {
     if (currentStep === 2 && stepStatus[2] === STEP_STATUS.ACTIVE && erpData) {
       if (!isMxXL(erpData.modelo)) {
-        setTimeout(() => markSkip(2), 600);
+        setTimeout(() => toggleSkip(2), 600);
       }
     }
   }, [currentStep, stepStatus, erpData]);
@@ -279,9 +351,20 @@ const Sequencer = ({ erpData, onErpData }) => {
             <span className="text-[9px] text-logisnext-lightslate font-bold uppercase tracking-widest">Protocolo de Prueba</span>
           </div>
         </div>
-        <button onClick={resetSequence} title="Reiniciar secuencia" className="p-1.5 hover:bg-[#2e404a] rounded-lg text-logisnext-slate hover:text-white transition-colors">
-          <RotateCcw size={14} />
-        </button>
+        <div className="flex items-center gap-2">
+          {erpData && (
+            <button 
+              onClick={handleAbort} 
+              title="Abortar prueba" 
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-900/20 hover:bg-red-900/40 border border-red-500/30 text-red-400 rounded-lg transition-colors text-[10px] font-bold uppercase tracking-widest"
+            >
+              Abortar
+            </button>
+          )}
+          <button onClick={resetSequence} title="Reiniciar secuencia" className="p-1.5 hover:bg-[#2e404a] rounded-lg text-logisnext-slate hover:text-white transition-colors">
+            <RotateCcw size={14} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
@@ -307,11 +390,17 @@ const Sequencer = ({ erpData, onErpData }) => {
                     onClick={() => { setInputMode('manual'); setSeqInput(''); setSeqError(''); }}
                     className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${
                       inputMode === 'manual'
-                        ? 'bg-logisnext-magenta/20 text-logisnext-magenta'
-                        : 'bg-transparent text-logisnext-slate hover:text-white'
+                        ? 'bg-logisnext-magenta/20 text-logisnext-magenta border-r border-logisnext-magenta/30'
+                        : 'bg-transparent text-logisnext-slate hover:text-white border-r border-[#2e404a]'
                     }`}
                   >
                     <Hash size={10} /> Manual
+                  </button>
+                  <button
+                    onClick={() => { if(onOpenErp) onOpenErp(); }}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all bg-transparent text-logisnext-slate hover:text-white"
+                  >
+                    <Database size={10} /> ERP
                   </button>
                 </div>
               )}
@@ -476,7 +565,7 @@ const Sequencer = ({ erpData, onErpData }) => {
 
 
         {/* ── PASO 2: Multiload — poner mástil en posición ────────────────── */}
-        <StepCard num={2} icon={Ruler} title="Posición multiload" status={stepStatus[1]}>
+        <StepCard num={2} icon={Ruler} title="Posición multiload" status={stepStatus[1]} canSkip onToggleSkip={() => toggleSkip(1)}>
           {stepStatus[1] === STEP_STATUS.ACTIVE && erpData && (
             <>
               <DataLine label="Altura máx" value={`${erpData.altura_max_interm} mm`} highlight />
@@ -499,7 +588,7 @@ const Sequencer = ({ erpData, onErpData }) => {
         </StepCard>
 
         {/* ── PASO 3: Prueba 5 minutos (solo Mx / XL) ─────────────────────── */}
-        <StepCard num={3} icon={Timer} title="Prueba 5 minutos" status={stepStatus[2]}>
+        <StepCard num={3} icon={Timer} title="Prueba 5 minutos" status={stepStatus[2]} canSkip onToggleSkip={() => toggleSkip(2)}>
           {stepStatus[2] === STEP_STATUS.ACTIVE && erpData && (
             <>
               <DataLine label="Modelo" value={erpData.modelo} highlight />
@@ -550,7 +639,7 @@ const Sequencer = ({ erpData, onErpData }) => {
         </StepCard>
 
         {/* ── PASO 4: Test CON CARGA ───────────────────────────────────────── */}
-        <StepCard num={4} icon={Weight} title="Test con carga" status={stepStatus[3]}>
+        <StepCard num={4} icon={Weight} title="Test con carga" status={stepStatus[3]} canSkip onToggleSkip={() => toggleSkip(3)}>
           {stepStatus[3] === STEP_STATUS.ACTIVE && erpData && (
             <>
               <DataLine label="Carga ref." value={erpData.capac_interm_1 != null ? `${erpData.capac_interm_1} kg` : '—'} highlight />
@@ -580,7 +669,7 @@ const Sequencer = ({ erpData, onErpData }) => {
         </StepCard>
 
         {/* ── PASO 5: Test SIN CARGA ───────────────────────────────────────── */}
-        <StepCard num={5} icon={ArrowUpDown} title="Test sin carga" status={stepStatus[4]}>
+        <StepCard num={5} icon={ArrowUpDown} title="Test sin carga" status={stepStatus[4]} canSkip onToggleSkip={() => toggleSkip(4)}>
           {stepStatus[4] === STEP_STATUS.ACTIVE && erpData && (
             <>
               <DataLine label="Elevac. min" value={ds2s(erpData.tpo_elev_min_scarga)} />
@@ -591,7 +680,7 @@ const Sequencer = ({ erpData, onErpData }) => {
                 Retira la carga. Ejecuta ciclos de elevación y descenso sin carga dentro de los tiempos de tolerancia.
               </p>
               <ActionBtn onClick={() => markOk(4)} variant="success">
-                <CheckCircle2 size={12} /> Test sin carga OK — Finalizar
+                <CheckCircle2 size={12} /> Test sin carga OK
               </ActionBtn>
             </>
           )}
@@ -601,17 +690,36 @@ const Sequencer = ({ erpData, onErpData }) => {
             </div>
           )}
           {stepStatus[4] === STEP_STATUS.OK && (
-            <div className="text-center py-2">
-              <CheckCircle2 size={28} className="text-green-400 mx-auto mb-1" />
-              <p className="text-[10px] text-green-400 font-black uppercase tracking-widest">Secuencia completada</p>
-              <button onClick={resetSequence} className="mt-2 text-[9px] text-logisnext-slate hover:text-white underline transition-colors">
-                Nueva prueba
-              </button>
-            </div>
+            <DataLine label="Estado" value="Completado ✓" highlight />
           )}
         </StepCard>
 
       </div>
+
+      {/* ── PANEL DE FINALIZACIÓN ───────────────────────────────────────── */}
+      {isSequenceFinished && (
+        <div className="mx-4 mb-4 p-4 rounded-xl border border-green-500/50 bg-green-900/10 flex flex-col items-center animate-in fade-in slide-in-from-bottom-2">
+          <CheckCircle2 size={32} className="text-green-400 mb-2" />
+          <p className="text-[11px] font-black text-green-400 uppercase tracking-widest mb-3 text-center">
+            Secuencia Completada
+          </p>
+          <button
+            onClick={() => {
+              if (pruebaId) {
+                fetch(`${API_BASE}/pruebas/${pruebaId}/resultado`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ tiempo_real: 0, estado: 'FINALIZADO_OK' })
+                }).catch(e => console.error("Error saving test state", e));
+              }
+              resetSequence();
+            }}
+            className="w-full py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-lg font-black text-[11px] uppercase tracking-widest shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-colors active:scale-95"
+          >
+            Guardar y Cerrar
+          </button>
+        </div>
+      )}
 
       {/* Footer — progreso global */}
       <div className="px-4 py-3 border-t border-[#2e404a] bg-[#0a0f12]/80 shrink-0">

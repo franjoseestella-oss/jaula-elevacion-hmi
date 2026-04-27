@@ -13,7 +13,7 @@ const StatusLED = ({ active, label, icon: Icon, onClick }) => (
   </div>
 );
 
-const Header = ({ status, onErpClick }) => {
+const Header = ({ status, onErpClick, onSettingsClick, operario, onOperatorClick, canChangeOperator }) => {
   return (
     <header className="h-20 bg-gradient-to-b from-[#151f25] to-[#11191e] border-b border-[#2e404a] flex items-center justify-between px-8 shrink-0 z-20 relative">
       {/* Accent Top Border */}
@@ -47,16 +47,38 @@ const Header = ({ status, onErpClick }) => {
         </div>
 
         {/* User Profile */}
-        <div className="flex items-center gap-3 bg-[#1d2930] hover:bg-[#2e404a] transition-colors duration-300 pr-4 rounded-full border border-[#2e404a] cursor-pointer">
+        <div 
+          className={`flex items-center gap-3 bg-[#1d2930] pr-4 rounded-full border border-[#2e404a] transition-all duration-300 ${
+            canChangeOperator 
+              ? 'hover:bg-[#2e404a] cursor-pointer shadow-[0_0_10px_rgba(255,255,255,0.05)] hover:border-gray-500' 
+              : 'opacity-80 cursor-not-allowed'
+          }`} 
+          onClick={canChangeOperator ? onOperatorClick : undefined}
+          title={canChangeOperator ? "Cambiar Operario" : "Finaliza o aborta la secuencia actual para cambiar operario"}
+        >
           <div className="w-10 h-10 bg-gradient-to-tr from-logisnext-slate to-logisnext-darkslate rounded-full flex items-center justify-center border-2 border-[#151f25] shadow-sm">
-            <span className="text-xs font-bold text-white">OP</span>
+            <span className="text-xs font-bold text-white">
+              {operario ? operario.APELLIDOS?.substring(0,2).toUpperCase() : 'OP'}
+            </span>
           </div>
           <div className="flex flex-col">
-            <span className="font-bold text-sm text-white leading-tight">Operario_01</span>
-            <span className="text-[10px] text-green-400 font-bold uppercase tracking-wider">Autorizado</span>
+            <span className="font-bold text-sm text-white leading-tight">
+              {operario ? operario.APELLIDOS : 'Identificándose...'}
+            </span>
+            <span className="text-[10px] text-green-400 font-bold uppercase tracking-wider">
+              {operario ? `CÓD. ${operario.CODIGO}` : 'Autorizado'}
+            </span>
           </div>
-          <Settings size={18} className="text-logisnext-lightslate hover:text-white transition-colors ml-2" />
         </div>
+
+        {/* Settings button */}
+        <button 
+          onClick={onSettingsClick}
+          className="p-2.5 bg-[#1d2930] hover:bg-[#2e404a] rounded-full border border-[#2e404a] text-logisnext-lightslate hover:text-white transition-colors cursor-pointer"
+          title="Ajustes del sistema"
+        >
+          <Settings size={18} />
+        </button>
       </div>
     </header>
   );
