@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Grid, Environment, RoundedBox, Text } from '@react-three/drei';
 import * as THREE from 'three';
@@ -71,18 +71,69 @@ const WenglorLaser = ({ position, beamLength }) => {
   );
 };
 
-const CageAssembly = () => {
+// ── COMPONENTE CÁMARA BASLER ──
+const BaslerCamera = ({ position, target }) => {
+  const groupRef = useRef();
+
+  useFrame(() => {
+    if (groupRef.current) {
+      // Hacer que la cámara mire hacia el target (la carretilla)
+      groupRef.current.lookAt(new THREE.Vector3(...target));
+    }
+  });
+
+  return (
+    <group ref={groupRef} position={position}>
+      {/* Cuerpo de la cámara (Gris metálico) */}
+      <mesh position={[0, 0, 0.05]}>
+        <boxGeometry args={[0.06, 0.06, 0.12]} />
+        <meshStandardMaterial color="#b0b5b9" metalness={0.6} roughness={0.3} />
+      </mesh>
+      {/* Lente (Cilindro negro) */}
+      <mesh position={[0, 0, 0.14]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.03, 0.03, 0.06]} />
+        <meshStandardMaterial color="#111111" roughness={0.2} metalness={0.8} />
+      </mesh>
+      {/* Cristal de la lente */}
+      <mesh position={[0, 0, 0.171]} rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.02, 0.02, 0.005]} />
+        <meshStandardMaterial color="#44aaff" transparent opacity={0.6} metalness={1} roughness={0} />
+      </mesh>
+    </group>
+  );
+};
+
+const CageAssembly = ({ plcState }) => {
   const gateRef = useRef();
   const frontGateRef = useRef();
 
-  useFrame((state) => {
+  const plcRef = useRef(plcState);
+  useEffect(() => {
+    plcRef.current = plcState;
+  }, [plcState]);
+
+  useFrame((state, delta) => {
+    // Determine target height based on plcState
+    // Default up if nothing specified, or UP if Ob_Subir_Vallas
+    // Leer el estado de los detectores en lugar de los comandos de salida
+    // Así la animación funcionará tanto en simulación como con el PLC real
+    const isDownRear = plcRef.current?.Ob_Dtec_Valla_1_trabajo_LH === true;
+    const isUpRear = plcRef.current?.Ob_Dtec_Valla_1_Reposo_LH === true;
+    
+    const isDownFront = plcRef.current?.Ob_Dtec_Valla_2_trabajo_RH === true;
+    const isUpFront = plcRef.current?.Ob_Dtec_Valla_2_Reposo_RH === true;
+    
+    // La posición original de la valla trasera (Valla 1) en reposo es Y=4.0
+    // La valla frontal (Valla 2) no debe bajar tanto para no chocar con los pallets (Y=5.4)
+    // Al subir, ambas se elevan a Y=8.7 (tope de la jaula) para despejar el camino
+    const targetRearY = isDownRear ? 4.0 : (isUpRear ? 8.7 : 4.0);
+    const targetFrontY = isDownFront ? 5.4 : (isUpFront ? 8.7 : 5.4);
+
     if (gateRef.current) {
-      // La valla neumática trasera
-      gateRef.current.position.y = 5.0 + Math.sin(state.clock.elapsedTime * 0.5) * 1.4;
+      gateRef.current.position.y += (targetRearY - gateRef.current.position.y) * delta * 5;
     }
     if (frontGateRef.current) {
-      // La valla neumática frontal (baja solo hasta la altura del pallet más alto)
-      frontGateRef.current.position.y = 6.5 + Math.sin(state.clock.elapsedTime * 0.5 + Math.PI) * 1.0;
+      frontGateRef.current.position.y += (targetFrontY - frontGateRef.current.position.y) * delta * 5;
     }
   });
 
@@ -91,32 +142,74 @@ const CageAssembly = () => {
       {/* ── ESTRUCTURA BLANCA (JAULA) ── */}
       <group>
         {/* Pilares verticales */}
-        <mesh position={[-1.2, 4, -0.5]}><boxGeometry args={[0.3, 8, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
-        <mesh position={[1.2, 4, -0.5]}><boxGeometry args={[0.3, 8, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
-        <mesh position={[-1.2, 4, 3.0]}><boxGeometry args={[0.3, 8, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
-        <mesh position={[1.2, 4, 3.0]}><boxGeometry args={[0.3, 8, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[-1.2, 4.35, -0.5]}><boxGeometry args={[0.3, 8.7, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[1.2, 4.35, -0.5]}><boxGeometry args={[0.3, 8.7, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[-1.2, 4.35, 3.0]}><boxGeometry args={[0.3, 8.7, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[1.2, 4.35, 3.0]}><boxGeometry args={[0.3, 8.7, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
 
         {/* Vigas superiores */}
-        <mesh position={[0, 7.85, -0.5]}><boxGeometry args={[2.7, 0.3, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
-        <mesh position={[0, 7.85, 3.0]}><boxGeometry args={[2.7, 0.3, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
-        <mesh position={[-1.2, 7.85, 1.25]}><boxGeometry args={[0.3, 0.3, 3.5]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
-        <mesh position={[1.2, 7.85, 1.25]}><boxGeometry args={[0.3, 0.3, 3.5]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[0, 8.55, -0.5]}><boxGeometry args={[2.7, 0.3, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[0, 8.55, 3.0]}><boxGeometry args={[2.7, 0.3, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[-1.2, 8.55, 1.25]}><boxGeometry args={[0.3, 0.3, 3.5]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[1.2, 8.55, 1.25]}><boxGeometry args={[0.3, 0.3, 3.5]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
 
         {/* Vigas medias laterales */}
         <mesh position={[-1.2, 4, 1.25]}><boxGeometry args={[0.15, 0.15, 3.5]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
         <mesh position={[1.2, 4, 1.25]}><boxGeometry args={[0.15, 0.15, 3.5]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
         
         {/* Tirantes diagonales */}
-        <mesh position={[-1.2, 6, 1.25]} rotation={[0.7188, 0, 0]}><boxGeometry args={[0.1, 5.315, 0.1]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
-        <mesh position={[-1.2, 6, 1.25]} rotation={[-0.7188, 0, 0]}><boxGeometry args={[0.1, 5.315, 0.1]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
-        <mesh position={[1.2, 6, 1.25]} rotation={[0.7188, 0, 0]}><boxGeometry args={[0.1, 5.315, 0.1]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
-        <mesh position={[1.2, 6, 1.25]} rotation={[-0.7188, 0, 0]}><boxGeometry args={[0.1, 5.315, 0.1]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[-1.2, 6.35, 1.25]} rotation={[0.6399, 0, 0]}><boxGeometry args={[0.1, 5.86, 0.1]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[-1.2, 6.35, 1.25]} rotation={[-0.6399, 0, 0]}><boxGeometry args={[0.1, 5.86, 0.1]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[1.2, 6.35, 1.25]} rotation={[0.6399, 0, 0]}><boxGeometry args={[0.1, 5.86, 0.1]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[1.2, 6.35, 1.25]} rotation={[-0.6399, 0, 0]}><boxGeometry args={[0.1, 5.86, 0.1]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
 
         {/* Base negra del suelo */}
         <mesh position={[0, 0.01, 1.25]} rotation={[-Math.PI/2, 0, 0]}>
           <planeGeometry args={[2.4, 4.5]} />
           <meshStandardMaterial color="#222222" />
         </mesh>
+
+        {/* Tiras LED (Columnas Traseras Z=3.0, caras frontales Z=2.84) */}
+        {(() => {
+          let ledColor = "#111111"; // Apagado
+          let emissive = "#000000";
+          let intensity = 0;
+          let lightActive = false;
+          
+          if (plcState?.Ob_LUZ_ROJA) {
+            ledColor = "#ff0000"; emissive = "#ff0000"; intensity = 5; lightActive = true;
+          } else if (plcState?.Ob_LUZ_VERDE) {
+            ledColor = "#00ff00"; emissive = "#00ff00"; intensity = 5; lightActive = true;
+          } else if (plcState?.Ob_LUZ_AZUL) {
+            ledColor = "#0088ff"; emissive = "#0088ff"; intensity = 5; lightActive = true;
+          }
+
+          return (
+            <>
+              {/* Luces puntuales para iluminar el entorno cuando están encendidas */}
+              {lightActive && (
+                <>
+                  <pointLight position={[-1.2, 2.0, 2.7]} color={emissive} intensity={2} distance={5} />
+                  <pointLight position={[1.2, 2.0, 2.7]} color={emissive} intensity={2} distance={5} />
+                </>
+              )}
+
+              {/* Tira LED Izquierda (Cara Frontal Trasera) */}
+              <mesh position={[-1.2, 2.0, 2.84]}>
+                <boxGeometry args={[0.15, 2.0, 0.02]} />
+                <meshStandardMaterial color={ledColor} emissive={emissive} emissiveIntensity={intensity} />
+              </mesh>
+              {/* Tira LED Derecha (Cara Frontal Trasera) */}
+              <mesh position={[1.2, 2.0, 2.84]}>
+                <boxGeometry args={[0.15, 2.0, 0.02]} />
+                <meshStandardMaterial color={ledColor} emissive={emissive} emissiveIntensity={intensity} />
+              </mesh>
+            </>
+          );
+        })()}
+        
+        {/* Cámara Basler (Pilar Izquierdo Trasero, Cara Frontal) apuntando al centro de la carretilla */}
+        <BaslerCamera position={[-1.2, 3.2, 2.84]} target={[0, 1.0, 0]} />
       </group>
 
       {/* ── CARGAS (PESOS DE PRUEBA) EN EL FRENTE (Z=2.2) ── */}
@@ -226,9 +319,9 @@ const CageAssembly = () => {
 
       {/* ── SENSORES LÁSER WENGLOR ── */}
       {/* Láser 1: Apuntando entre las horquillas de la carretilla */}
-      <WenglorLaser position={[0, 7.8, 0.8]} beamLength={7.8} />
+      <WenglorLaser position={[0, 8.7, 0.8]} beamLength={8.7} />
       {/* Láser 2: Apuntando al centro de la torre de pallets (altura del pallet superior Y=3.94) */}
-      <WenglorLaser position={[0, 7.8, 2.0]} beamLength={7.8 - 3.94} />
+      <WenglorLaser position={[0, 8.7, 2.0]} beamLength={8.7 - 3.94} />
 
     </group>
   );
@@ -470,7 +563,7 @@ const ForkliftAssembly = ({ distance }) => {
   );
 };
 
-const DigitalTwin = ({ distance }) => {
+const DigitalTwin = ({ distance, plcState }) => {
   return (
     <div className="w-full h-full bg-gradient-to-b from-[#1d2930] to-[#0f171e]">
       <Canvas camera={{ position: [4, 3, 5], fov: 50 }}>
@@ -479,7 +572,7 @@ const DigitalTwin = ({ distance }) => {
         <pointLight position={[-10, -10, -10]} intensity={0.5} />
         <Environment preset="warehouse" blur={0.8} />
         
-        <CageAssembly />
+        <CageAssembly plcState={plcState} />
         <ForkliftAssembly distance={distance} />
         
         {/* Suelo Industrial */}

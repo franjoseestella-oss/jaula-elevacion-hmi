@@ -13,7 +13,7 @@ const StatusLED = ({ active, label, icon: Icon, onClick }) => (
   </div>
 );
 
-const Header = ({ status, onErpClick, onSettingsClick, operario, onOperatorClick, canChangeOperator }) => {
+const Header = ({ status, onErpClick, onSettingsClick, onPlcClick, operario, onOperatorClick, canChangeOperator }) => {
   return (
     <header className="h-20 bg-gradient-to-b from-[#151f25] to-[#11191e] border-b border-[#2e404a] flex items-center justify-between px-8 shrink-0 z-20 relative">
       {/* Accent Top Border */}
@@ -40,7 +40,7 @@ const Header = ({ status, onErpClick, onSettingsClick, operario, onOperatorClick
             <span className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">SYS LINK</span>
           </div>
           <div className="w-[1px] h-8 bg-[#2e404a]"></div>
-          <StatusLED active={status.opc} label="OPC UA" icon={Activity} />
+          <StatusLED active={status.opc} label="PLC" icon={Activity} onClick={onPlcClick} />
           <StatusLED active={status.basler} label="BASLER" icon={Camera} />
           <StatusLED active={status.db} label="SQL DB" icon={Database} />
           <StatusLED active={status.erp} label="ERP" icon={Server} onClick={onErpClick} />

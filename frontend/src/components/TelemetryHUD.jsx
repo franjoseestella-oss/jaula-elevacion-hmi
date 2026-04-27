@@ -3,7 +3,8 @@ import { Target, Clock } from 'lucide-react';
 
 const TelemetryHUD = ({ telemetry }) => {
   return (
-    <div className="absolute top-6 left-6 right-6 flex justify-between z-10 pointer-events-none">
+    <>
+      <div className="absolute top-6 left-6 right-6 flex justify-between z-10 pointer-events-none">
       
       {/* Distance Telemetry */}
       <div className="glass-panel p-5 rounded-xl w-72 pointer-events-auto relative overflow-hidden group">
@@ -51,6 +52,9 @@ const TelemetryHUD = ({ telemetry }) => {
       </div>
 
     </div>
+      
+
+    </>
   );
 };
 

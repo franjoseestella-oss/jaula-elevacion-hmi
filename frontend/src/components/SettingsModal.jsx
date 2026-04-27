@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { X, Settings, Network, Usb, Save, TestTube } from 'lucide-react';
+import { X, Settings, Network, Usb, Save, TestTube, Cpu, Activity, Lightbulb } from 'lucide-react';
 
-const SettingsModal = ({ open, onClose }) => {
+const SettingsModal = ({ open, onClose, telemetry }) => {
   const [activeTab, setActiveTab] = useState('datalogic');
   const [connType, setConnType] = useState('tcp');
   const [ip, setIp] = useState('192.168.0.50');
@@ -10,6 +10,21 @@ const SettingsModal = ({ open, onClose }) => {
   const [baudRate, setBaudRate] = useState('115200');
   const [testResult, setTestResult] = useState(null);
   const [isTesting, setIsTesting] = useState(false);
+  const [isSimulation, setIsSimulation] = useState(true);
+
+  // Estado local para las salidas del PLC
+  const [luces, setLuces] = useState({ Ob_LUZ_VERDE: false, Ob_LUZ_AZUL: false, Ob_LUZ_ROJA: false });
+
+  // Sincronizar el estado local con la telemetría real del backend
+  React.useEffect(() => {
+    if (telemetry?.plc) {
+      setLuces({
+        Ob_LUZ_VERDE: !!telemetry.plc.Ob_LUZ_VERDE,
+        Ob_LUZ_AZUL: !!telemetry.plc.Ob_LUZ_AZUL,
+        Ob_LUZ_ROJA: !!telemetry.plc.Ob_LUZ_ROJA,
+      });
+    }
+  }, [telemetry?.plc]);
 
   if (!open) return null;
 
@@ -23,7 +38,7 @@ const SettingsModal = ({ open, onClose }) => {
     setIsTesting(true);
     setTestResult(null);
     try {
-      const res = await fetch('http://localhost:8000/config/datalogic/test', {
+      const res = await fetch('http://localhost:8001/config/datalogic/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ connType, ip, port, comPort, baudRate })
@@ -79,7 +94,6 @@ const SettingsModal = ({ open, onClose }) => {
               <Network size={14} />
               Datalogic
             </button>
-            {/* Futuras pestañas aquí */}
           </div>
 
           {/* Tab Content */}

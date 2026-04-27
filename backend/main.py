@@ -462,7 +462,103 @@ def test_datalogic_connection(config: DatalogicConfig):
     return {"status": "error", "message": "Tipo de conexión inválido."}
 
 # ─────────────────────────────────────────────────────────────
-# WebSocket — Telemetría en tiempo real
+# PLC OPC UA — Simulación de lectura y escritura
+# ─────────────────────────────────────────────────────────────
+
+# Estado global simulado
+plc_sim_state = {
+    # Salidas (Comandos HMI -> PLC)
+    "Ob_LUZ_VERDE": False,
+    "Ob_LUZ_AZUL": False,
+    "Ob_LUZ_ROJA": False,
+    "Ob_Subir_Vallas": False,
+    "Ob_Bajar_Vallas": False,
+
+    # Entradas Analógicas (Simuladas)
+    "OW_Altura_Elevacion": 0.0,
+    "OW_Pallet": 0.0,
+
+    # Entradas Digitales (Simuladas)
+    "Ob_Inciar_Secuencia": False,
+    "Ob_Repetir_Secuencia": False,
+    "Ob_Abortar_Secuancia": False,
+    
+    "Ob_Dtec_Valla_1_trabajo_LH": False,
+    "Ob_Dtec_Valla_1_trabajo_RH": False,
+    "Ob_Dtec_Valla_1_Reposo_LH": True,
+    "Ob_Dtec_Valla_1_Reposo_RH": True,
+    
+    "Ob_Dtec_Valla_2_trabajo_LH": False,
+    "Ob_Dtec_Valla_2_trabajo_RH": False,
+    "Ob_Dtec_Valla_2_Reposo_LH": True,
+    "Ob_Dtec_Valla_2_Reposo_RH": True,
+}
+
+class PlcWriteParams(BaseModel):
+    Ob_LUZ_VERDE: bool | None = None
+    Ob_LUZ_AZUL: bool | None = None
+    Ob_LUZ_ROJA: bool | None = None
+    Ob_Subir_Vallas: bool | None = None
+    Ob_Bajar_Vallas: bool | None = None
+    OW_Altura_Elevacion: float | None = None
+    OW_Pallet: float | None = None
+
+@app.post("/plc/write")
+def write_to_plc(params: PlcWriteParams):
+    """
+    Simula la escritura de señales hacia el PLC vía OPC UA.
+    En el futuro, esto utilizará la librería asyncua para escribir en el S7-1200.
+    """
+    global plc_sim_state
+    escrito = params.dict(exclude_none=True)
+    
+    for key, value in escrito.items():
+        if key in plc_sim_state:
+            plc_sim_state[key] = value
+            
+            # Exclusión mutua para luces
+            if value is True:
+                if key == "Ob_LUZ_ROJA":
+                    plc_sim_state["Ob_LUZ_VERDE"] = False
+                    plc_sim_state["Ob_LUZ_AZUL"] = False
+                elif key == "Ob_LUZ_VERDE":
+                    plc_sim_state["Ob_LUZ_ROJA"] = False
+                    plc_sim_state["Ob_LUZ_AZUL"] = False
+                elif key == "Ob_LUZ_AZUL":
+                    plc_sim_state["Ob_LUZ_ROJA"] = False
+                    plc_sim_state["Ob_LUZ_VERDE"] = False
+            
+            # Lógica de simulación de vallas
+            if key == "Ob_Subir_Vallas" and value is True:
+                plc_sim_state["Ob_Bajar_Vallas"] = False
+                plc_sim_state["Ob_Dtec_Valla_1_Reposo_LH"] = True
+                plc_sim_state["Ob_Dtec_Valla_1_Reposo_RH"] = True
+                plc_sim_state["Ob_Dtec_Valla_2_Reposo_LH"] = True
+                plc_sim_state["Ob_Dtec_Valla_2_Reposo_RH"] = True
+                
+                plc_sim_state["Ob_Dtec_Valla_1_trabajo_LH"] = False
+                plc_sim_state["Ob_Dtec_Valla_1_trabajo_RH"] = False
+                plc_sim_state["Ob_Dtec_Valla_2_trabajo_LH"] = False
+                plc_sim_state["Ob_Dtec_Valla_2_trabajo_RH"] = False
+                
+            elif key == "Ob_Bajar_Vallas" and value is True:
+                plc_sim_state["Ob_Subir_Vallas"] = False
+                plc_sim_state["Ob_Dtec_Valla_1_trabajo_LH"] = True
+                plc_sim_state["Ob_Dtec_Valla_1_trabajo_RH"] = True
+                plc_sim_state["Ob_Dtec_Valla_2_trabajo_LH"] = True
+                plc_sim_state["Ob_Dtec_Valla_2_trabajo_RH"] = True
+                
+                plc_sim_state["Ob_Dtec_Valla_1_Reposo_LH"] = False
+                plc_sim_state["Ob_Dtec_Valla_1_Reposo_RH"] = False
+                plc_sim_state["Ob_Dtec_Valla_2_Reposo_LH"] = False
+                plc_sim_state["Ob_Dtec_Valla_2_Reposo_RH"] = False
+                    
+    print(f"[OPC UA SIM] Escribiendo salidas al PLC: {escrito}")
+    return {"status": "ok", "message": "Valores enviados al PLC simulado", "data": escrito}
+
+
+# ─────────────────────────────────────────────────────────────
+# WebSocket — Telemetría en tiempo real (OPC UA Simulado)
 # ─────────────────────────────────────────────────────────────
 
 @app.websocket("/ws")
@@ -470,30 +566,20 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
 
     start_time = time.time()
-    distance = 0.0
-    direction = 1  # 1 = subir, -1 = bajar
-    state = "ASCENDIENDO"
-
+    
     try:
         while True:
-            # Simular telemetría del láser (0 a 5000mm)
-            distance += random.uniform(50, 150) * direction
-            if distance >= 5000:
-                distance = 5000
-                direction = -1
-                state = "DESCENDIENDO"
-            elif distance <= 0:
-                distance = 0
-                direction = 1
-                state = "ASCENDIENDO"
-
+            global plc_sim_state
+            
             elapsed = time.time() - start_time
+            state_str = "SIMULACION"
 
             await websocket.send_json({
                 "type": "telemetry",
-                "distance": round(distance, 1),
+                "distance": round(plc_sim_state.get("OW_Altura_Elevacion", 0.0), 1),
                 "timer": round(elapsed, 2),
-                "state": state,
+                "state": state_str,
+                "plc": plc_sim_state
             })
 
             await asyncio.sleep(0.1)  # 10 Hz
@@ -556,4 +642,4 @@ if os.path.isdir(_frontend_dist):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=False)
