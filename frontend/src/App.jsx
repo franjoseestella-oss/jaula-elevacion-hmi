@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { AlertTriangle } from 'lucide-react';
 import Header from './components/Header';
 import LeftPanel from './components/LeftPanel';
 import DigitalTwin from './components/DigitalTwin';
@@ -21,6 +22,7 @@ function App() {
   const [networkStatus, setNetworkStatus] = useState({ opc: false, basler: false, db: false, erp: true });
   const [operario, setOperario]         = useState(null);
   const [isSimulation, setIsSimulation] = useState(true);
+  const [palletState, setPalletState]   = useState('idle'); // idle | animating | picked_up
 
 
   // Cargar datos completos de un bastidor seleccionado (desde el modal o ErpSearch)
@@ -86,8 +88,67 @@ function App() {
         <LeftPanel data={erpData} onErpData={handleBastidorSelect} />
 
         <div className="flex-1 relative flex items-center justify-center bg-black overflow-hidden scanlines">
+          {/* BANNER GIGANTE DE SEGURIDAD */}
+          {erpData && (!telemetry.plc?.Ob_Dtec_Valla_1_trabajo_LH || !telemetry.plc?.Ob_Dtec_Valla_2_trabajo_RH) && (
+            <div className="absolute top-10 left-1/2 -translate-x-1/2 z-50 bg-red-600/90 border-4 border-red-500 text-white px-8 py-4 rounded-xl shadow-[0_0_50px_rgba(220,38,38,0.8)] flex items-center gap-6 backdrop-blur-md">
+              <AlertTriangle size={56} className="text-white drop-shadow-lg" />
+              <div className="flex flex-col">
+                <span className="text-4xl font-black tracking-[0.2em] drop-shadow-md">VALLAS NO EN POSICIÓN</span>
+                <span className="text-sm font-bold tracking-widest text-red-100 drop-shadow">PELIGRO: LA JAULA NO ES SEGURA</span>
+              </div>
+            </div>
+          )}
+
           <TelemetryHUD telemetry={telemetry} />
-          <DigitalTwin distance={telemetry.distance} plcState={telemetry.plc} />
+          <DigitalTwin distance={telemetry.distance} plcState={telemetry.plc} palletState={palletState} onPalletAnimComplete={() => setPalletState('picked_up')} />
+
+          {/* Botonera Simulada (Solo Simulación) */}
+          {isSimulation && (
+            <div className="absolute left-6 bottom-6 flex gap-4 bg-[#0a0f12]/80 backdrop-blur-md p-4 rounded-2xl border border-[#2e404a] shadow-[0_0_20px_rgba(0,0,0,0.5)] z-20">
+              <div className="flex flex-col gap-2">
+                <span className="text-white text-[10px] font-black uppercase tracking-widest text-center border-b border-[#2e404a] pb-2 mb-2">Botonera PLC (Simulación)</span>
+                {['Ob_Inciar_Secuencia', 'Ob_Repetir_Secuencia', 'Ob_Abortar_Secuancia'].map((id, idx) => {
+                  const labels = ['Iniciar Secuencia', 'Confirmar Pegatina (P2)', 'Abortar Secuencia'];
+                  const colors = ['bg-green-500 hover:bg-green-400 text-green-950', 'bg-blue-500 hover:bg-blue-400 text-blue-950', 'bg-red-500 hover:bg-red-400 text-red-950'];
+                  return (
+                    <button
+                      key={id}
+                      onMouseDown={async () => {
+                        try {
+                          await fetch('http://localhost:8001/plc/write', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ [id]: true })
+                          });
+                        } catch (e) {}
+                      }}
+                      onMouseUp={async () => {
+                        try {
+                          await fetch('http://localhost:8001/plc/write', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ [id]: false })
+                          });
+                        } catch (e) {}
+                      }}
+                      onMouseLeave={async () => {
+                        try {
+                          await fetch('http://localhost:8001/plc/write', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ [id]: false })
+                          });
+                        } catch (e) {}
+                      }}
+                      className={`px-4 py-3 rounded-lg font-black text-xs uppercase tracking-widest transition-all active:scale-95 shadow-lg ${colors[idx]} ${telemetry?.plc?.[id] ? 'brightness-150 ring-2 ring-white scale-95' : ''}`}
+                    >
+                      {labels[idx]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Slider flotante para el movimiento del carro (Solo Simulación) */}
           {isSimulation && (
@@ -117,7 +178,14 @@ function App() {
           )}
         </div>
 
-        <Sequencer erpData={erpData} onErpData={setErpData} onOpenErp={() => setErpModalOpen(true)} />
+        <Sequencer 
+          erpData={erpData} 
+          onErpData={setErpData} 
+          onOpenErp={() => setErpModalOpen(true)} 
+          palletState={palletState}
+          setPalletState={setPalletState}
+          plcState={telemetry?.plc}
+        />
       </div>
 
       <Footer />

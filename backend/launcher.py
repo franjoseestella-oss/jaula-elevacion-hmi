@@ -2,7 +2,7 @@
 launcher.py — Punto de entrada para el ejecutable PyInstaller.
 
 Arranca el servidor FastAPI (uvicorn) en un hilo secundario y abre
-automáticamente el navegador apuntando a http://localhost:8000.
+automáticamente el navegador apuntando a http://localhost:8001.
 """
 
 import sys
@@ -24,7 +24,7 @@ sys.path.insert(0, bundle_dir)
 # Cambiamos el CWD al bundle para que los paths relativos (database.config, etc.) funcionen
 os.chdir(bundle_dir)
 
-PORT = 8000
+PORT = 8001
 HOST = "0.0.0.0"
 
 

@@ -219,6 +219,45 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     }
   }, [plcState, pruebaId, stepStatus]);
 
+  // ── Controles de PLC (Botones físicos) ────────────────────────────────────
+  
+  // 1. Abortar secuencia
+  useEffect(() => {
+    if (plcState?.Ob_Abortar_Secuancia === true) {
+      if (stepStatus.some(s => s !== STEP_STATUS.PENDING)) {
+        console.warn("ABORTAR SECUENCIA (Pulsador PLC)");
+        handleAbort();
+      }
+    }
+  }, [plcState?.Ob_Abortar_Secuancia]);
+
+  // 2. Iniciar Secuencia -> avanzar en Pasos 3, 4, 5
+  useEffect(() => {
+    if (plcState?.Ob_Inciar_Secuencia === true) {
+      if (stepStatus[2] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
+        markOk(2);
+      } else if (stepStatus[3] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
+        markOk(3);
+      } else if (stepStatus[4] === STEP_STATUS.ACTIVE) {
+        if (timer5min === 0) {
+          markOk(4);
+        } else if (timer5minDisplay === null && visionOk) {
+          // Si está en el paso 5 y aún no ha iniciado el contador, lo arranca con el botón
+          startTimer5min();
+        }
+      }
+    }
+  }, [plcState?.Ob_Inciar_Secuencia]);
+
+  // 3. Confirmar Pegatina (Repetir Secuencia) -> avanzar Paso 2 (Multiload)
+  useEffect(() => {
+    if (plcState?.Ob_Repetir_Secuencia === true) {
+      if (stepStatus[1] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
+        markOk(1);
+      }
+    }
+  }, [plcState?.Ob_Repetir_Secuencia]);
+
   // ── Teclado numérico manual ───────────────────────────────────────────────
   const handleNumpadPress = (key) => {
     setSeqError('');
