@@ -99,7 +99,7 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation }) =
             <div className="flex flex-col gap-3 bg-[#0a0f12]/60 border border-[#2e404a] rounded-xl p-5 h-full">
               {[
                 { id: 'OW_Altura_Elevacion', label: 'Láser Altura Elevación', isAnalog: true, unit: 'mm' },
-                { id: 'OW_Pallet', label: 'Sensor Peso Pallet', isAnalog: true, unit: 'kg' },
+                { id: 'OW_Pallet', label: 'Láser Altura Pallet', isAnalog: true, unit: 'mm' },
                 { id: 'Ob_Inciar_Secuencia', label: 'Botón Iniciar Secuencia', isAnalog: false, canSimulateClick: true },
                 { id: 'Ob_Repetir_Secuencia', label: 'Botón Repetir Secuencia', isAnalog: false, canSimulateClick: true },
                 { id: 'Ob_Abortar_Secuancia', label: 'Botón Abortar Secuencia', isAnalog: false, isDanger: true, canSimulateClick: true },
@@ -121,6 +121,7 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation }) =
                           {(() => {
                             let val = isSimulation ? Number(analogs[sensor.id] || 0) : (value !== undefined ? Number(value) : null);
                             if (val === null) return '---';
+                            if (sensor.id === 'OW_Altura_Elevacion') val = Math.max(0, val - 1180);
                             // Convertir ambos sensores a metros (dividiendo por 1000)
                             return (val / 1000).toFixed(2);
                           })()} <span className="text-[10px] text-blue-400/70">m</span>

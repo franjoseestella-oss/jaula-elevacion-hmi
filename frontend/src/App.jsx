@@ -99,8 +99,8 @@ function App() {
             </div>
           )}
 
-          <TelemetryHUD telemetry={telemetry} />
-          <DigitalTwin distance={telemetry.distance} plcState={telemetry.plc} palletState={palletState} onPalletAnimComplete={() => setPalletState('picked_up')} />
+          <TelemetryHUD telemetry={{ ...telemetry, distance: Math.max(0, (telemetry.distance || 0) - 1180) }} />
+          <DigitalTwin distance={Math.max(0, (telemetry.distance || 0) - 1180)} plcState={telemetry.plc} palletState={palletState} onPalletAnimComplete={() => setPalletState('picked_up')} />
 
           {/* Botonera Simulada (Solo Simulación) */}
           {isSimulation && (
@@ -159,9 +159,9 @@ function App() {
                 min="0" 
                 max="8700" 
                 step="10"
-                value={telemetry.plc?.OW_Altura_Elevacion || 0}
+                value={telemetry.plc?.OW_Altura_Elevacion ? Math.max(0, telemetry.plc.OW_Altura_Elevacion - 1180) : 0}
                 onChange={async (e) => {
-                  const val = parseFloat(e.target.value);
+                  const val = parseFloat(e.target.value) + 1180;
                   try {
                     await fetch('http://localhost:8001/plc/write', {
                       method: 'POST',
