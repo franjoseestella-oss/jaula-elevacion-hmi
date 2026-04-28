@@ -118,7 +118,7 @@ const ActionBtn = ({ onClick, children, disabled = false, variant = 'primary' })
 
 // ─── Componente principal ────────────────────────────────────────────────────
 
-const Sequencer = ({ erpData, onErpData, onOpenErp }) => {
+const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState, plcState }) => {
   const [stepStatus, setStepStatus]   = useState([
     STEP_STATUS.ACTIVE,
     STEP_STATUS.PENDING,
@@ -150,6 +150,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp }) => {
     setTimer5min(null);
     setVisionOk(false);
     setPruebaId(null);
+    if (setPalletState) setPalletState('idle');
     if (onErpData) onErpData(null);
   };
 
@@ -169,8 +170,17 @@ const Sequencer = ({ erpData, onErpData, onOpenErp }) => {
   // ── Auto-Avanzar PASO 1 si se carga desde ERP Modal ───────────────
   useEffect(() => {
     if (erpData && stepStatus[0] === STEP_STATUS.ACTIVE) {
+      const isDownRear = plcState?.Ob_Dtec_Valla_1_trabajo_LH === true;
+      const isDownFront = plcState?.Ob_Dtec_Valla_2_trabajo_RH === true;
+
+      if (!isDownRear || !isDownFront) {
+        // La secuencia está cargada, pero no avanzamos al Paso 2 hasta que las vallas bajen.
+        return;
+      }
+
       setScannedSeq(null);
-      markOk(0);
+      setSeqError('');
+      markOk(0); // Avanzar a Paso 2 (Iniciar prueba)
       
       // Crear nueva prueba en BD
       fetch(`${API_BASE}/pruebas/nueva`, {
@@ -193,7 +203,21 @@ const Sequencer = ({ erpData, onErpData, onOpenErp }) => {
       })
       .catch(e => console.error("Error creating test:", e));
     }
-  }, [erpData, stepStatus]);
+  }, [erpData, stepStatus, plcState]);
+
+  // ── Abortar prueba en curso si se abre la jaula ───────────────
+  useEffect(() => {
+    // Si la prueba está activa (ya pasó del paso 1 y tiene ID)
+    if (pruebaId && stepStatus[0] === STEP_STATUS.OK && stepStatus[4] !== STEP_STATUS.OK) {
+      const isDownRear = plcState?.Ob_Dtec_Valla_1_trabajo_LH === true;
+      const isDownFront = plcState?.Ob_Dtec_Valla_2_trabajo_RH === true;
+
+      if (!isDownRear || !isDownFront) {
+        console.warn("Seguridad Comprometida: Vallas abiertas durante el test. Abortando...");
+        handleAbort();
+      }
+    }
+  }, [plcState, pruebaId, stepStatus]);
 
   // ── Teclado numérico manual ───────────────────────────────────────────────
   const handleNumpadPress = (key) => {
@@ -260,6 +284,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp }) => {
   // ── PASO 1B: Operario pulsa "Cargar" → consulta ERP y avanza
   const handleConfirmarCarga = async () => {
     if (!scannedSeq) return;
+    
     setSeqLoading(true);
     setSeqError('');
     try {
@@ -268,7 +293,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp }) => {
       if (res.ok) {
         onErpData(data);
         setScannedSeq(null);
-        markOk(0);
+        // El useEffect de arriba se encargará de llamar a markOk(0) cuando las vallas estén abajo.
       } else {
         setSeqError(data.detail || `Secuencia '${scannedSeq.digits}' no encontrada.`);
         setScannedSeq(null);
@@ -310,15 +335,26 @@ const Sequencer = ({ erpData, onErpData, onOpenErp }) => {
       if (!altura || altura === 0) {
         // Sin multiload → saltar
         setTimeout(() => toggleSkip(1), 600);
+      } else if (palletState === 'idle') {
+        setPalletState('animating');
       }
     }
-  }, [currentStep, stepStatus, erpData]);
+  }, [currentStep, stepStatus, erpData, palletState, setPalletState]);
 
-  // ── PASO 3: 5 minutos — decidir automáticamente al entrar ─────────────────
+  // ── PASO 3: Test sin carga — disparar animación si se saltó el 2 ────────────
   useEffect(() => {
     if (currentStep === 2 && stepStatus[2] === STEP_STATUS.ACTIVE && erpData) {
+      if (palletState === 'idle') {
+        setPalletState('animating');
+      }
+    }
+  }, [currentStep, stepStatus, erpData, palletState, setPalletState]);
+
+  // ── PASO 5: 5 minutos — decidir automáticamente al entrar ─────────────────
+  useEffect(() => {
+    if (currentStep === 4 && stepStatus[4] === STEP_STATUS.ACTIVE && erpData) {
       if (!isMxXL(erpData.modelo)) {
-        setTimeout(() => toggleSkip(2), 600);
+        setTimeout(() => toggleSkip(4), 600);
       }
     }
   }, [currentStep, stepStatus, erpData]);
@@ -368,6 +404,14 @@ const Sequencer = ({ erpData, onErpData, onOpenErp }) => {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+      
+        {/* Banner de seguridad: Vallas no en posición */}
+        {(erpData && (!plcState?.Ob_Dtec_Valla_1_trabajo_LH || !plcState?.Ob_Dtec_Valla_2_trabajo_RH)) && (
+          <div className="bg-red-500/10 border border-red-500/50 text-red-500 px-3 py-2 rounded-lg flex items-center justify-center gap-2 font-black tracking-widest text-xs shadow-[0_0_15px_rgba(239,68,68,0.2)]">
+            <AlertTriangle size={16} className="text-red-500" />
+            VALLAS NO EN POSICIÓN
+          </div>
+        )}
 
         {/* ── PASO 1: Leer código de barras / secuencia ────────────────────── */}
         <StepCard num={1} icon={Barcode} title="Identificar carretilla" status={stepStatus[0]}>
@@ -572,7 +616,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp }) => {
               <p className="text-[9px] text-logisnext-slate leading-relaxed">
                 Posiciona el mástil a la altura indicada. Confirma cuando esté en posición.
               </p>
-              <ActionBtn onClick={() => markOk(1)} variant="primary">
+              {palletState === 'animating' && (
+                <div className="flex items-center gap-2 mt-2 py-1.5 px-2 bg-logisnext-magenta/10 border border-logisnext-magenta/30 rounded text-[9px] text-logisnext-magenta">
+                  <Loader2 size={12} className="animate-spin" /> Animación de recogida del palet en curso...
+                </div>
+              )}
+              <ActionBtn onClick={() => markOk(1)} variant="primary" disabled={palletState === 'animating'}>
                 <CheckCircle2 size={12} /> Mástil en posición
               </ActionBtn>
             </>
@@ -587,54 +636,34 @@ const Sequencer = ({ erpData, onErpData, onOpenErp }) => {
           )}
         </StepCard>
 
-        {/* ── PASO 3: Prueba 5 minutos (solo Mx / XL) ─────────────────────── */}
-        <StepCard num={3} icon={Timer} title="Prueba 5 minutos" status={stepStatus[2]} canSkip onToggleSkip={() => toggleSkip(2)}>
+        {/* ── PASO 3: Test SIN CARGA ───────────────────────────────────────── */}
+        <StepCard num={3} icon={ArrowUpDown} title="Test sin carga" status={stepStatus[2]} canSkip onToggleSkip={() => toggleSkip(2)}>
           {stepStatus[2] === STEP_STATUS.ACTIVE && erpData && (
             <>
-              <DataLine label="Modelo" value={erpData.modelo} highlight />
-              <DataLine label="Altura mástil" value={`${erpData.altura_max_interm ?? '—'} mm`} />
-
-              {timer5minDisplay === null ? (
-                <>
-                  <p className="text-[9px] text-logisnext-slate leading-relaxed">
-                    Posiciona el mástil. Espera validación de visión y arranca el cronómetro.
-                  </p>
-                  <div className={`flex items-center gap-1.5 py-1 px-2 rounded-md mt-1 text-[9px] font-bold ${visionOk ? 'bg-green-900/30 text-green-400' : 'bg-[#0a0f12] text-logisnext-slate'}`}>
-                    {visionOk ? <CheckCircle2 size={10} /> : <Loader2 size={10} className="animate-spin" />}
-                    {visionOk ? 'Visión OK — listo para iniciar' : 'Esperando OK de visión…'}
-                  </div>
-                  <div className="flex gap-1.5 mt-1">
-                    {!visionOk && (
-                      <ActionBtn onClick={() => setVisionOk(true)} variant="secondary">
-                        Simular OK visión
-                      </ActionBtn>
-                    )}
-                    <ActionBtn onClick={startTimer5min} disabled={!visionOk} variant="primary">
-                      <Timer size={12} /> Iniciar 5 min
-                    </ActionBtn>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className={`text-center font-mono text-3xl font-black mt-1 mb-2 ${timer5min <= 30 ? 'text-red-400 animate-pulse' : timer5min <= 60 ? 'text-yellow-400' : 'text-logisnext-magenta'}`}>
-                    {timer5minDisplay}
-                  </div>
-                  {timer5min === 0 && (
-                    <ActionBtn onClick={() => markOk(2)} variant="success">
-                      <CheckCircle2 size={12} /> Prueba completada
-                    </ActionBtn>
-                  )}
-                </>
+              <DataLine label="Elevac. min" value={ds2s(erpData.tpo_elev_min_scarga)} />
+              <DataLine label="Elevac. max" value={ds2s(erpData.tpo_elev_max_scarga)} />
+              <DataLine label="Descenso min" value={ds2s(erpData.tpo_desc_min_scarga)} />
+              <DataLine label="Descenso max" value={ds2s(erpData.tpo_desc_max_scarga)} />
+              <p className="text-[9px] text-logisnext-slate leading-relaxed mt-1">
+                Retira la carga. Ejecuta ciclos de elevación y descenso sin carga dentro de los tiempos de tolerancia.
+              </p>
+              {palletState === 'animating' && (
+                <div className="flex items-center gap-2 mt-2 py-1.5 px-2 bg-logisnext-magenta/10 border border-logisnext-magenta/30 rounded text-[9px] text-logisnext-magenta">
+                  <Loader2 size={12} className="animate-spin" /> Animación de recogida del palet en curso...
+                </div>
               )}
+              <ActionBtn onClick={() => markOk(2)} variant="success" disabled={palletState === 'animating'}>
+                <CheckCircle2 size={12} /> Test sin carga OK
+              </ActionBtn>
             </>
           )}
-          {stepStatus[2] === STEP_STATUS.SKIP && (
-            <p className="text-[9px] text-yellow-500/80">
-              Modelo <strong>{erpData?.modelo}</strong> → no es Mx/XL. Paso omitido.
-            </p>
+          {(stepStatus[2] === STEP_STATUS.PENDING) && (
+            <div className="flex items-center gap-1.5 text-[9px] text-logisnext-slate">
+              <Lock size={10} /> Pendiente paso anterior
+            </div>
           )}
           {stepStatus[2] === STEP_STATUS.OK && (
-            <p className="text-[9px] text-green-400">Prueba de 5 minutos superada ✓</p>
+            <DataLine label="Estado" value="Completado ✓" highlight />
           )}
         </StepCard>
 
@@ -668,29 +697,54 @@ const Sequencer = ({ erpData, onErpData, onOpenErp }) => {
           )}
         </StepCard>
 
-        {/* ── PASO 5: Test SIN CARGA ───────────────────────────────────────── */}
-        <StepCard num={5} icon={ArrowUpDown} title="Test sin carga" status={stepStatus[4]} canSkip onToggleSkip={() => toggleSkip(4)}>
+        {/* ── PASO 5: Prueba 5 minutos (solo Mx / XL) ─────────────────────── */}
+        <StepCard num={5} icon={Timer} title="Prueba 5 minutos" status={stepStatus[4]} canSkip onToggleSkip={() => toggleSkip(4)}>
           {stepStatus[4] === STEP_STATUS.ACTIVE && erpData && (
             <>
-              <DataLine label="Elevac. min" value={ds2s(erpData.tpo_elev_min_scarga)} />
-              <DataLine label="Elevac. max" value={ds2s(erpData.tpo_elev_max_scarga)} />
-              <DataLine label="Descenso min" value={ds2s(erpData.tpo_desc_min_scarga)} />
-              <DataLine label="Descenso max" value={ds2s(erpData.tpo_desc_max_scarga)} />
-              <p className="text-[9px] text-logisnext-slate leading-relaxed mt-1">
-                Retira la carga. Ejecuta ciclos de elevación y descenso sin carga dentro de los tiempos de tolerancia.
-              </p>
-              <ActionBtn onClick={() => markOk(4)} variant="success">
-                <CheckCircle2 size={12} /> Test sin carga OK
-              </ActionBtn>
+              <DataLine label="Modelo" value={erpData.modelo} highlight />
+              <DataLine label="Altura mástil" value={`${erpData.altura_max_interm ?? '—'} mm`} />
+
+              {timer5minDisplay === null ? (
+                <>
+                  <p className="text-[9px] text-logisnext-slate leading-relaxed">
+                    Posiciona el mástil. Espera validación de visión y arranca el cronómetro.
+                  </p>
+                  <div className={`flex items-center gap-1.5 py-1 px-2 rounded-md mt-1 text-[9px] font-bold ${visionOk ? 'bg-green-900/30 text-green-400' : 'bg-[#0a0f12] text-logisnext-slate'}`}>
+                    {visionOk ? <CheckCircle2 size={10} /> : <Loader2 size={10} className="animate-spin" />}
+                    {visionOk ? 'Visión OK — listo para iniciar' : 'Esperando OK de visión…'}
+                  </div>
+                  <div className="flex gap-1.5 mt-1">
+                    {!visionOk && (
+                      <ActionBtn onClick={() => setVisionOk(true)} variant="secondary">
+                        Simular OK visión
+                      </ActionBtn>
+                    )}
+                    <ActionBtn onClick={startTimer5min} disabled={!visionOk} variant="primary">
+                      <Timer size={12} /> Iniciar 5 min
+                    </ActionBtn>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className={`text-center font-mono text-3xl font-black mt-1 mb-2 ${timer5min <= 30 ? 'text-red-400 animate-pulse' : timer5min <= 60 ? 'text-yellow-400' : 'text-logisnext-magenta'}`}>
+                    {timer5minDisplay}
+                  </div>
+                  {timer5min === 0 && (
+                    <ActionBtn onClick={() => markOk(4)} variant="success">
+                      <CheckCircle2 size={12} /> Prueba completada
+                    </ActionBtn>
+                  )}
+                </>
+              )}
             </>
           )}
-          {(stepStatus[4] === STEP_STATUS.PENDING) && (
-            <div className="flex items-center gap-1.5 text-[9px] text-logisnext-slate">
-              <Lock size={10} /> Pendiente paso anterior
-            </div>
+          {stepStatus[4] === STEP_STATUS.SKIP && (
+            <p className="text-[9px] text-yellow-500/80">
+              Modelo <strong>{erpData?.modelo}</strong> → no es Mx/XL. Paso omitido.
+            </p>
           )}
           {stepStatus[4] === STEP_STATUS.OK && (
-            <DataLine label="Estado" value="Completado ✓" highlight />
+            <p className="text-[9px] text-green-400">Prueba de 5 minutos superada ✓</p>
           )}
         </StepCard>
 

@@ -37,7 +37,22 @@ const StripedBar = ({ args, position, rotation, isVertical }) => {
 };
 
 // ── COMPONENTE LÁSER WENGLOR ──
-const WenglorLaser = ({ position, beamLength }) => {
+const WenglorLaser = React.forwardRef(({ position, beamLength }, ref) => {
+  const beamRef = useRef();
+  const dotRef = useRef();
+
+  React.useImperativeHandle(ref, () => ({
+    setLength: (len) => {
+      if (beamRef.current) {
+        beamRef.current.scale.y = len / beamLength;
+        beamRef.current.position.y = -len / 2;
+      }
+      if (dotRef.current) {
+        dotRef.current.position.y = -len + 0.01;
+      }
+    }
+  }));
+
   return (
     <group position={position}>
       {/* Cuerpo principal (Azul Wenglor) */}
@@ -57,19 +72,19 @@ const WenglorLaser = ({ position, beamLength }) => {
       </mesh>
 
       {/* Haz de luz Láser (Rojo) */}
-      <mesh position={[0, -beamLength / 2, 0]}>
+      <mesh ref={beamRef} position={[0, -beamLength / 2, 0]}>
         <cylinderGeometry args={[0.005, 0.005, beamLength]} />
         <meshBasicMaterial color="#ff0000" transparent opacity={0.6} />
       </mesh>
 
       {/* Punto de impacto láser (Suelo u objeto) */}
-      <mesh position={[0, -beamLength + 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh ref={dotRef} position={[0, -beamLength + 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[0.04, 16]} />
         <meshBasicMaterial color="#ff0000" />
       </mesh>
     </group>
   );
-};
+});
 
 // ── COMPONENTE CÁMARA BASLER ──
 const BaslerCamera = ({ position, target }) => {
@@ -103,14 +118,46 @@ const BaslerCamera = ({ position, target }) => {
   );
 };
 
+// ── COMPONENTE PALET DE MADERA ──
+const WoodenPallet = ({ position }) => {
+  const woodMat = <meshStandardMaterial color="#8b5a2b" roughness={0.9} />;
+  return (
+    <group position={position}>
+      {/* Tablas superiores (simuladas con un bloque plano por simplicidad o varias tablas) */}
+      <mesh position={[0, 0.06, 0]}><boxGeometry args={[1.6, 0.03, 1.0]} />{woodMat}</mesh>
+      
+      {/* Tacos (bloques) */}
+      <mesh position={[-0.75, 0, -0.4]}><boxGeometry args={[0.1, 0.09, 0.1]} />{woodMat}</mesh>
+      <mesh position={[0, 0, -0.4]}><boxGeometry args={[0.1, 0.09, 0.1]} />{woodMat}</mesh>
+      <mesh position={[0.75, 0, -0.4]}><boxGeometry args={[0.1, 0.09, 0.1]} />{woodMat}</mesh>
+      
+      <mesh position={[-0.75, 0, 0]}><boxGeometry args={[0.1, 0.09, 0.1]} />{woodMat}</mesh>
+      <mesh position={[0, 0, 0]}><boxGeometry args={[0.1, 0.09, 0.1]} />{woodMat}</mesh>
+      <mesh position={[0.75, 0, 0]}><boxGeometry args={[0.1, 0.09, 0.1]} />{woodMat}</mesh>
+
+      <mesh position={[-0.75, 0, 0.4]}><boxGeometry args={[0.1, 0.09, 0.1]} />{woodMat}</mesh>
+      <mesh position={[0, 0, 0.4]}><boxGeometry args={[0.1, 0.09, 0.1]} />{woodMat}</mesh>
+      <mesh position={[0.75, 0, 0.4]}><boxGeometry args={[0.1, 0.09, 0.1]} />{woodMat}</mesh>
+
+      {/* Tablas inferiores */}
+      <mesh position={[-0.75, -0.06, 0]}><boxGeometry args={[0.1, 0.03, 1.0]} />{woodMat}</mesh>
+      <mesh position={[0, -0.06, 0]}><boxGeometry args={[0.1, 0.03, 1.0]} />{woodMat}</mesh>
+      <mesh position={[0.75, -0.06, 0]}><boxGeometry args={[0.1, 0.03, 1.0]} />{woodMat}</mesh>
+    </group>
+  );
+};
+
 const CageAssembly = ({ plcState }) => {
   const gateRef = useRef();
   const frontGateRef = useRef();
+  const laser1Ref = useRef();
 
   const plcRef = useRef(plcState);
   useEffect(() => {
     plcRef.current = plcState;
   }, [plcState]);
+
+  const laser2Ref = useRef();
 
   useFrame((state, delta) => {
     // Determine target height based on plcState
@@ -125,15 +172,39 @@ const CageAssembly = ({ plcState }) => {
     
     // La posición original de la valla trasera (Valla 1) en reposo es Y=4.0
     // La valla frontal (Valla 2) no debe bajar tanto para no chocar con los pallets (Y=5.4)
-    // Al subir, ambas se elevan a Y=8.7 (tope de la jaula) para despejar el camino
-    const targetRearY = isDownRear ? 4.0 : (isUpRear ? 8.7 : 4.0);
-    const targetFrontY = isDownFront ? 5.4 : (isUpFront ? 8.7 : 5.4);
+    // Al subir, ambas se elevan a Y=7.1 (tope de la jaula es 8.7, la valla mide 3.0, 7.1 + 1.5 = 8.6)
+    const targetRearY = isDownRear ? 4.0 : (isUpRear ? 7.1 : 4.0);
+    const targetFrontY = isDownFront ? 5.4 : (isUpFront ? 7.1 : 5.4);
 
     if (gateRef.current) {
       gateRef.current.position.y += (targetRearY - gateRef.current.position.y) * delta * 5;
     }
     if (frontGateRef.current) {
       frontGateRef.current.position.y += (targetFrontY - frontGateRef.current.position.y) * delta * 5;
+    }
+    
+    // Animar láser 1 (Carretilla)
+    if (laser1Ref.current && window.__carriageY !== undefined) {
+      let targetY = 0; // Si no hay palet en horquillas, al suelo
+      if (window.__hasPalletOnForks) {
+        targetY = window.__carriageY + 0.185; 
+      }
+      laser1Ref.current.setLength(8.7 - targetY);
+    }
+
+    // Animar láser 2 (Torre de pesos)
+    if (laser2Ref.current) {
+      let targetY = 0; // Suelo por defecto si no hay nada
+      // Altura del bloque superior de pesos (18 bloques de 0.22 de altura base)
+      // Bloque 17 está en Y = 0.1 + 17*0.22 = 3.84, su parte superior es 3.84 + 0.1 = 3.94
+      // Si hay palet de madera, su altura es Y = 4.06, tope = 4.195
+      const hasWeights = true; // Por ahora los pesos son estáticos
+      if (window.__hasPalletOnStack) {
+        targetY = 4.14; // Superficie del palet de madera
+      } else if (hasWeights) {
+        targetY = 3.94; // Superficie del peso superior
+      }
+      laser2Ref.current.setLength(8.7 - targetY);
     }
   });
 
@@ -149,6 +220,8 @@ const CageAssembly = ({ plcState }) => {
 
         {/* Vigas superiores */}
         <mesh position={[0, 8.55, -0.5]}><boxGeometry args={[2.7, 0.3, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[0, 8.55, 0.75]}><boxGeometry args={[2.7, 0.3, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
+        <mesh position={[0, 8.55, 2.2]}><boxGeometry args={[2.7, 0.3, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
         <mesh position={[0, 8.55, 3.0]}><boxGeometry args={[2.7, 0.3, 0.3]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
         <mesh position={[-1.2, 8.55, 1.25]}><boxGeometry args={[0.3, 0.3, 3.5]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
         <mesh position={[1.2, 8.55, 1.25]}><boxGeometry args={[0.3, 0.3, 3.5]} /><meshStandardMaterial color="#e0e0e0" metalness={0.3} roughness={0.6} /></mesh>
@@ -245,98 +318,184 @@ const CageAssembly = ({ plcState }) => {
             </group>
           );
         })}
+        {/* Palet de madera adicional (solo si está 'idle' o en las primeras fases de 'animating') */}
+        {(() => {
+          const hasPallet = !window.__palletState || window.__palletState === 'idle' || (window.__palletState === 'animating' && (window.__palletPhase === 'raising_forks' || window.__palletPhase === 'moving_fwd'));
+          if (typeof window !== 'undefined') window.__hasPalletOnStack = hasPallet;
+          return hasPallet && (
+            <WoodenPallet position={[0, 0.1 + 18 * 0.22, 0]} />
+          );
+        })()}
       </group>
 
       {/* ── VALLA NEUMÁTICA (Z=-0.5) ── */}
       <group ref={gateRef} position={[0, 4, -0.5]}>
-        {/* Marco exterior */}
+        {/* Marco exterior (Acortado por abajo, antes bajaba a -1.5, ahora a -0.5) */}
         <StripedBar args={[2.0, 0.1, 0.05]} position={[0, 1.5, 0]} isVertical={false} />
-        <StripedBar args={[2.0, 0.1, 0.05]} position={[0, -1.5, 0]} isVertical={false} />
-        <StripedBar args={[0.1, 3.0, 0.05]} position={[-0.95, 0, 0]} isVertical={true} />
-        <StripedBar args={[0.1, 3.0, 0.05]} position={[0.95, 0, 0]} isVertical={true} />
+        <StripedBar args={[2.0, 0.1, 0.05]} position={[0, -0.5, 0]} isVertical={false} />
+        <StripedBar args={[0.1, 2.0, 0.05]} position={[-0.95, 0.5, 0]} isVertical={true} />
+        <StripedBar args={[0.1, 2.0, 0.05]} position={[0.95, 0.5, 0]} isVertical={true} />
         
-        {/* Rejilla interior */}
+        {/* Rejilla interior (Fila inferior eliminada) */}
         <StripedBar args={[1.8, 0.05, 0.05]} position={[0, 0.5, 0]} isVertical={false} />
-        <StripedBar args={[1.8, 0.05, 0.05]} position={[0, -0.5, 0]} isVertical={false} />
-        <StripedBar args={[0.05, 3.0, 0.05]} position={[-0.3, 0, 0]} isVertical={true} />
-        <StripedBar args={[0.05, 3.0, 0.05]} position={[0.3, 0, 0]} isVertical={true} />
+        <StripedBar args={[0.05, 2.0, 0.05]} position={[-0.3, 0.5, 0]} isVertical={true} />
+        <StripedBar args={[0.05, 2.0, 0.05]} position={[0.3, 0.5, 0]} isVertical={true} />
         
-        {/* Vástagos móviles (unidos a la valla) */}
-        <mesh position={[-0.6, 3.25, 0]}>
-          <cylinderGeometry args={[0.03, 0.03, 3.5]} />
+        {/* Vástagos móviles (más largos y anclados más arriba para compensar el recorte) */}
+        <mesh position={[-1.0, -2.1, 0]}>
+          <cylinderGeometry args={[0.03, 0.03, 3.2]} />
           <meshStandardMaterial color="#7a8288" />
         </mesh>
-        <mesh position={[0.6, 3.25, 0]}>
-          <cylinderGeometry args={[0.03, 0.03, 3.5]} />
+        <mesh position={[1.0, -2.1, 0]}>
+          <cylinderGeometry args={[0.03, 0.03, 3.2]} />
           <meshStandardMaterial color="#7a8288" />
         </mesh>
       </group>
 
       {/* ── VALLA NEUMÁTICA FRONTAL (Z=1.3, delante de los pallets) ── */}
       <group ref={frontGateRef} position={[0, 4, 1.3]}>
-        {/* Marco exterior */}
+        {/* Marco exterior (Acortado igual que la trasera) */}
         <StripedBar args={[2.0, 0.1, 0.05]} position={[0, 1.5, 0]} isVertical={false} />
-        <StripedBar args={[2.0, 0.1, 0.05]} position={[0, -1.5, 0]} isVertical={false} />
-        <StripedBar args={[0.1, 3.0, 0.05]} position={[-0.95, 0, 0]} isVertical={true} />
-        <StripedBar args={[0.1, 3.0, 0.05]} position={[0.95, 0, 0]} isVertical={true} />
+        <StripedBar args={[2.0, 0.1, 0.05]} position={[0, -0.5, 0]} isVertical={false} />
+        <StripedBar args={[0.1, 2.0, 0.05]} position={[-0.95, 0.5, 0]} isVertical={true} />
+        <StripedBar args={[0.1, 2.0, 0.05]} position={[0.95, 0.5, 0]} isVertical={true} />
         
         {/* Rejilla interior */}
         <StripedBar args={[1.8, 0.05, 0.05]} position={[0, 0.5, 0]} isVertical={false} />
-        <StripedBar args={[1.8, 0.05, 0.05]} position={[0, -0.5, 0]} isVertical={false} />
-        <StripedBar args={[0.05, 3.0, 0.05]} position={[-0.3, 0, 0]} isVertical={true} />
-        <StripedBar args={[0.05, 3.0, 0.05]} position={[0.3, 0, 0]} isVertical={true} />
+        <StripedBar args={[0.05, 2.0, 0.05]} position={[-0.3, 0.5, 0]} isVertical={true} />
+        <StripedBar args={[0.05, 2.0, 0.05]} position={[0.3, 0.5, 0]} isVertical={true} />
         
-        {/* Vástagos móviles (unidos a la valla) */}
-        <mesh position={[-0.6, 3.0, 0]}>
-          <cylinderGeometry args={[0.03, 0.03, 3.0]} />
+        {/* Vástagos móviles (apuntan hacia abajo) */}
+        <mesh position={[-1.0, -2.1, 0]}>
+          <cylinderGeometry args={[0.03, 0.03, 3.2]} />
           <meshStandardMaterial color="#7a8288" />
         </mesh>
-        <mesh position={[0.6, 3.0, 0]}>
-          <cylinderGeometry args={[0.03, 0.03, 3.0]} />
+        <mesh position={[1.0, -2.1, 0]}>
+          <cylinderGeometry args={[0.03, 0.03, 3.2]} />
           <meshStandardMaterial color="#7a8288" />
         </mesh>
       </group>
 
       {/* ── CILINDROS NEUMÁTICOS FIJOS (VALLA TRASERA Z=-0.5) ── */}
-      <mesh position={[-0.6, 9.0, -0.5]}>
-        <cylinderGeometry args={[0.06, 0.06, 3.0]} />
+      {/* Montados sobre el suelo/lateral interior, empujando la valla hacia arriba */}
+      <mesh position={[-1.0, 1.75, -0.5]}>
+        <cylinderGeometry args={[0.06, 0.06, 3.5]} />
         <meshStandardMaterial color="#444" />
       </mesh>
-      <mesh position={[0.6, 9.0, -0.5]}>
-        <cylinderGeometry args={[0.06, 0.06, 3.0]} />
+      <mesh position={[1.0, 1.75, -0.5]}>
+        <cylinderGeometry args={[0.06, 0.06, 3.5]} />
         <meshStandardMaterial color="#444" />
       </mesh>
 
       {/* ── CILINDROS NEUMÁTICOS FIJOS (VALLA FRONTAL Z=1.3) ── */}
-      <mesh position={[-0.6, 9.0, 1.3]}>
-        <cylinderGeometry args={[0.06, 0.06, 3.0]} />
+      <mesh position={[-1.0, 1.75, 1.3]}>
+        <cylinderGeometry args={[0.06, 0.06, 3.5]} />
         <meshStandardMaterial color="#444" />
       </mesh>
-      <mesh position={[0.6, 9.0, 1.3]}>
-        <cylinderGeometry args={[0.06, 0.06, 3.0]} />
+      <mesh position={[1.0, 1.75, 1.3]}>
+        <cylinderGeometry args={[0.06, 0.06, 3.5]} />
         <meshStandardMaterial color="#444" />
       </mesh>
 
       {/* ── SENSORES LÁSER WENGLOR ── */}
-      {/* Láser 1: Apuntando entre las horquillas de la carretilla */}
-      <WenglorLaser position={[0, 8.7, 0.8]} beamLength={8.7} />
-      {/* Láser 2: Apuntando al centro de la torre de pallets (altura del pallet superior Y=3.94) */}
-      <WenglorLaser position={[0, 8.7, 2.0]} beamLength={8.7 - 3.94} />
+      {/* Láser 1: Apuntando al centro del palet de madera (dinámico) */}
+      <WenglorLaser ref={laser1Ref} position={[0, 8.7, 0.75]} beamLength={8.0} />
+      {/* Láser 2: Apuntando al centro de la torre de palets base (Z = 2.2) */}
+      <WenglorLaser ref={laser2Ref} position={[0, 8.7, 2.2]} beamLength={8.7 - 4.14} />
 
     </group>
   );
 };
 
-const ForkliftAssembly = ({ distance }) => {
+const ForkliftAssembly = ({ distance, palletState, onPalletAnimComplete }) => {
+  const forkliftRef = useRef();
   const carriageRef = useRef();
+  const middleMastRef = useRef();
+  const innerMastRef = useRef();
   const beaconRef = useRef();
+  
+  const animState = useRef({ phase: 'idle', t: 0 });
 
-  useFrame((state) => {
-    if (carriageRef.current) {
-      // Clamp distance so it physically doesn't exceed the 2.5m tall mast
-      const targetY = THREE.MathUtils.clamp(distance / 1000, 0, 2.5);
-      carriageRef.current.position.y = THREE.MathUtils.lerp(carriageRef.current.position.y, targetY, 0.1);
+  // Sincronizar estados globales para la renderización condicional (un pequeño hack para evitar pasarlo por todo el árbol sin context)
+  if (typeof window !== 'undefined') {
+    window.__palletState = palletState;
+  }
+
+  useEffect(() => {
+    if (palletState === 'animating') {
+      animState.current = { phase: 'raising_forks', t: 0 };
+    } else if (palletState === 'idle') {
+      animState.current = { phase: 'idle', t: 0 };
     }
+  }, [palletState]);
+
+  useFrame((state, delta) => {
+    if (typeof window !== 'undefined') {
+      window.__palletPhase = animState.current.phase;
+    }
+
+    if (palletState === 'animating' && forkliftRef.current && carriageRef.current) {
+      animState.current.t += delta;
+      const { phase, t } = animState.current;
+      
+      // 1) Subir horquillas antes de avanzar (t: 0s a 1.5s)
+      if (phase === 'raising_forks') {
+        carriageRef.current.position.y = THREE.MathUtils.lerp(carriageRef.current.position.y, 4.01, delta * 4);
+        if (t >= 1.5) { animState.current = { phase: 'moving_fwd', t: 0 }; }
+      }
+      // 2) Avanzar hacia el palet con horquillas elevadas (t: 0s a 1.5s)
+      else if (phase === 'moving_fwd') {
+        forkliftRef.current.position.z = THREE.MathUtils.lerp(-0.6, 0.85, t / 1.5);
+        if (t >= 1.5) { animState.current = { phase: 'grabbing', t: 0 }; }
+      }
+      // 3) Agarrar (elevar un poco las horquillas y cambiar parent) (t: 0s a 0.5s)
+      else if (phase === 'grabbing') {
+        carriageRef.current.position.y = THREE.MathUtils.lerp(carriageRef.current.position.y, 4.10, delta * 4);
+        if (t >= 0.5) { animState.current = { phase: 'moving_back', t: 0 }; }
+      }
+      // 4) Retroceder al origen (-0.6) con el palet (t: 0s a 1.5s)
+      else if (phase === 'moving_back') {
+        forkliftRef.current.position.z = THREE.MathUtils.lerp(0.85, -0.6, t / 1.5);
+        if (t >= 1.5) { animState.current = { phase: 'lowering_forks', t: 0 }; }
+      }
+      // 5) Bajar horquillas a posición de transporte (t: 0s a 1.5s)
+      else if (phase === 'lowering_forks') {
+        carriageRef.current.position.y = THREE.MathUtils.lerp(carriageRef.current.position.y, 0.5, delta * 4);
+        if (t >= 1.5) { 
+          animState.current = { phase: 'done', t: 0 };
+          if (onPalletAnimComplete) onPalletAnimComplete();
+        }
+      }
+    } else if (carriageRef.current) {
+      // Normal PLC operation
+      const targetY = THREE.MathUtils.clamp(distance / 1000, 0, 5.0); // Ampliado a 5.0m
+      carriageRef.current.position.y = THREE.MathUtils.lerp(carriageRef.current.position.y, targetY, 0.1);
+      
+      if (forkliftRef.current) {
+        forkliftRef.current.position.z = THREE.MathUtils.lerp(forkliftRef.current.position.z, -0.6, 0.1);
+      }
+    }
+    
+    // Guardar altura global del carro para que el láser 1 la pueda leer
+    if (carriageRef.current && typeof window !== 'undefined') {
+      window.__carriageY = carriageRef.current.position.y;
+    }
+    
+    // Animar las pistas del mástil basadas en la altura actual del carro
+    if (carriageRef.current) {
+      const currentY = carriageRef.current.position.y;
+      const maxFreeLift = 1.5; // Cota superior (1.5m)
+      
+      if (currentY > maxFreeLift) {
+        const extraLift = currentY - maxFreeLift;
+        if (middleMastRef.current) middleMastRef.current.position.y = extraLift / 2;
+        if (innerMastRef.current) innerMastRef.current.position.y = extraLift;
+      } else {
+        if (middleMastRef.current) middleMastRef.current.position.y = 0;
+        if (innerMastRef.current) innerMastRef.current.position.y = 0;
+      }
+    }
+    
     if (beaconRef.current) {
       beaconRef.current.rotation.y = state.clock.elapsedTime * 10;
     }
@@ -388,7 +547,7 @@ const ForkliftAssembly = ({ distance }) => {
   };
 
   return (
-    <group position={[0, 0, 0]}>
+    <group ref={forkliftRef} position={[0, 0, -0.6]}>
       {/* --- CHASSIS --- */}
       <group position={[0, 0, 0]}>
         {/* Main Base */}
@@ -505,28 +664,40 @@ const ForkliftAssembly = ({ distance }) => {
         <mesh position={[0.3, 0.4, -0.2]} rotation={[0.2, 0, 0]}><cylinderGeometry args={[0.04, 0.04, 0.4]} />{blackMat}</mesh>
         <mesh position={[0.3, 0.4, -0.05]} rotation={[0.2, 0, 0]}><cylinderGeometry args={[0.02, 0.02, 0.3]} />{steelMat}</mesh>
 
-        {/* Triplex Mast Rails */}
-        {/* Outer */}
+        {/* Outer Mast (Fijo al chasis) */}
         <mesh position={[-0.35, 1.35, 0]}><boxGeometry args={[0.08, 2.5, 0.15]} />{darkMat}</mesh>
         <mesh position={[0.35, 1.35, 0]}><boxGeometry args={[0.08, 2.5, 0.15]} />{darkMat}</mesh>
-        {/* Middle */}
-        <mesh position={[-0.25, 1.35, 0.05]}><boxGeometry args={[0.06, 2.5, 0.1]} />{darkMat}</mesh>
-        <mesh position={[0.25, 1.35, 0.05]}><boxGeometry args={[0.06, 2.5, 0.1]} />{darkMat}</mesh>
-        {/* Inner */}
-        <mesh position={[-0.15, 1.35, 0.1]}><boxGeometry args={[0.05, 2.5, 0.08]} />{darkMat}</mesh>
-        <mesh position={[0.15, 1.35, 0.1]}><boxGeometry args={[0.05, 2.5, 0.08]} />{darkMat}</mesh>
-
-        {/* Mast Crossbars */}
-        <mesh position={[0, 2.5, 0]}><boxGeometry args={[0.7, 0.1, 0.1]} />{darkMat}</mesh>
         <mesh position={[0, 1.0, 0]}><boxGeometry args={[0.7, 0.1, 0.1]} />{darkMat}</mesh>
         <mesh position={[0, 0.2, 0]}><boxGeometry args={[0.7, 0.1, 0.1]} />{darkMat}</mesh>
+        
+        {/* Base fija de los cilindros hidráulicos (simula la primera etapa telescópica) */}
+        <mesh position={[-0.05, 1.3, -0.05]}><cylinderGeometry args={[0.045, 0.045, 2.5]} />{blackMat}</mesh>
+        <mesh position={[0.05, 1.3, -0.05]}><cylinderGeometry args={[0.045, 0.045, 2.5]} />{blackMat}</mesh>
 
-        {/* Central Hydraulic Cylinders */}
-        <mesh position={[-0.05, 1.3, -0.05]}><cylinderGeometry args={[0.03, 0.03, 2.4]} />{steelMat}</mesh>
-        <mesh position={[0.05, 1.3, -0.05]}><cylinderGeometry args={[0.03, 0.03, 2.4]} />{steelMat}</mesh>
-        {/* Chains (simulated with thin dark boxes) */}
-        <mesh position={[-0.1, 1.3, -0.02]}><boxGeometry args={[0.02, 2.4, 0.01]} />{blackMat}</mesh>
-        <mesh position={[0.1, 1.3, -0.02]}><boxGeometry args={[0.02, 2.4, 0.01]} />{blackMat}</mesh>
+        {/* Middle Mast (Pista Intermedia) */}
+        <group ref={middleMastRef}>
+          <mesh position={[-0.25, 1.35, 0.05]}><boxGeometry args={[0.06, 2.5, 0.1]} />{darkMat}</mesh>
+          <mesh position={[0.25, 1.35, 0.05]}><boxGeometry args={[0.06, 2.5, 0.1]} />{darkMat}</mesh>
+          <mesh position={[0, 2.5, 0]}><boxGeometry args={[0.6, 0.1, 0.1]} />{darkMat}</mesh>
+          {/* Segunda etapa telescópica de los cilindros */}
+          <mesh position={[-0.05, 1.3, -0.05]}><cylinderGeometry args={[0.035, 0.035, 2.5]} />{steelMat}</mesh>
+          <mesh position={[0.05, 1.3, -0.05]}><cylinderGeometry args={[0.035, 0.035, 2.5]} />{steelMat}</mesh>
+        </group>
+
+        {/* Inner Mast (Pista Interior) */}
+        <group ref={innerMastRef}>
+          <mesh position={[-0.15, 1.35, 0.1]}><boxGeometry args={[0.05, 2.5, 0.08]} />{darkMat}</mesh>
+          <mesh position={[0.15, 1.35, 0.1]}><boxGeometry args={[0.05, 2.5, 0.08]} />{darkMat}</mesh>
+          {/* Barra transversal superior de la pista interior */}
+          <mesh position={[0, 2.5, 0.1]}><boxGeometry args={[0.4, 0.1, 0.08]} />{darkMat}</mesh>
+          
+          {/* Tercera etapa de los cilindros (conectada al carro/pista interior) */}
+          <mesh position={[-0.05, 1.3, -0.05]}><cylinderGeometry args={[0.025, 0.025, 2.5]} />{steelMat}</mesh>
+          <mesh position={[0.05, 1.3, -0.05]}><cylinderGeometry args={[0.025, 0.025, 2.5]} />{steelMat}</mesh>
+          {/* Cadenas de elevación */}
+          <mesh position={[-0.1, 1.3, -0.02]}><boxGeometry args={[0.02, 2.5, 0.01]} />{blackMat}</mesh>
+          <mesh position={[0.1, 1.3, -0.02]}><boxGeometry args={[0.02, 2.5, 0.01]} />{blackMat}</mesh>
+        </group>
 
         {/* --- CARRIAGE (Animated) --- */}
         <group ref={carriageRef} position={[0, 0, 0.15]}>
@@ -551,6 +722,15 @@ const ForkliftAssembly = ({ distance }) => {
             <RoundedBox args={[0.12, 0.04, 1.2]} radius={0.01} position={[0, 0, 0]}>{steelMat}</RoundedBox>
             <RoundedBox args={[0.12, 0.6, 0.05]} radius={0.01} position={[0, 0.3, -0.58]}>{steelMat}</RoundedBox>
           </group>
+
+          {/* Palet de madera (Renderizado sobre las horquillas cuando está recogido o se está retrocediendo/bajando) */}
+          {(() => {
+            const isPickedUp = palletState === 'picked_up' || (palletState === 'animating' && animState.current.phase !== 'raising_forks' && animState.current.phase !== 'moving_fwd' && animState.current.phase !== 'idle');
+            if (typeof window !== 'undefined') window.__hasPalletOnForks = isPickedUp;
+            return isPickedUp && (
+              <WoodenPallet position={[0, 0.05, 0.6]} />
+            );
+          })()}
           
           {/* Pegatina Basler Target (Simulada) */}
           <mesh position={[0, 1.0, 0.03]}>
@@ -563,7 +743,7 @@ const ForkliftAssembly = ({ distance }) => {
   );
 };
 
-const DigitalTwin = ({ distance, plcState }) => {
+const DigitalTwin = ({ distance, plcState, palletState, onPalletAnimComplete }) => {
   return (
     <div className="w-full h-full bg-gradient-to-b from-[#1d2930] to-[#0f171e]">
       <Canvas camera={{ position: [4, 3, 5], fov: 50 }}>
@@ -573,7 +753,7 @@ const DigitalTwin = ({ distance, plcState }) => {
         <Environment preset="warehouse" blur={0.8} />
         
         <CageAssembly plcState={plcState} />
-        <ForkliftAssembly distance={distance} />
+        <ForkliftAssembly distance={distance} palletState={palletState} onPalletAnimComplete={onPalletAnimComplete} />
         
         {/* Suelo Industrial */}
         <Grid 
