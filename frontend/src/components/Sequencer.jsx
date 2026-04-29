@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useImperativeHandle } from 'react';
 import {
   Layers, Barcode, ArrowUpDown, Timer, Weight,
   CheckCircle2, AlertTriangle, SkipForward, Loader2,
-  RotateCcw, Ruler, Lock, Hash, Database, XCircle
+  RotateCcw, Ruler, Lock, Hash, Database, XCircle, Play
 } from 'lucide-react';
 
 
@@ -11,6 +11,13 @@ const API_BASE = 'http://localhost:8001';
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const ds2s = (v) => (v != null ? `${(v / 10).toFixed(1)} s` : '—');
+const formatDuration = (secs) => {
+  if (secs == null) return '—';
+  if (secs < 60) return `${secs} s`;
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m} min ${s} s`;
+};
 const isMxXL = (modelo) => {
   if (!modelo) return false;
   const m = modelo.trim().toUpperCase();
@@ -21,23 +28,23 @@ const isMxXL = (modelo) => {
 
 const STEP_STATUS = {
   PENDING: 'pending',
-  ACTIVE:  'active',
-  OK:      'ok',
-  SKIP:    'skip',
-  ERROR:   'error',
+  ACTIVE: 'active',
+  OK: 'ok',
+  SKIP: 'skip',
+  ERROR: 'error',
 };
 
 const statusStyle = {
-  pending: { ring: 'border-[#2e404a]/50',  bg: 'bg-[#0d1a20]',   num: 'bg-[#1d2930] text-gray-400',       label: 'text-gray-500' },
-  active:  { ring: 'border-logisnext-magenta/80', bg: 'bg-[#1d2930]/80', num: 'bg-logisnext-magenta text-white shadow-[0_0_10px_#dd2876]', label: 'text-white' },
-  ok:      { ring: 'border-green-500/50',  bg: 'bg-green-900/10', num: 'bg-green-600 text-white',           label: 'text-green-400' },
-  skip:    { ring: 'border-gray-800/50', bg: 'bg-[#0a0f12] opacity-50 grayscale',   num: 'bg-[#1d2930] text-gray-600',  label: 'text-gray-600 line-through' },
-  error:   { ring: 'border-red-500/60',   bg: 'bg-red-900/10',   num: 'bg-red-700 text-white',             label: 'text-red-400' },
+  pending: { ring: 'border-[#2e404a]/50', bg: 'bg-[#0d1a20]', num: 'bg-[#1d2930] text-gray-400', label: 'text-gray-500' },
+  active: { ring: 'border-logisnext-magenta/80', bg: 'bg-[#1d2930]/80', num: 'bg-logisnext-magenta text-white shadow-[0_0_10px_#dd2876]', label: 'text-white' },
+  ok: { ring: 'border-green-500/50', bg: 'bg-green-900/10', num: 'bg-green-600 text-white', label: 'text-green-400' },
+  skip: { ring: 'border-gray-800/50', bg: 'bg-[#0a0f12] opacity-50 grayscale', num: 'bg-[#1d2930] text-gray-600', label: 'text-gray-600 line-through' },
+  error: { ring: 'border-red-500/60', bg: 'bg-red-900/10', num: 'bg-red-700 text-white', label: 'text-red-400' },
 };
 
 const StatusIcon = ({ status }) => {
-  if (status === STEP_STATUS.OK)    return <CheckCircle2 size={14} className="text-green-400" />;
-  if (status === STEP_STATUS.SKIP)  return <XCircle size={14} className="text-gray-600" />;
+  if (status === STEP_STATUS.OK) return <CheckCircle2 size={14} className="text-green-400" />;
+  if (status === STEP_STATUS.SKIP) return <XCircle size={14} className="text-gray-600" />;
   if (status === STEP_STATUS.ERROR) return <AlertTriangle size={14} className="text-red-400" />;
   if (status === STEP_STATUS.ACTIVE) return <Loader2 size={14} className="animate-spin text-logisnext-magenta" />;
   return null;
@@ -62,7 +69,7 @@ const StepCard = ({ num, icon: Icon, title, status, children, action, canSkip, o
           </div>
           <Icon size={13} className={isActive ? 'text-logisnext-magenta' : 'text-logisnext-slate'} />
           <span className={`font-black text-[10px] uppercase tracking-widest flex-1 ${s.label}`}>{title}</span>
-          
+
           {canSkip && status !== STEP_STATUS.OK && (
             <button
               onClick={onToggleSkip}
@@ -105,9 +112,9 @@ const DataLine = ({ label, value, highlight = false }) => (
 const ActionBtn = ({ onClick, children, disabled = false, variant = 'primary' }) => {
   const base = 'w-full py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5';
   const variants = {
-    primary:   'bg-logisnext-magenta/90 hover:bg-logisnext-magenta text-white shadow-[0_0_12px_rgba(221,40,118,0.3)]',
+    primary: 'bg-logisnext-magenta/90 hover:bg-logisnext-magenta text-white shadow-[0_0_12px_rgba(221,40,118,0.3)]',
     secondary: 'bg-[#1d2930] hover:bg-[#2e404a] text-logisnext-lightslate border border-[#2e404a]',
-    success:   'bg-green-700/80 hover:bg-green-600 text-white',
+    success: 'bg-green-700/80 hover:bg-green-600 text-white',
   };
   return (
     <button className={`${base} ${variants[variant]}`} onClick={onClick} disabled={disabled}>
@@ -118,97 +125,175 @@ const ActionBtn = ({ onClick, children, disabled = false, variant = 'primary' })
 
 // ─── Componente principal ────────────────────────────────────────────────────
 
-const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState, plcState }) => {
-  const [stepStatus, setStepStatus]   = useState([
+const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState, plcState, setStep2Overlay, sequencerRef, onSequenceEnd, onStepChange, operario }) => {
+  const [stepStatus, setStepStatus] = useState([
     STEP_STATUS.ACTIVE,
     STEP_STATUS.PENDING,
     STEP_STATUS.PENDING,
     STEP_STATUS.PENDING,
     STEP_STATUS.PENDING,
   ]);
+  const [stepStarted, setStepStarted] = useState([true, false, false, false, false]);
+  // Timestamps (ms) de cuando cada paso empieza y termina
+  const [stepStartTime, setStepStartTime] = useState([null, null, null, null, null]);
+  const [stepDurations, setStepDurations] = useState([null, null, null, null, null]); // segundos
+  // Posición real de la pegatina (mm)
+  const [pegatinaPosicion, setPegatinaPosicion] = useState(null);
   const currentStep = stepStatus.findIndex(s => s === STEP_STATUS.ACTIVE);
   const isSequenceFinished = stepStatus[0] === STEP_STATUS.OK && !stepStatus.includes(STEP_STATUS.ACTIVE) && !stepStatus.includes(STEP_STATUS.PENDING);
 
-  const [seqInput, setSeqInput]     = useState('');
+  // Guardar datos específicos de etapas para el log global
+  const stageDataRef = useRef({
+    3: { elev: null, desc: null },
+    4: { elev: null, desc: null, cargaGet: null },
+    5: { altura_inicial: null, altura_final: null, diff: null }
+  });
+
+  useEffect(() => {
+    if (onStepChange) onStepChange(currentStep);
+  }, [currentStep, onStepChange]);
+
+  // Timer para parpadeo de LEDs (1s)
+  const [blinkTick, setBlinkTick] = useState(true);
+  useEffect(() => {
+    const intv = setInterval(() => setBlinkTick(b => !b), 1000);
+    return () => clearInterval(intv);
+  }, []);
+
+  const [seqInput, setSeqInput] = useState('');
   const [seqLoading, setSeqLoading] = useState(false);
-  const [seqError, setSeqError]     = useState('');
+  const [seqError, setSeqError] = useState('');
   const [scannedSeq, setScannedSeq] = useState(null);
-  const [inputMode, setInputMode]   = useState('scanner'); // 'scanner' | 'manual'
+  const [inputMode, setInputMode] = useState('scanner'); // 'scanner' | 'manual'
   const [manualDigits, setManualDigits] = useState('');    // dígitos teclados a mano
-  const [timer5min, setTimer5min]   = useState(null);
-  const [visionOk, setVisionOk]     = useState(false);
-  const [pruebaId, setPruebaId]     = useState(null);
+  const [timer5min, setTimer5min] = useState(null);
+  const [visionOk, setVisionOk] = useState(false);
   const inputRef = useRef(null);
 
-  // ── Reset cuando no hay datos ERP (ej. sesión nueva) ────────────────────
+  // Tolerancias
+  const [tolerancias, setTolerancias] = useState({
+    positiva: parseInt(localStorage.getItem('toleranciaPositiva')) || 50,
+    negativa: parseInt(localStorage.getItem('toleranciaNegativa')) || 50
+  });
+
+  useEffect(() => {
+    const handleTolerancia = () => {
+      setTolerancias({
+        positiva: parseInt(localStorage.getItem('toleranciaPositiva')) || 50,
+        negativa: parseInt(localStorage.getItem('toleranciaNegativa')) || 50
+      });
+    };
+    window.addEventListener('toleranciaChanged', handleTolerancia);
+    return () => window.removeEventListener('toleranciaChanged', handleTolerancia);
+  }, []);
+
+  // ── Guardar Log Global ────────────────────────────────────────────────────
+  const saveLog = async (globalStatus) => {
+    const startSec = stepStartTime[0] || Date.now();
+    const endSec = Date.now();
+    const erp = erpDataRef.current;
+    const sData = stageDataRef.current;
+
+    const logData = {
+      FECHA_MONTAJE: erp?.fecha_montaje,
+      NSECUENCIA: erp?.secuencia,
+      NMODELO: erp?.modelo,
+      NBASTIDOR: erp?.bastidor,
+      NMASTIL: erp?.mastil,
+      ALTURA_MAX_INTERMEDIA: erp?.altura_max_interm,
+      CARGA_CONSIGNADA: erp?.capac_interm_1,
+      TIEMPO_ELEVACION_MIN_SINCARGA: erp?.tpo_elev_min_scarga,
+      TIEMPO_ELEVACION_MAX_SINCARGA: erp?.tpo_elev_max_scarga,
+      TIEMPO_DESCENSO_MIN_SINCARGA: erp?.tpo_desc_min_scarga,
+      TIEMPO_DESCENSO_MAX_SINCARGA: erp?.tpo_desc_max_scarga,
+      TIEMPO_ELEVACION_MIN_CARGA: erp?.tpo_elevac_min,
+      TIEMPO_ELEVACION_MAX_CARGA: erp?.tpo_elevac_max,
+      TIEMPO_DESCENSO_MIN_CARGA: erp?.tpo_descenso_min,
+      TIEMPO_DESCENSO_MAX_CARGA: erp?.tpo_descenso_max,
+
+      ALTURA_CAPTADA: pegatinaPosicion,
+      FECHA_HORA_INICIO_MULTILOAD: stepStartTime[1] ? new Date(stepStartTime[1]).toLocaleString() : null,
+      FECHA_HORA_FIN_MULTILOAD: stepStartTime[1] && stepDurations[1] ? new Date(stepStartTime[1] + stepDurations[1]*1000).toLocaleString() : null,
+      ESTADO_MULTILOAD: stepStatus[1] === STEP_STATUS.OK ? 'OK' : (stepStatus[1] === STEP_STATUS.SKIP ? 'NO APLICA' : 'NOK'),
+
+      TIEMPO_ELEVACION_MEDIDO_SINCARGA: sData[3].elev,
+      TIEMPO_DESCENSO_MEDIDO_SINCARGA: sData[3].desc,
+      FECHA_HORA_INICIO_SINCARGA: stepStartTime[2] ? new Date(stepStartTime[2]).toLocaleString() : null,
+      FECHA_HORA_FIN_SINCARGA: stepStartTime[2] && stepDurations[2] ? new Date(stepStartTime[2] + stepDurations[2]*1000).toLocaleString() : null,
+      ESTADO_SINCARGA: stepStatus[2] === STEP_STATUS.OK ? 'OK' : (stepStatus[2] === STEP_STATUS.SKIP ? 'NO APLICA' : 'NOK'),
+
+      TIEMPO_ELEVACION_MEDIDO_CARGA: sData[4].elev,
+      TIEMPO_DESCENSO_MEDIDO_CARGA: sData[4].desc,
+      FECHA_HORA_INICIO_CARGA: stepStartTime[3] ? new Date(stepStartTime[3]).toLocaleString() : null,
+      FECHA_HORA_FIN_CARGA: stepStartTime[3] && stepDurations[3] ? new Date(stepStartTime[3] + stepDurations[3]*1000).toLocaleString() : null,
+      ESTADO_DESCENSO_CARGA: stepStatus[3] === STEP_STATUS.OK ? 'OK' : (stepStatus[3] === STEP_STATUS.SKIP ? 'NO APLICA' : 'NOK'),
+      CARGA_GET: sData[4].cargaGet,
+
+      ALTURA_INICIAL: sData[5].altura_inicial,
+      ALTURA_FINAL: sData[5].altura_final,
+      DIFERENCIA_ALTURAS: sData[5].diff,
+      FECHA_HORA_INICIO_5MIN: stepStartTime[4] ? new Date(stepStartTime[4]).toLocaleString() : null,
+      FECHA_HORA_FIN_5MIN: stepStartTime[4] && stepDurations[4] ? new Date(stepStartTime[4] + stepDurations[4]*1000).toLocaleString() : null,
+      ESTADO_CARGA_5_MIN: stepStatus[4] === STEP_STATUS.OK ? 'OK' : (stepStatus[4] === STEP_STATUS.SKIP ? 'NO APLICA' : 'NOK'),
+
+      OK_NOK: globalStatus,
+      REPETICIONES_SECUENCIA: 1,
+      FECHA_HORA_INICIO_SEC: new Date(startSec).toLocaleString(),
+      FECHA_HORA_FIN_SEC: new Date(endSec).toLocaleString(),
+      OPERARIO: operario ? `${operario.NOMBRE || ''} ${operario.APELLIDOS || ''}`.trim() : 'Desconocido'
+    };
+
+    try {
+      await fetch(`${API_BASE}/api/logs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(logData)
+      });
+    } catch (e) { console.error("Error guardando log global:", e); }
+  };
+
   const resetSequence = () => {
     setStepStatus([STEP_STATUS.ACTIVE, STEP_STATUS.PENDING, STEP_STATUS.PENDING, STEP_STATUS.PENDING, STEP_STATUS.PENDING]);
+    setStepStarted([true, false, false, false, false]);
+    setStepStartTime([Date.now(), null, null, null, null]);
+    setStepDurations([null, null, null, null, null]);
+    stageDataRef.current = {
+      3: { elev: null, desc: null },
+      4: { elev: null, desc: null, cargaGet: null },
+      5: { altura_inicial: null, altura_final: null, diff: null }
+    };
+    setPegatinaPosicion(null);
     setSeqInput('');
     setSeqError('');
     setScannedSeq(null);
     setManualDigits('');
     setTimer5min(null);
     setVisionOk(false);
-    setPruebaId(null);
+    if (setStep2Overlay) setStep2Overlay(null);
     if (setPalletState) setPalletState('idle');
     if (onErpData) onErpData(null);
   };
 
   const handleAbort = async () => {
-    if (pruebaId) {
-      try {
-        await fetch(`${API_BASE}/pruebas/${pruebaId}/resultado`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tiempo_real: 0, estado: 'ERROR' })
-        });
-      } catch (e) { console.error("Error aborting test:", e); }
-    }
+    await saveLog('NOK');
+    if (onSequenceEnd) onSequenceEnd();
     resetSequence();
   };
 
   // ── Auto-Avanzar PASO 1 si se carga desde ERP Modal ───────────────
   useEffect(() => {
     if (erpData && stepStatus[0] === STEP_STATUS.ACTIVE) {
-      const isDownRear = plcState?.Ob_Dtec_Valla_1_trabajo_LH === true;
-      const isDownFront = plcState?.Ob_Dtec_Valla_2_trabajo_RH === true;
-
-      if (!isDownRear || !isDownFront) {
-        // La secuencia está cargada, pero no avanzamos al Paso 2 hasta que las vallas bajen.
-        return;
-      }
-
       setScannedSeq(null);
       setSeqError('');
       markOk(0); // Avanzar a Paso 2 (Iniciar prueba)
-      
-      // Crear nueva prueba en BD
-      fetch(`${API_BASE}/pruebas/nueva`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fecha_montaje: erpData.fecha_montaje || "",
-          secuencia: erpData.secuencia || "",
-          modelo: erpData.modelo || "",
-          bastidor: erpData.bastidor || "",
-          mastil: erpData.mastil || "",
-          altura_max_interm: erpData.altura_max_interm || 0,
-          tpo_elevac_min: erpData.tpo_elevac_min || 0,
-          tpo_elevac_max: erpData.tpo_elevac_max || 0
-        })
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.id) setPruebaId(data.id);
-      })
-      .catch(e => console.error("Error creating test:", e));
+
     }
   }, [erpData, stepStatus, plcState]);
 
   // ── Abortar prueba en curso si se abre la jaula ───────────────
   useEffect(() => {
-    // Si la prueba está activa (ya pasó del paso 1 y tiene ID)
-    if (pruebaId && stepStatus[0] === STEP_STATUS.OK && stepStatus[4] !== STEP_STATUS.OK) {
+    // Solo abortar si las vallas se abren en la etapa 4 o 5 (índices 3 y 4) Y la etapa ya está iniciada
+    if (erpData && (currentStep === 3 || currentStep === 4) && stepStarted[currentStep]) {
       const isDownRear = plcState?.Ob_Dtec_Valla_1_trabajo_LH === true;
       const isDownFront = plcState?.Ob_Dtec_Valla_2_trabajo_RH === true;
 
@@ -217,10 +302,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         handleAbort();
       }
     }
-  }, [plcState, pruebaId, stepStatus]);
+  }, [plcState, erpData, currentStep, stepStarted]);
 
   // ── Controles de PLC (Botones físicos) ────────────────────────────────────
-  
+
   // 1. Abortar secuencia
   useEffect(() => {
     if (plcState?.Ob_Abortar_Secuancia === true) {
@@ -231,9 +316,40 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     }
   }, [plcState?.Ob_Abortar_Secuancia]);
 
-  // 2. Iniciar Secuencia -> avanzar en Pasos 3, 4, 5
+  // 2. Iniciar Secuencia — detección robusta de flanco de subida
+  const prevInciarRef = useRef(false);
   useEffect(() => {
-    if (plcState?.Ob_Inciar_Secuencia === true) {
+    const curr = plcState?.Ob_Inciar_Secuencia === true;
+    const risingEdge = curr && !prevInciarRef.current;
+    prevInciarRef.current = curr;
+
+    if (!risingEdge) return;
+
+    console.log('[INICIAR] Rising edge detectado. currentStep:', currentStep, 'stepStarted:', stepStarted);
+
+    // Si el paso actual (1-4) aún no está iniciado → desbloquearlo
+    if (currentStep >= 1 && currentStep <= 4 && !stepStarted[currentStep]) {
+      // Bloquear el inicio de etapas 4 y 5 si las vallas no están en trabajo
+      if (currentStep === 3 || currentStep === 4) {
+        const isDownRear = plcState?.Ob_Dtec_Valla_1_trabajo_LH === true;
+        const isDownFront = plcState?.Ob_Dtec_Valla_2_trabajo_RH === true;
+        if (!isDownRear || !isDownFront) {
+          console.warn("[INICIAR] Bloqueado: Vallas no en posición para etapa", currentStep);
+          return;
+        }
+      }
+
+      console.log('[INICIAR] Desbloqueando paso', currentStep);
+      setStepStarted(prev => {
+        const next = [...prev];
+        next[currentStep] = true;
+        return next;
+      });
+      return; // en el mismo pulso no avanzamos, solo desbloqueamos
+    }
+
+    // Si ya estaba desbloqueado → ejecutar acción de avance
+    if (currentStep >= 1 && currentStep <= 4 && stepStarted[currentStep]) {
       if (stepStatus[2] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
         markOk(2);
       } else if (stepStatus[3] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
@@ -241,13 +357,100 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       } else if (stepStatus[4] === STEP_STATUS.ACTIVE) {
         if (timer5min === 0) {
           markOk(4);
-        } else if (timer5minDisplay === null && visionOk) {
-          // Si está en el paso 5 y aún no ha iniciado el contador, lo arranca con el botón
+        } else if (timer5min === null && visionOk) {
           startTimer5min();
         }
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plcState?.Ob_Inciar_Secuencia]);
+
+  // 3. Pegatina Colocada -> avanzar en Paso 2
+  useEffect(() => {
+    if (plcState?.Ob_Pegatina_Colocada === true && stepStatus[1] === STEP_STATUS.ACTIVE && erpData && stepStarted[1]) {
+      const altura = erpData.altura_max_interm;
+      const act = plcState?.OW_Altura_Elevacion || 0;
+      const posOk = act >= (altura - tolerancias.negativa) && act <= (altura + tolerancias.positiva);
+
+      if (posOk) {
+        markOk(1);
+      }
+    }
+  }, [plcState?.Ob_Pegatina_Colocada, stepStatus[1], erpData, tolerancias]);
+
+  // ── Overlay Datos Multiload (Paso 2) ───────────────────────────────────────
+  useEffect(() => {
+    if (currentStep === 1 && erpData && stepStarted[1]) {
+      const alturaMax = erpData.altura_max_interm;
+      const actual = plcState?.OW_Altura_Elevacion || 0;
+      const min = alturaMax - tolerancias.negativa;
+      const max = alturaMax + tolerancias.positiva;
+      const isOk = actual >= min && actual <= max;
+
+      if (setStep2Overlay) {
+        setStep2Overlay({
+          active: true,
+          actual,
+          min,
+          max,
+          isOk
+        });
+      }
+    } else {
+      if (setStep2Overlay) setStep2Overlay(null);
+    }
+  }, [currentStep, erpData, plcState?.OW_Altura_Elevacion, tolerancias, setStep2Overlay]);
+
+  // ── Luces LED de Torre ─────────────────────────────────
+  useEffect(() => {
+    let luzAzul = false;
+    let luzVerde = false;
+    let luzRoja = false;
+
+    if (!erpData) {
+      // Sin iniciar prueba -> Azul
+      luzAzul = true;
+    } else {
+      if (currentStep >= 1 && currentStep <= 4) {
+        if (!stepStarted[currentStep]) {
+          // Etapa no iniciada explícitamente -> Azul
+          luzAzul = true;
+        } else {
+          // Etapa iniciada
+          if (currentStep === 1) { // Paso 2: Multiload
+            const altura = erpData?.altura_max_interm || 0;
+            const act = plcState?.OW_Altura_Elevacion || 0;
+            const posOk = act >= (altura - tolerancias.negativa) && act <= (altura + tolerancias.positiva);
+            
+            if (posOk) {
+              luzVerde = blinkTick;
+            } else {
+              luzRoja = blinkTick;
+            }
+          }
+          // Para etapas 3,4,5 se podrían añadir lógicas similares si fuera necesario.
+        }
+      } else if (currentStep === 0) {
+        luzAzul = true;
+      }
+    }
+
+    const updateLed = async () => {
+      try {
+        await fetch(`${API_BASE}/plc/write`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            Ob_LUZ_AZUL: luzAzul,
+            Ob_LUZ_VERDE: luzVerde,
+            Ob_LUZ_ROJA: luzRoja
+          })
+        });
+      } catch (e) { console.error("Error setting LEDs:", e); }
+    };
+
+    updateLed();
+  }, [currentStep, stepStarted, erpData, plcState?.OW_Altura_Elevacion, tolerancias, blinkTick]);
 
   // 3. Confirmar Pegatina (Repetir Secuencia) -> avanzar Paso 2 (Multiload)
   useEffect(() => {
@@ -290,6 +493,30 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   };
 
   const markOk = (idx, skipNext = false) => {
+    if (setStep2Overlay) setStep2Overlay(null);
+    
+    // Guardar telemetría de fin de etapa según índice
+    const pState = plcStateRef.current;
+    if (idx === 2) { // Fin Etapa 3 (Sin Carga)
+      stageDataRef.current[3] = { elev: pState?.OW_Tiempo_Elevacion, desc: pState?.OW_Tiempo_Descenso };
+    } else if (idx === 3) { // Fin Etapa 4 (Con Carga)
+      stageDataRef.current[4] = { 
+        elev: pState?.OW_Tiempo_Elevacion, 
+        desc: pState?.OW_Tiempo_Descenso, 
+        cargaGet: pState?.Ob_Palets_Carga ? pState.Ob_Palets_Carga * 250 : null 
+      };
+    } else if (idx === 4) { // Fin Etapa 5 (5 min)
+      stageDataRef.current[5].altura_final = pState?.OW_Altura_Elevacion;
+      stageDataRef.current[5].diff = Math.abs((stageDataRef.current[5].altura_inicial || 0) - (pState?.OW_Altura_Elevacion || 0));
+    }
+
+    // Registrar duración del paso
+    setStepDurations(prev => {
+      const next = [...prev];
+      const start = stepStartTime[idx];
+      next[idx] = start ? Math.round((Date.now() - start) / 1000) : null;
+      return next;
+    });
     setStepStatus(prev => {
       let s = [...prev];
       s[idx] = STEP_STATUS.OK;
@@ -311,9 +538,100 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     });
   };
 
+  // ── Refs para acceso instantáneo al estado actual (para callbacks imperativos) ──
+  const stepStatusRef = useRef(stepStatus);
+  const stepStartedRef = useRef(stepStarted);
+  const currentStepRef = useRef(currentStep);
+  const erpDataRef = useRef(erpData);
+  const toleranciasRef = useRef(tolerancias);
+  const plcStateRef = useRef(plcState);
+  useEffect(() => { stepStatusRef.current = stepStatus; }, [stepStatus]);
+  useEffect(() => { stepStartedRef.current = stepStarted; }, [stepStarted]);
+  useEffect(() => { currentStepRef.current = currentStep; }, [currentStep]);
+  useEffect(() => { erpDataRef.current = erpData; }, [erpData]);
+  useEffect(() => { toleranciasRef.current = tolerancias; }, [tolerancias]);
+  useEffect(() => { plcStateRef.current = plcState; }, [plcState]);
+
+  // Registrar timestamp de inicio cuando un paso se activa
+  useEffect(() => {
+    if (currentStep >= 0 && currentStep <= 4) {
+      setStepStartTime(prev => {
+        const next = [...prev];
+        if (!next[currentStep]) next[currentStep] = Date.now(); // solo si no se ha iniciado ya
+        return next;
+      });
+    }
+  }, [currentStep]);
+
+  // ── Handlers directos (llamados desde botones sin pasar por WebSocket) ────────
+  const handleIniciarSecuenciaDirecto = () => {
+    const step = currentStepRef.current;
+    const started = stepStartedRef.current;
+    const statuses = stepStatusRef.current;
+    const pState = plcStateRef.current;
+    console.log('[DIRECTO] Iniciar Secuencia. step:', step, 'started:', started);
+
+    if (step >= 1 && step <= 4 && !started[step]) {
+      // Bloquear el inicio de etapas 4 y 5 si las vallas no están en trabajo
+      if (step === 3 || step === 4) {
+        const isDownRear = pState?.Ob_Dtec_Valla_1_trabajo_LH === true;
+        const isDownFront = pState?.Ob_Dtec_Valla_2_trabajo_RH === true;
+        if (!isDownRear || !isDownFront) {
+          console.warn("[DIRECTO] Bloqueado: Vallas no en posición para etapa", step);
+          return;
+        }
+      }
+
+      // Desbloquear etapa
+      console.log('[DIRECTO] Desbloqueando paso', step);
+      setStepStarted(prev => {
+        const next = [...prev];
+        next[step] = true;
+        return next;
+      });
+      return;
+    }
+    // Ya desbloqueada — avanzar
+    if (step >= 1 && step <= 4 && started[step]) {
+      if (statuses[2] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') markOk(2);
+      else if (statuses[3] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') markOk(3);
+      else if (statuses[4] === STEP_STATUS.ACTIVE) {
+        if (timer5min === 0) markOk(4);
+        else if (timer5min === null && visionOk) startTimer5min?.();
+      }
+    }
+  };
+
+  const handlePegatinaDireto = () => {
+    const started = stepStartedRef.current;
+    const statuses = stepStatusRef.current;
+    const erp = erpDataRef.current;
+    const tols = toleranciasRef.current;
+    const pState = plcStateRef.current;
+
+    if (statuses[1] === STEP_STATUS.ACTIVE && erp && started[1]) {
+      const altura = erp.altura_max_interm;
+      const act = pState?.OW_Altura_Elevacion || 0;
+      const posOk = act >= (altura - tols.negativa) && act <= (altura + tols.positiva);
+      console.log('[DIRECTO] Pegatina. posOk:', posOk, 'act:', act, 'rango:', altura - tols.negativa, '-', altura + tols.positiva);
+      if (posOk) {
+        setPegatinaPosicion(act); // guardar posición real de pegatina
+        markOk(1);
+      }
+    }
+  };
+
+  // Exponer funciones al padre via ref
+  useImperativeHandle(sequencerRef, () => ({
+    onIniciarSecuencia: handleIniciarSecuenciaDirecto,
+    onPegatina: handlePegatinaDireto,
+    onAbortar: handleAbort,
+  }));
+
+
   // ── PASO 1A: El lector envía el código → extraer dígitos → mostrar confirmación
   const handleLeerSecuencia = () => {
-    const raw    = seqInput.trim();
+    const raw = seqInput.trim();
     const digits = raw.replace(/\D/g, '').slice(-4).padStart(4, '0');
     if (!digits || digits === '0000') return;
     setScannedSeq({ raw, digits });
@@ -323,11 +641,11 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   // ── PASO 1B: Operario pulsa "Cargar" → consulta ERP y avanza
   const handleConfirmarCarga = async () => {
     if (!scannedSeq) return;
-    
+
     setSeqLoading(true);
     setSeqError('');
     try {
-      const res  = await fetch(`${API_BASE}/erp/secuencia/${encodeURIComponent(scannedSeq.digits)}`);
+      const res = await fetch(`${API_BASE}/erp/secuencia/${encodeURIComponent(scannedSeq.digits)}`);
       const data = await res.json();
       if (res.ok) {
         onErpData(data);
@@ -398,6 +716,13 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     }
   }, [currentStep, stepStatus, erpData]);
 
+  // ── Etapa 5: Start Timer 5 min ────────────────────────────────────────────
+  const startTimer5min = () => {
+    setTimer5min(300); // 5 minutos
+    // Capturamos altura inicial al empezar la etapa 5
+    stageDataRef.current[4] = { altura_inicial: plcStateRef.current?.OW_Altura_Elevacion };
+  };
+
   // ── Timer 5 minutos ───────────────────────────────────────────────────────
   useEffect(() => {
     if (timer5min === null) return;
@@ -406,7 +731,6 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     return () => clearTimeout(t);
   }, [timer5min]);
 
-  const startTimer5min = () => setTimer5min(300);
   const timer5minDisplay = timer5min !== null
     ? `${String(Math.floor(timer5min / 60)).padStart(2, '0')}:${String(timer5min % 60).padStart(2, '0')}`
     : null;
@@ -428,9 +752,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         </div>
         <div className="flex items-center gap-2">
           {erpData && (
-            <button 
-              onClick={handleAbort} 
-              title="Abortar prueba" 
+            <button
+              onClick={handleAbort}
+              title="Abortar prueba"
               className="flex items-center gap-1.5 px-3 py-1.5 bg-red-900/20 hover:bg-red-900/40 border border-red-500/30 text-red-400 rounded-lg transition-colors text-[10px] font-bold uppercase tracking-widest"
             >
               Abortar
@@ -443,9 +767,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-      
+
         {/* Banner de seguridad: Vallas no en posición */}
-        {(erpData && (!plcState?.Ob_Dtec_Valla_1_trabajo_LH || !plcState?.Ob_Dtec_Valla_2_trabajo_RH)) && (
+        {(erpData && (currentStep === 3 || currentStep === 4) && (!plcState?.Ob_Dtec_Valla_1_trabajo_LH || !plcState?.Ob_Dtec_Valla_2_trabajo_RH)) && (
           <div className="bg-red-500/10 border border-red-500/50 text-red-500 px-3 py-2 rounded-lg flex items-center justify-center gap-2 font-black tracking-widest text-xs shadow-[0_0_15px_rgba(239,68,68,0.2)]">
             <AlertTriangle size={16} className="text-red-500" />
             VALLAS NO EN POSICIÓN
@@ -461,26 +785,24 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                 <div className="flex rounded-lg overflow-hidden border border-[#2e404a] mb-2">
                   <button
                     onClick={() => { setInputMode('scanner'); setManualDigits(''); setSeqError(''); setTimeout(() => inputRef.current?.focus(), 50); }}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${
-                      inputMode === 'scanner'
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${inputMode === 'scanner'
                         ? 'bg-logisnext-magenta/20 text-logisnext-magenta border-r border-logisnext-magenta/30'
                         : 'bg-transparent text-logisnext-slate hover:text-white border-r border-[#2e404a]'
-                    }`}
+                      }`}
                   >
                     <Barcode size={10} /> Escáner
                   </button>
                   <button
                     onClick={() => { setInputMode('manual'); setSeqInput(''); setSeqError(''); }}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${
-                      inputMode === 'manual'
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${inputMode === 'manual'
                         ? 'bg-logisnext-magenta/20 text-logisnext-magenta border-r border-logisnext-magenta/30'
                         : 'bg-transparent text-logisnext-slate hover:text-white border-r border-[#2e404a]'
-                    }`}
+                      }`}
                   >
                     <Hash size={10} /> Manual
                   </button>
                   <button
-                    onClick={() => { if(onOpenErp) onOpenErp(); }}
+                    onClick={() => { if (onOpenErp) onOpenErp(); }}
                     className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all bg-transparent text-logisnext-slate hover:text-white"
                   >
                     <Database size={10} /> ERP
@@ -513,11 +835,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
               {!scannedSeq && inputMode === 'scanner' && (
                 <div
                   onClick={handleStepClick}
-                  className={`relative flex flex-col items-center justify-center gap-3 py-5 px-4 rounded-xl border-2 border-dashed cursor-text transition-all ${
-                    seqError
+                  className={`relative flex flex-col items-center justify-center gap-3 py-5 px-4 rounded-xl border-2 border-dashed cursor-text transition-all ${seqError
                       ? 'border-red-500/50 bg-red-900/10'
                       : 'border-[#2e404a] hover:border-logisnext-magenta/40 bg-[#0a0f12]'
-                  }`}
+                    }`}
                 >
                   <div className="relative">
                     <Barcode size={36} className={`transition-all ${seqError ? 'text-red-400' : 'text-logisnext-slate'}`} />
@@ -572,8 +893,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                     <button onClick={() => handleNumpadPress('0')} className="h-10 bg-[#1d2930] hover:bg-[#2e404a] text-white font-mono text-lg rounded-lg transition-colors border border-[#2e404a]">
                       0
                     </button>
-                    <button 
-                      onClick={() => handleNumpadPress('OK')} 
+                    <button
+                      onClick={() => handleNumpadPress('OK')}
                       disabled={manualDigits.length === 0}
                       className="h-10 bg-logisnext-magenta hover:bg-logisnext-magenta/80 text-white font-bold text-xs rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-logisnext-magenta border border-logisnext-magenta/50"
                     >
@@ -638,10 +959,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           )}
           {stepStatus[0] === STEP_STATUS.OK && erpData && (
             <>
-              <DataLine label="Bastidor"  value={erpData.bastidor}  highlight />
+              <DataLine label="Bastidor" value={erpData.bastidor} highlight />
               <DataLine label="Secuencia" value={erpData.secuencia} />
-              <DataLine label="Modelo"    value={erpData.modelo} />
-              <DataLine label="Mástil"    value={erpData.mastil} />
+              <DataLine label="Modelo" value={erpData.modelo} />
+              <DataLine label="Mástil" value={erpData.mastil} />
             </>
           )}
         </StepCard>
@@ -649,29 +970,60 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
         {/* ── PASO 2: Multiload — poner mástil en posición ────────────────── */}
         <StepCard num={2} icon={Ruler} title="Posición multiload" status={stepStatus[1]} canSkip onToggleSkip={() => toggleSkip(1)}>
-          {stepStatus[1] === STEP_STATUS.ACTIVE && erpData && (
-            <>
-              <DataLine label="Altura máx" value={`${erpData.altura_max_interm} mm`} highlight />
-              <p className="text-[9px] text-logisnext-slate leading-relaxed">
-                Posiciona el mástil a la altura indicada. Confirma cuando esté en posición.
-              </p>
-              {palletState === 'animating' && (
-                <div className="flex items-center gap-2 mt-2 py-1.5 px-2 bg-logisnext-magenta/10 border border-logisnext-magenta/30 rounded text-[9px] text-logisnext-magenta">
-                  <Loader2 size={12} className="animate-spin" /> Animación de recogida del palet en curso...
+          {stepStatus[1] === STEP_STATUS.ACTIVE && erpData && (() => {
+            const alturaMax = erpData.altura_max_interm;
+            const alturaAct = plcState?.OW_Altura_Elevacion || 0;
+            const isPosOk = alturaAct >= (alturaMax - tolerancias.negativa) && alturaAct <= (alturaMax + tolerancias.positiva);
+
+            return (
+              <>
+                <DataLine label="Altura máx" value={`${alturaMax} mm`} highlight />
+                <div className="flex items-center gap-4 mt-2">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-logisnext-slate font-bold uppercase tracking-widest mb-1">Tolerancia</span>
+                    <div className="flex gap-2">
+                      <span className="text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded border border-green-500/30">+{tolerancias.positiva}</span>
+                      <span className="text-[10px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded border border-red-500/30">-{tolerancias.negativa}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-[10px] text-logisnext-slate font-bold uppercase tracking-widest mb-1">Actual</span>
+                    <span className={`text-[12px] font-black ${isPosOk ? 'text-green-400' : 'text-blue-400'}`}>{alturaAct} mm</span>
+                  </div>
                 </div>
-              )}
-              <ActionBtn onClick={() => markOk(1)} variant="primary" disabled={palletState === 'animating'}>
-                <CheckCircle2 size={12} /> Mástil en posición
-              </ActionBtn>
-            </>
-          )}
+
+                {!stepStarted[1] ? (
+                  <div className="flex items-center gap-2 text-yellow-400 font-bold bg-yellow-400/10 p-2 mt-2 rounded border border-yellow-400/20 text-[9px]">
+                    <AlertTriangle size={12} /> ESPERANDO: Pulse INICIAR SECUENCIA
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-[9px] text-logisnext-slate leading-relaxed mt-2">
+                      Posiciona el mástil a la altura indicada dentro de la tolerancia. Confirma con "Pegatina Colocada" cuando esté en posición.
+                    </p>
+                    {palletState === 'animating' && (
+                      <div className="flex items-center gap-2 mt-2 py-1.5 px-2 bg-logisnext-magenta/10 border border-logisnext-magenta/30 rounded text-[9px] text-logisnext-magenta">
+                        <Loader2 size={12} className="animate-spin" /> Animación de recogida del palet en curso...
+                      </div>
+                    )}
+                    <ActionBtn onClick={() => markOk(1)} variant="primary" disabled={palletState === 'animating' || !isPosOk}>
+                      <CheckCircle2 size={12} /> Pegatina Posicionada
+                    </ActionBtn>
+                  </>
+                )}
+              </>
+            );
+          })()}
           {stepStatus[1] === STEP_STATUS.SKIP && (
             <p className="text-[9px] text-yellow-500/80">
               Altura máx = 0 → <strong>Sin multiload</strong>. Paso omitido.
             </p>
           )}
-          {stepStatus[1] === STEP_STATUS.OK && erpData && (
-            <DataLine label="Posición" value={`${erpData.altura_max_interm} mm ✓`} highlight />
+          {stepStatus[1] === STEP_STATUS.OK && (
+            <div className="flex flex-col gap-1">
+              <DataLine label="Pos. pegatina" value={pegatinaPosicion != null ? `${pegatinaPosicion} mm` : `${erpData?.altura_max_interm ?? '—'} mm`} highlight />
+              <DataLine label="Duración" value={formatDuration(stepDurations[1])} />
+            </div>
           )}
         </StepCard>
 
@@ -683,17 +1035,25 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
               <DataLine label="Elevac. max" value={ds2s(erpData.tpo_elev_max_scarga)} />
               <DataLine label="Descenso min" value={ds2s(erpData.tpo_desc_min_scarga)} />
               <DataLine label="Descenso max" value={ds2s(erpData.tpo_desc_max_scarga)} />
-              <p className="text-[9px] text-logisnext-slate leading-relaxed mt-1">
-                Retira la carga. Ejecuta ciclos de elevación y descenso sin carga dentro de los tiempos de tolerancia.
-              </p>
-              {palletState === 'animating' && (
-                <div className="flex items-center gap-2 mt-2 py-1.5 px-2 bg-logisnext-magenta/10 border border-logisnext-magenta/30 rounded text-[9px] text-logisnext-magenta">
-                  <Loader2 size={12} className="animate-spin" /> Animación de recogida del palet en curso...
+              {!stepStarted[2] ? (
+                <div className="flex items-center gap-2 text-yellow-400 font-bold bg-yellow-400/10 p-2 mt-1 rounded border border-yellow-400/20 text-[9px]">
+                  <AlertTriangle size={12} /> ESPERANDO: Pulse INICIAR SECUENCIA
                 </div>
+              ) : (
+                <>
+                  <p className="text-[9px] text-logisnext-slate leading-relaxed mt-1">
+                    Retira la carga. Ejecuta ciclos de elevación y descenso sin carga dentro de los tiempos de tolerancia.
+                  </p>
+                  {palletState === 'animating' && (
+                    <div className="flex items-center gap-2 mt-2 py-1.5 px-2 bg-logisnext-magenta/10 border border-logisnext-magenta/30 rounded text-[9px] text-logisnext-magenta">
+                      <Loader2 size={12} className="animate-spin" /> Animación de recogida del palet en curso...
+                    </div>
+                  )}
+                  <ActionBtn onClick={() => markOk(2)} variant="success" disabled={palletState === 'animating'}>
+                    <CheckCircle2 size={12} /> Test sin carga OK
+                  </ActionBtn>
+                </>
               )}
-              <ActionBtn onClick={() => markOk(2)} variant="success" disabled={palletState === 'animating'}>
-                <CheckCircle2 size={12} /> Test sin carga OK
-              </ActionBtn>
             </>
           )}
           {(stepStatus[2] === STEP_STATUS.PENDING) && (
@@ -702,7 +1062,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             </div>
           )}
           {stepStatus[2] === STEP_STATUS.OK && (
-            <DataLine label="Estado" value="Completado ✓" highlight />
+            <DataLine label="Duración" value={formatDuration(stepDurations[2])} highlight />
           )}
         </StepCard>
 
@@ -715,12 +1075,20 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
               <DataLine label="Elevac. max" value={ds2s(erpData.tpo_elevac_max)} />
               <DataLine label="Descenso min" value={ds2s(erpData.tpo_descenso_min)} />
               <DataLine label="Descenso max" value={ds2s(erpData.tpo_descenso_max)} />
-              <p className="text-[9px] text-logisnext-slate leading-relaxed mt-1">
-                Carga la carretilla con la capacidad indicada y ejecuta ciclos de elevación y descenso dentro de los tiempos de tolerancia.
-              </p>
-              <ActionBtn onClick={() => markOk(3)} variant="primary">
-                <CheckCircle2 size={12} /> Test con carga OK
-              </ActionBtn>
+              {!stepStarted[3] ? (
+                <div className="flex items-center gap-2 text-yellow-400 font-bold bg-yellow-400/10 p-2 mt-1 rounded border border-yellow-400/20 text-[9px]">
+                  <AlertTriangle size={12} /> ESPERANDO: Pulse INICIAR SECUENCIA
+                </div>
+              ) : (
+                <>
+                  <p className="text-[9px] text-logisnext-slate leading-relaxed mt-1">
+                    Carga la carretilla con la capacidad indicada y ejecuta ciclos de elevación y descenso dentro de los tiempos de tolerancia.
+                  </p>
+                  <ActionBtn onClick={() => markOk(3)} variant="primary">
+                    <CheckCircle2 size={12} /> Test con carga OK
+                  </ActionBtn>
+                </>
+              )}
             </>
           )}
           {(stepStatus[3] === STEP_STATUS.PENDING) && (
@@ -729,10 +1097,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             </div>
           )}
           {stepStatus[3] === STEP_STATUS.OK && erpData && (
-            <>
+            <div className="flex flex-col gap-1">
               <DataLine label="Carga" value={`${erpData.capac_interm_1 ?? '—'} kg ✓`} highlight />
-              <DataLine label="Rango elevac." value={`${ds2s(erpData.tpo_elevac_min)} — ${ds2s(erpData.tpo_elevac_max)}`} />
-            </>
+              <DataLine label="Duración" value={formatDuration(stepDurations[3])} />
+            </div>
           )}
         </StepCard>
 
@@ -743,7 +1111,11 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
               <DataLine label="Modelo" value={erpData.modelo} highlight />
               <DataLine label="Altura mástil" value={`${erpData.altura_max_interm ?? '—'} mm`} />
 
-              {timer5minDisplay === null ? (
+              {!stepStarted[4] ? (
+                <div className="flex items-center gap-2 text-yellow-400 font-bold bg-yellow-400/10 p-2 mt-1 mb-2 rounded border border-yellow-400/20 text-[9px]">
+                  <AlertTriangle size={12} /> ESPERANDO: Pulse INICIAR SECUENCIA
+                </div>
+              ) : timer5minDisplay === null ? (
                 <>
                   <p className="text-[9px] text-logisnext-slate leading-relaxed">
                     Posiciona el mástil. Espera validación de visión y arranca el cronómetro.
@@ -783,7 +1155,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             </p>
           )}
           {stepStatus[4] === STEP_STATUS.OK && (
-            <p className="text-[9px] text-green-400">Prueba de 5 minutos superada ✓</p>
+            <div className="flex flex-col gap-1">
+              <p className="text-[9px] text-green-400">Prueba de 5 minutos superada ✓</p>
+              <DataLine label="Duración" value={formatDuration(stepDurations[4])} />
+            </div>
           )}
         </StepCard>
 
@@ -798,13 +1173,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           </p>
           <button
             onClick={() => {
-              if (pruebaId) {
-                fetch(`${API_BASE}/pruebas/${pruebaId}/resultado`, {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ tiempo_real: 0, estado: 'FINALIZADO_OK' })
-                }).catch(e => console.error("Error saving test state", e));
-              }
+              saveLog('OK');
+              if (onSequenceEnd) onSequenceEnd();
               resetSequence();
             }}
             className="w-full py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-lg font-black text-[11px] uppercase tracking-widest shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-colors active:scale-95"
@@ -824,18 +1194,19 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         </div>
         <div className="flex gap-1">
           {stepStatus.map((s, i) => (
-            <div key={i} className={`flex-1 h-1.5 rounded-full transition-all duration-500 ${
-              s === STEP_STATUS.OK    ? 'bg-green-500' :
-              s === STEP_STATUS.SKIP  ? 'bg-yellow-600' :
-              s === STEP_STATUS.ACTIVE ? 'bg-logisnext-magenta animate-pulse' :
-              s === STEP_STATUS.ERROR  ? 'bg-red-500' :
-              'bg-[#1d2930]'
-            }`} />
+            <div key={i} className={`flex-1 h-1.5 rounded-full transition-all duration-500 ${s === STEP_STATUS.OK ? 'bg-green-500' :
+                s === STEP_STATUS.SKIP ? 'bg-yellow-600' :
+                  s === STEP_STATUS.ACTIVE ? 'bg-logisnext-magenta animate-pulse' :
+                    s === STEP_STATUS.ERROR ? 'bg-red-500' :
+                      'bg-[#1d2930]'
+              }`} />
           ))}
         </div>
       </div>
     </aside>
   );
 };
+
+Sequencer.displayName = 'Sequencer';
 
 export default Sequencer;

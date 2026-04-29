@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from .models import ErpCarretilla, PruebaElevacion, RegistroTelemetria
+from .models import ErpCarretilla, LogTabla
 from typing import Optional, List
 
 
@@ -45,66 +45,20 @@ def upsert_carretilla(db: Session, data: dict) -> ErpCarretilla:
         return new_record
 
 
+
 # ─────────────────────────────────────────────────────────────
-# PruebaElevacion
+# LogTabla
 # ─────────────────────────────────────────────────────────────
 
-def create_prueba(db: Session, prueba_data: dict) -> PruebaElevacion:
-    """Crea un nuevo registro de prueba de elevación."""
-    prueba = PruebaElevacion(**prueba_data)
-    db.add(prueba)
+def create_log(db: Session, log_data: dict) -> LogTabla:
+    """Guarda un registro completo en LOG_TABLA."""
+    # Evitar guardar en base de datos si log_data tiene campos nulos irrelevantes que fallarían
+    log = LogTabla(**log_data)
+    db.add(log)
     db.commit()
-    db.refresh(prueba)
-    return prueba
+    db.refresh(log)
+    return log
 
-def get_pruebas_by_bastidor(db: Session, bastidor: str, limit: int = 20) -> List[PruebaElevacion]:
-    """Obtiene el historial de pruebas de un bastidor."""
-    return (
-        db.query(PruebaElevacion)
-        .filter(PruebaElevacion.bastidor.ilike(f"%{bastidor}%"))
-        .order_by(PruebaElevacion.fecha_creacion.desc())
-        .limit(limit)
-        .all()
-    )
-
-def get_prueba_by_id(db: Session, prueba_id: int) -> Optional[PruebaElevacion]:
-    return db.query(PruebaElevacion).filter(PruebaElevacion.id == prueba_id).first()
-
-def update_prueba_resultado(
-    db: Session, prueba_id: int, tiempo_real: float, estado: str
-) -> Optional[PruebaElevacion]:
-    """Actualiza el resultado final de una prueba."""
-    prueba = get_prueba_by_id(db, prueba_id)
-    if prueba:
-        prueba.tiempo_real_elevacion = tiempo_real
-        prueba.estado_final = estado
-        db.commit()
-        db.refresh(prueba)
-    return prueba
-
-
-# ─────────────────────────────────────────────────────────────
-# RegistroTelemetria
-# ─────────────────────────────────────────────────────────────
-
-def add_telemetria(db: Session, prueba_id: int, tiempo: float, distancia: float, estado: str) -> RegistroTelemetria:
-    """Almacena un punto de telemetría asociado a una prueba."""
-    registro = RegistroTelemetria(
-        prueba_id=prueba_id,
-        tiempo_transcurrido=tiempo,
-        distancia_mm=distancia,
-        estado_movimiento=estado
-    )
-    db.add(registro)
-    db.commit()
-    db.refresh(registro)
-    return registro
-
-def get_telemetria_by_prueba(db: Session, prueba_id: int) -> List[RegistroTelemetria]:
-    """Obtiene todos los registros de telemetría de una prueba."""
-    return (
-        db.query(RegistroTelemetria)
-        .filter(RegistroTelemetria.prueba_id == prueba_id)
-        .order_by(RegistroTelemetria.timestamp.asc())
-        .all()
-    )
+def get_logs(db: Session, skip: int = 0, limit: int = 200) -> List[LogTabla]:
+    """Obtiene el historial de LOG_TABLA."""
+    return db.query(LogTabla).order_by(LogTabla.id.desc()).offset(skip).limit(limit).all()

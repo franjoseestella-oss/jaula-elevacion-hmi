@@ -13,8 +13,8 @@ import os
 import sys
 
 from database.database import engine, get_db
-from database.models import init_db, PruebaElevacion, ErpCarretilla
-from database.crud import create_prueba, update_prueba_resultado, get_pruebas_by_bastidor
+from database.models import init_db, ErpCarretilla
+from database.crud import create_log, get_logs
 from erp_sync import parse_and_sync_dat
 
 # ─────────────────────────────────────────────────────────────
@@ -287,15 +287,21 @@ def listar_carretillas(limit: int = 500, db: Session = Depends(get_db)):
     )
     if erp_rows:
         bastidores = [r.bastidor for r in erp_rows if r.bastidor]
-        from database.models import PruebaElevacion
-        pruebas = db.query(PruebaElevacion.bastidor, PruebaElevacion.estado_final)\
-            .filter(PruebaElevacion.bastidor.in_(bastidores))\
-            .order_by(PruebaElevacion.id.asc())\
+        from database.models import LogTabla
+        pruebas = db.query(LogTabla.NBASTIDOR, LogTabla.OK_NOK)\
+            .filter(LogTabla.NBASTIDOR.in_(bastidores))\
+            .order_by(LogTabla.id.asc())\
             .all()
         
         estado_por_bastidor = {}
         for b, e in pruebas:
-            estado_por_bastidor[b] = e
+            if e:
+                if e.upper() == 'OK':
+                    estado_por_bastidor[b] = 'FINALIZADO_OK'
+                elif e.upper() == 'NOK':
+                    estado_por_bastidor[b] = 'ERROR'
+                else:
+                    estado_por_bastidor[b] = e
 
         items = [
             {
@@ -383,50 +389,6 @@ def estado_erp():
 
 
 # ─────────────────────────────────────────────────────────────
-# Pruebas Endpoints
-# ─────────────────────────────────────────────────────────────
-
-@app.get("/pruebas/bastidor/{bastidor}")
-def historial_pruebas(bastidor: str, db: Session = Depends(get_db)):
-    """Devuelve el historial de pruebas de elevación de un bastidor."""
-    pruebas = get_pruebas_by_bastidor(db, bastidor)
-    return {
-        "bastidor": bastidor,
-        "total": len(pruebas),
-        "historial": [
-            {
-                "id": p.id,
-                "estado": p.estado_final,
-                "tiempo_real": p.tiempo_real_elevacion,
-                "fecha": str(p.fecha_creacion),
-            }
-            for p in pruebas
-        ]
-    }
-
-
-@app.post("/pruebas/nueva")
-def nueva_prueba(prueba_data: dict, db: Session = Depends(get_db)):
-    """Registra una nueva prueba de elevación en la base de datos."""
-    prueba = create_prueba(db, prueba_data)
-    return {"status": "created", "id": prueba.id}
-
-
-@app.put("/pruebas/{prueba_id}/resultado")
-def finalizar_prueba(prueba_id: int, resultado: dict, db: Session = Depends(get_db)):
-    """Actualiza el resultado final de una prueba (tiempo real + estado OK/KO)."""
-    prueba = update_prueba_resultado(
-        db,
-        prueba_id,
-        resultado.get("tiempo_real", 0.0),
-        resultado.get("estado", "KO"),
-    )
-    if not prueba:
-        raise HTTPException(status_code=404, detail="Prueba no encontrada.")
-    return {"status": "updated", "estado": prueba.estado_final}
-
-
-# ─────────────────────────────────────────────────────────────
 # Configuración Dispositivos (Datalogic)
 # ─────────────────────────────────────────────────────────────
 
@@ -480,18 +442,14 @@ plc_sim_state = {
 
     # Entradas Digitales (Simuladas)
     "Ob_Inciar_Secuencia": False,
-    "Ob_Repetir_Secuencia": False,
+    "Ob_Pegatina_Colocada": False,
     "Ob_Abortar_Secuancia": False,
     
     "Ob_Dtec_Valla_1_trabajo_LH": False,
     "Ob_Dtec_Valla_1_trabajo_RH": False,
-    "Ob_Dtec_Valla_1_Reposo_LH": True,
-    "Ob_Dtec_Valla_1_Reposo_RH": True,
     
     "Ob_Dtec_Valla_2_trabajo_LH": False,
     "Ob_Dtec_Valla_2_trabajo_RH": False,
-    "Ob_Dtec_Valla_2_Reposo_LH": True,
-    "Ob_Dtec_Valla_2_Reposo_RH": True,
 }
 
 class PlcWriteParams(BaseModel):
@@ -502,6 +460,9 @@ class PlcWriteParams(BaseModel):
     Ob_Bajar_Vallas: bool | None = None
     OW_Altura_Elevacion: float | None = None
     OW_Pallet: float | None = None
+    Ob_Inciar_Secuencia: bool | None = None
+    Ob_Pegatina_Colocada: bool | None = None
+    Ob_Abortar_Secuancia: bool | None = None
 
 @app.post("/plc/write")
 def write_to_plc(params: PlcWriteParams):
@@ -531,10 +492,6 @@ def write_to_plc(params: PlcWriteParams):
             # Lógica de simulación de vallas
             if key == "Ob_Subir_Vallas" and value is True:
                 plc_sim_state["Ob_Bajar_Vallas"] = False
-                plc_sim_state["Ob_Dtec_Valla_1_Reposo_LH"] = True
-                plc_sim_state["Ob_Dtec_Valla_1_Reposo_RH"] = True
-                plc_sim_state["Ob_Dtec_Valla_2_Reposo_LH"] = True
-                plc_sim_state["Ob_Dtec_Valla_2_Reposo_RH"] = True
                 
                 plc_sim_state["Ob_Dtec_Valla_1_trabajo_LH"] = False
                 plc_sim_state["Ob_Dtec_Valla_1_trabajo_RH"] = False
@@ -547,11 +504,6 @@ def write_to_plc(params: PlcWriteParams):
                 plc_sim_state["Ob_Dtec_Valla_1_trabajo_RH"] = True
                 plc_sim_state["Ob_Dtec_Valla_2_trabajo_LH"] = True
                 plc_sim_state["Ob_Dtec_Valla_2_trabajo_RH"] = True
-                
-                plc_sim_state["Ob_Dtec_Valla_1_Reposo_LH"] = False
-                plc_sim_state["Ob_Dtec_Valla_1_Reposo_RH"] = False
-                plc_sim_state["Ob_Dtec_Valla_2_Reposo_LH"] = False
-                plc_sim_state["Ob_Dtec_Valla_2_Reposo_RH"] = False
                     
     print(f"[OPC UA SIM] Escribiendo salidas al PLC: {escrito}")
     return {"status": "ok", "message": "Valores enviados al PLC simulado", "data": escrito}
@@ -588,6 +540,30 @@ async def websocket_endpoint(websocket: WebSocket):
         print("[WS] Cliente desconectado.")
 
 
+
+
+
+
+# ─────────────────────────────────────────────────────────────
+# Logs de pruebas (LOG_TABLA)
+# ─────────────────────────────────────────────────────────────
+
+@app.post("/api/logs")
+def save_log(log_data: dict, db: Session = Depends(get_db)):
+    try:
+        log = create_log(db, log_data)
+        return {"status": "success", "id": log.id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/logs")
+def read_logs(skip: int = 0, limit: int = 200, db: Session = Depends(get_db)):
+    try:
+        logs = get_logs(db, skip=skip, limit=limit)
+        return logs
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ─────────────────────────────────────────────────────────────
 # Health check
 # ─────────────────────────────────────────────────────────────
@@ -609,11 +585,11 @@ def health_db():
         # Contar registros en tablas clave
         with engine.connect() as conn:
             n_erp    = conn.execute(text("SELECT COUNT(*) FROM JAULA_ERP")).scalar()
-            n_pruebas = conn.execute(text("SELECT COUNT(*) FROM pruebas_elevacion")).scalar()
+            n_logs = conn.execute(text("SELECT COUNT(*) FROM LOG_TABLA")).scalar()
         return {
             "connected": True,
             "jaula_erp": n_erp,
-            "pruebas":   n_pruebas,
+            "logs": n_logs,
         }
     except Exception as e:
         return {"connected": False, "error": str(e)}

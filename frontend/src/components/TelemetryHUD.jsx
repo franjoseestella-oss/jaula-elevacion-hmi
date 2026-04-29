@@ -1,7 +1,19 @@
 import React from 'react';
 import { Target, Clock } from 'lucide-react';
 
-const TelemetryHUD = ({ telemetry }) => {
+const TelemetryHUD = ({ telemetry, cycleTimer = 0 }) => {
+  const isRunning = cycleTimer > 0;
+
+  // Formatear como MM:SS.d si >= 60s, si no como SS.dd s
+  const formatCycleTime = (secs) => {
+    if (secs < 60) return secs.toFixed(2).padStart(5, '0');
+    const m = Math.floor(secs / 60);
+    const s = (secs % 60).toFixed(1);
+    return `${String(m).padStart(2, '0')}:${s.padStart(4, '0')}`;
+  };
+
+  const unit = cycleTimer < 60 ? 's' : 'min';
+
   return (
     <>
       <div className="absolute top-6 left-6 right-6 flex justify-between z-10 pointer-events-none">
@@ -30,24 +42,26 @@ const TelemetryHUD = ({ telemetry }) => {
         </div>
       </div>
 
-      {/* Timer Telemetry */}
+      {/* Cycle Time — controlado por secuencia */}
       <div className="glass-panel p-5 rounded-xl w-72 pointer-events-auto text-right relative overflow-hidden group">
-        <div className="absolute top-0 right-0 w-full h-[2px] bg-green-500 shadow-[0_0_10px_#22c55e]"></div>
+        <div className={`absolute top-0 right-0 w-full h-[2px] transition-colors duration-500 ${isRunning ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-[#2e404a]'}`}></div>
         
         <div className="flex items-center justify-end gap-2 mb-2">
           <h3 className="text-logisnext-lightslate text-[10px] font-black uppercase tracking-[0.2em]">Cycle Time</h3>
-          <Clock size={14} className="text-green-500" />
+          <Clock size={14} className={`transition-colors duration-500 ${isRunning ? 'text-green-500' : 'text-logisnext-slate'}`} />
         </div>
 
         <div className="flex items-baseline justify-end gap-2">
-          <span className="text-5xl font-mono font-black text-white tracking-tighter drop-shadow-md">
-            {telemetry.timer.toFixed(2).padStart(5, '0')}
+          <span className={`text-5xl font-mono font-black tracking-tighter drop-shadow-md transition-colors duration-500 ${isRunning ? 'text-white' : 'text-logisnext-slate/50'}`}>
+            {formatCycleTime(cycleTimer)}
           </span>
-          <span className="text-green-500 font-bold text-lg">s</span>
+          <span className={`font-bold text-lg transition-colors duration-500 ${isRunning ? 'text-green-500' : 'text-logisnext-slate/40'}`}>{unit}</span>
         </div>
         
-        <div className="mt-2 inline-block bg-green-500/10 border border-green-500/30 px-3 py-1 rounded-full">
-          <p className="text-[10px] text-green-400 font-black uppercase tracking-widest">{telemetry.state}</p>
+        <div className={`mt-2 inline-block px-3 py-1 rounded-full border transition-all duration-500 ${isRunning ? 'bg-green-500/10 border-green-500/30' : 'bg-[#1d2930]/50 border-[#2e404a]'}`}>
+          <p className={`text-[10px] font-black uppercase tracking-widest transition-colors duration-500 ${isRunning ? 'text-green-400' : 'text-logisnext-slate/60'}`}>
+            {isRunning ? telemetry.state : 'EN ESPERA'}
+          </p>
         </div>
       </div>
 

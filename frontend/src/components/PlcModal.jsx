@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { X, Cpu, TestTube, Network, Activity, Lightbulb, Zap } from 'lucide-react';
+import { X, Cpu, TestTube, Network, Activity, Lightbulb, Zap, Play, CheckCircle2, PowerOff, RefreshCw } from 'lucide-react';
 
-const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation }) => {
+const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pulsePlc }) => {
   const [outputs, setOutputs] = useState({ 
     Ob_LUZ_VERDE: false, Ob_LUZ_AZUL: false, Ob_LUZ_ROJA: false,
     Ob_Subir_Vallas: false, Ob_Bajar_Vallas: false 
@@ -97,16 +97,55 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation }) =
             </h3>
             
             <div className="flex flex-col gap-3 bg-[#0a0f12]/60 border border-[#2e404a] rounded-xl p-5 h-full">
+              
+              {/* Botonera de pulsadores simulada (Usando el mecanismo de pulsePlc) */}
+              <div className="mb-4 bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-4">
+                <h4 className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest mb-4 border-b border-[#2e404a] pb-2">
+                  Pulsadores de Control
+                </h4>
+                <div className="flex justify-between items-center px-2">
+                  
+                  <div className="flex flex-col items-center">
+                    <button
+                      disabled={!isSimulation}
+                      onClick={() => pulsePlc('Ob_Inciar_Secuencia')}
+                      className={`w-12 h-12 rounded-full border-4 flex items-center justify-center transition-all ${!isSimulation ? 'bg-[#1d2930] border-[#2e404a] opacity-50 cursor-not-allowed' : 'bg-gradient-to-b from-green-500 to-green-700 active:from-green-700 active:to-green-900 border-[#1d2930] shadow-[0_4px_10px_rgba(34,197,94,0.3)] active:scale-95 active:shadow-inner'}`}
+                    >
+                      <Play size={18} className={`${!isSimulation ? 'text-gray-500' : 'text-white ml-1'}`} />
+                    </button>
+                    <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Iniciar<br/>Secuencia</span>
+                  </div>
+
+                  <div className="flex flex-col items-center">
+                    <button
+                      disabled={!isSimulation}
+                      onClick={() => pulsePlc('Ob_Pegatina_Colocada')}
+                      className={`w-12 h-12 rounded-full border-4 flex items-center justify-center transition-all ${!isSimulation ? 'bg-[#1d2930] border-[#2e404a] opacity-50 cursor-not-allowed' : 'bg-gradient-to-b from-blue-500 to-blue-700 active:from-blue-700 active:to-blue-900 border-[#1d2930] shadow-[0_4px_10px_rgba(59,130,246,0.3)] active:scale-95 active:shadow-inner'}`}
+                    >
+                      <CheckCircle2 size={20} className={`${!isSimulation ? 'text-gray-500' : 'text-white'}`} />
+                    </button>
+                    <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Pegatina<br/>Colocada</span>
+                  </div>
+
+                  <div className="flex flex-col items-center">
+                    <button
+                      disabled={!isSimulation}
+                      onClick={() => pulsePlc('Ob_Abortar_Secuancia')}
+                      className={`w-12 h-12 rounded-full border-4 flex items-center justify-center transition-all ${!isSimulation ? 'bg-[#1d2930] border-[#2e404a] opacity-50 cursor-not-allowed' : 'bg-gradient-to-b from-red-500 to-red-700 active:from-red-700 active:to-red-900 border-[#1d2930] shadow-[0_4px_10px_rgba(239,68,68,0.3)] active:scale-95 active:shadow-inner'}`}
+                    >
+                      <PowerOff size={18} className={`${!isSimulation ? 'text-gray-500' : 'text-white'}`} />
+                    </button>
+                    <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Abortar<br/>Secuencia</span>
+                  </div>
+
+                </div>
+              </div>
+
               {[
                 { id: 'OW_Altura_Elevacion', label: 'Láser Altura Elevación', isAnalog: true, unit: 'mm' },
                 { id: 'OW_Pallet', label: 'Láser Altura Pallet', isAnalog: true, unit: 'mm' },
-                { id: 'Ob_Inciar_Secuencia', label: 'Botón Iniciar Secuencia', isAnalog: false, canSimulateClick: true },
-                { id: 'Ob_Repetir_Secuencia', label: 'Botón Repetir Secuencia', isAnalog: false, canSimulateClick: true },
-                { id: 'Ob_Abortar_Secuancia', label: 'Botón Abortar Secuencia', isAnalog: false, isDanger: true, canSimulateClick: true },
                 { id: 'Ob_Dtec_Valla_1_trabajo_LH', label: 'Valla 1 Trabajo LH', isAnalog: false },
-                { id: 'Ob_Dtec_Valla_1_Reposo_LH', label: 'Valla 1 Reposo LH', isAnalog: false },
-                { id: 'Ob_Dtec_Valla_2_trabajo_RH', label: 'Valla 2 Trabajo RH', isAnalog: false },
-                { id: 'Ob_Dtec_Valla_2_Reposo_RH', label: 'Valla 2 Reposo RH', isAnalog: false }
+                { id: 'Ob_Dtec_Valla_2_trabajo_RH', label: 'Valla 2 Trabajo RH', isAnalog: false }
               ].map((sensor) => {
                 const value = telemetry?.plc ? telemetry.plc[sensor.id] : undefined;
                 const active = !!value; // Para los digitales
@@ -121,7 +160,6 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation }) =
                           {(() => {
                             let val = isSimulation ? Number(analogs[sensor.id] || 0) : (value !== undefined ? Number(value) : null);
                             if (val === null) return '---';
-                            if (sensor.id === 'OW_Altura_Elevacion') val = Math.max(0, val - 1180);
                             // Convertir ambos sensores a metros (dividiendo por 1000)
                             return (val / 1000).toFixed(2);
                           })()} <span className="text-[10px] text-blue-400/70">m</span>

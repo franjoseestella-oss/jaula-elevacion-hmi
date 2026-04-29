@@ -162,13 +162,12 @@ const CageAssembly = ({ plcState }) => {
   useFrame((state, delta) => {
     // Determine target height based on plcState
     // Default up if nothing specified, or UP if Ob_Subir_Vallas
-    // Leer el estado de los detectores en lugar de los comandos de salida
-    // Así la animación funcionará tanto en simulación como con el PLC real
+    // Leer el estado de los detectores de trabajo
     const isDownRear = plcRef.current?.Ob_Dtec_Valla_1_trabajo_LH === true;
-    const isUpRear = plcRef.current?.Ob_Dtec_Valla_1_Reposo_LH === true;
+    const isUpRear = !isDownRear;
     
     const isDownFront = plcRef.current?.Ob_Dtec_Valla_2_trabajo_RH === true;
-    const isUpFront = plcRef.current?.Ob_Dtec_Valla_2_Reposo_RH === true;
+    const isUpFront = !isDownFront;
     
     // La posición original de la valla trasera (Valla 1) en reposo es Y=4.0
     // La valla frontal (Valla 2) no debe bajar tanto para no chocar con los pallets (Y=5.4)
@@ -407,7 +406,36 @@ const CageAssembly = ({ plcState }) => {
   );
 };
 
-const ForkliftAssembly = ({ distance, palletState, onPalletAnimComplete }) => {
+const arrowShape = new THREE.Shape();
+arrowShape.moveTo(-0.04, -0.02);
+arrowShape.lineTo(0.01, -0.02);
+arrowShape.lineTo(0.01, -0.04);
+arrowShape.lineTo(0.05, 0); // punta
+arrowShape.lineTo(0.01, 0.04);
+arrowShape.lineTo(0.01, 0.02);
+arrowShape.lineTo(-0.04, 0.02);
+arrowShape.lineTo(-0.04, -0.02);
+
+const Sticker2D = ({ pointsRight }) => (
+  <group scale={[1.5, 1.5, 1.5]}>
+    <mesh position={[0, 0, 0]}>
+      <planeGeometry args={[0.1, 0.1]} />
+      <meshBasicMaterial color="#ffffff" side={THREE.DoubleSide} />
+    </mesh>
+    <group rotation={[0, 0, pointsRight ? 0 : Math.PI]}>
+      <mesh position={[0, 0, 0.001]}>
+        <shapeGeometry args={[arrowShape]} />
+        <meshBasicMaterial color="#ff0000" side={THREE.DoubleSide} />
+      </mesh>
+      <mesh position={[0, 0, -0.001]}>
+        <shapeGeometry args={[arrowShape]} />
+        <meshBasicMaterial color="#ff0000" side={THREE.DoubleSide} />
+      </mesh>
+    </group>
+  </group>
+);
+
+const ForkliftAssembly = ({ distance, palletState, onPalletAnimComplete, showStickers, zoomToStickers }) => {
   const forkliftRef = useRef();
   const carriageRef = useRef();
   const middleMastRef = useRef();
@@ -415,6 +443,39 @@ const ForkliftAssembly = ({ distance, palletState, onPalletAnimComplete }) => {
   const beaconRef = useRef();
   
   const animState = useRef({ phase: 'idle', t: 0 });
+  const [lockedStickerY, setLockedStickerY] = React.useState(null);
+  const fixedStickerGroupRef = useRef();
+
+  const pendingSticker1 = useRef();
+  const pendingSticker2 = useRef();
+
+  useFrame((state) => {
+    // Parpadeo de las pegatinas cuando están pendientes de colocación (animación)
+    const isVisible = Math.sin(state.clock.elapsedTime * 8) > 0;
+    if (pendingSticker1.current) pendingSticker1.current.visible = isVisible;
+    if (pendingSticker2.current) pendingSticker2.current.visible = isVisible;
+
+    // La pegatina fija sigue al mástil interior hasta que se confirme
+    if (zoomToStickers && lockedStickerY === null && fixedStickerGroupRef.current && innerMastRef.current) {
+      fixedStickerGroupRef.current.position.y = -0.3 + innerMastRef.current.position.y;
+    }
+  });
+
+  useEffect(() => {
+    // Solo fijamos la posición permanentemente cuando se confirma la pegatina
+    if (showStickers && !zoomToStickers && lockedStickerY === null) {
+      const targetY = THREE.MathUtils.clamp(distance / 1000, 0, 5.0);
+      const extraLift = Math.max(0, targetY - 1.5);
+      setLockedStickerY(extraLift);
+    }
+  }, [showStickers, zoomToStickers, lockedStickerY, distance]);
+
+  useEffect(() => {
+    // Aplicamos la posición final si ya está bloqueada
+    if (lockedStickerY !== null && fixedStickerGroupRef.current) {
+      fixedStickerGroupRef.current.position.y = -0.3 + lockedStickerY;
+    }
+  }, [lockedStickerY]);
 
   // Sincronizar estados globales para la renderización condicional (un pequeño hack para evitar pasarlo por todo el árbol sin context)
   if (typeof window !== 'undefined') {
@@ -684,6 +745,17 @@ const ForkliftAssembly = ({ distance, palletState, onPalletAnimComplete }) => {
           <mesh position={[0.05, 1.3, -0.05]}><cylinderGeometry args={[0.035, 0.035, 2.5]} />{steelMat}</mesh>
         </group>
 
+        {/* Pegatina Fija en Mástil Exterior Izquierdo (X=-0.31) en la cara trasera */}
+        {(showStickers || zoomToStickers) && (
+          <group position={[-0.31, 0, -0.15]}>
+            <group ref={fixedStickerGroupRef}>
+              <group ref={!showStickers && zoomToStickers ? pendingSticker1 : null}>
+                <Sticker2D pointsRight={true} />
+              </group>
+            </group>
+          </group>
+        )}
+
         {/* Inner Mast (Pista Interior) */}
         <group ref={innerMastRef}>
           <mesh position={[-0.15, 1.35, 0.1]}><boxGeometry args={[0.05, 2.5, 0.08]} />{darkMat}</mesh>
@@ -697,6 +769,13 @@ const ForkliftAssembly = ({ distance, palletState, onPalletAnimComplete }) => {
           {/* Cadenas de elevación */}
           <mesh position={[-0.1, 1.3, -0.02]}><boxGeometry args={[0.02, 2.5, 0.01]} />{blackMat}</mesh>
           <mesh position={[0.1, 1.3, -0.02]}><boxGeometry args={[0.02, 2.5, 0.01]} />{blackMat}</mesh>
+          
+          {/* Pegatina Móvil en Mástil Interior Izquierdo (X=-0.175) en la cara trasera */}
+          {(showStickers || zoomToStickers) && (
+            <group position={[-0.175, -0.3, -0.15]} ref={!showStickers && zoomToStickers ? pendingSticker2 : null}>
+              <Sticker2D pointsRight={false} />
+            </group>
+          )}
         </group>
 
         {/* --- CARRIAGE (Animated) --- */}
@@ -743,7 +822,22 @@ const ForkliftAssembly = ({ distance, palletState, onPalletAnimComplete }) => {
   );
 };
 
-const DigitalTwin = ({ distance, plcState, palletState, onPalletAnimComplete }) => {
+const CameraAnimator = ({ zoomToStickers }) => {
+  useFrame((state, delta) => {
+    if (zoomToStickers && state.controls) {
+      const carriageY = window.__carriageY || 2.0;
+      const extraLift = Math.max(0, carriageY - 1.5);
+      const stickerWorldY = -0.3 + extraLift;
+
+      // Cámara por detrás de la carretilla (Z negativo) mirando hacia las pegatinas
+      state.camera.position.lerp(new THREE.Vector3(-0.4, stickerWorldY, -1.8), delta * 2);
+      state.controls.target.lerp(new THREE.Vector3(-0.25, stickerWorldY, 0), delta * 2);
+    }
+  });
+  return null;
+};
+
+const DigitalTwin = ({ distance, plcState, palletState, onPalletAnimComplete, showStickers, zoomToStickers }) => {
   return (
     <div className="w-full h-full bg-gradient-to-b from-[#1d2930] to-[#0f171e]">
       <Canvas camera={{ position: [4, 3, 5], fov: 50 }}>
@@ -753,7 +847,8 @@ const DigitalTwin = ({ distance, plcState, palletState, onPalletAnimComplete }) 
         <Environment preset="warehouse" blur={0.8} />
         
         <CageAssembly plcState={plcState} />
-        <ForkliftAssembly distance={distance} palletState={palletState} onPalletAnimComplete={onPalletAnimComplete} />
+        <ForkliftAssembly distance={distance} palletState={palletState} onPalletAnimComplete={onPalletAnimComplete} showStickers={showStickers} zoomToStickers={zoomToStickers} />
+        <CameraAnimator zoomToStickers={zoomToStickers} />
         
         {/* Suelo Industrial */}
         <Grid 
@@ -765,8 +860,8 @@ const DigitalTwin = ({ distance, plcState, palletState, onPalletAnimComplete }) 
           sectionSize={2.5} 
           position={[0, 0, 0]} 
         />
-        
         <OrbitControls 
+          makeDefault
           target={[0, 2.5, 0]} 
           maxPolarAngle={Math.PI / 2 - 0.05} // Evitar ir por debajo del suelo
           minDistance={3}

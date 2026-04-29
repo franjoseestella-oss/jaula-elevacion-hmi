@@ -12,6 +12,10 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
   const [isTesting, setIsTesting] = useState(false);
   const [isSimulation, setIsSimulation] = useState(true);
 
+  // Estados de tolerancia (se guardan en localStorage para persistencia)
+  const [toleranciaPositiva, setToleranciaPositiva] = useState(() => parseInt(localStorage.getItem('toleranciaPositiva')) || 50);
+  const [toleranciaNegativa, setToleranciaNegativa] = useState(() => parseInt(localStorage.getItem('toleranciaNegativa')) || 50);
+
   // Estado local para las salidas del PLC
   const [luces, setLuces] = useState({ Ob_LUZ_VERDE: false, Ob_LUZ_AZUL: false, Ob_LUZ_ROJA: false });
 
@@ -31,6 +35,10 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
   const handleSave = () => {
     // Aquí se enviaría la configuración al backend
     console.log("Guardando config Datalogic:", { connType, ip, port, comPort, baudRate });
+    localStorage.setItem('toleranciaPositiva', toleranciaPositiva);
+    localStorage.setItem('toleranciaNegativa', toleranciaNegativa);
+    // Notificar al sistema para actualizar tolerancias si es necesario
+    window.dispatchEvent(new Event('toleranciaChanged'));
     onClose();
   };
 
@@ -93,6 +101,17 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
             >
               <Network size={14} />
               Datalogic
+            </button>
+            <button
+              onClick={() => setActiveTab('tolerancia')}
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                activeTab === 'tolerancia'
+                  ? 'bg-logisnext-magenta/20 text-logisnext-magenta border border-logisnext-magenta/30'
+                  : 'text-logisnext-slate hover:bg-[#1d2930] hover:text-white border border-transparent'
+              }`}
+            >
+              <Activity size={14} />
+              Tolerancia
             </button>
           </div>
 
@@ -199,6 +218,46 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
                   )}
                 </div>
 
+              </div>
+            )}
+
+            {activeTab === 'tolerancia' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-logisnext-magenta/50 pb-1 inline-block">
+                    Tolerancia (Multiload)
+                  </h3>
+                </div>
+
+                <div className="bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-5 space-y-6">
+                  <p className="text-xs text-logisnext-lightslate font-medium">
+                    Configure los márgenes de tolerancia para la colocación de la pegatina en la etapa de Multiload. El sistema indicará posición correcta si la altura del láser se encuentra dentro de estos límites respecto a la ALTURA MAX del ERP.
+                  </p>
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] text-green-400 font-bold uppercase tracking-widest">
+                        Tolerancia en Positivo (+mm)
+                      </label>
+                      <input
+                        type="number"
+                        value={toleranciaPositiva}
+                        onChange={(e) => setToleranciaPositiva(e.target.value)}
+                        className="bg-[#0a0f12] border border-green-500/30 rounded-lg px-4 py-3 text-white text-sm font-black outline-none focus:border-green-400 transition-colors"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] text-red-400 font-bold uppercase tracking-widest">
+                        Tolerancia en Negativo (-mm)
+                      </label>
+                      <input
+                        type="number"
+                        value={toleranciaNegativa}
+                        onChange={(e) => setToleranciaNegativa(e.target.value)}
+                        className="bg-[#0a0f12] border border-red-500/30 rounded-lg px-4 py-3 text-white text-sm font-black outline-none focus:border-red-400 transition-colors"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>

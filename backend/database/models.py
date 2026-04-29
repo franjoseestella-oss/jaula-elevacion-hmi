@@ -2,26 +2,7 @@ from sqlalchemy import Column, Integer, String, Float, DateTime
 from sqlalchemy.sql import func
 from .database import Base, engine
 
-class PruebaElevacion(Base):
-    __tablename__ = "pruebas_elevacion"
 
-    id = Column(Integer, primary_key=True, index=True)
-    fecha_montaje = Column(String(20))
-    secuencia = Column(String(20))
-    modelo = Column(String(50))
-    bastidor = Column(String(100))
-    mastil = Column(String(50))
-    
-    # Tolerancias objetivo
-    altura_max_interm = Column(Float)
-    tpo_elevac_min = Column(Float)
-    tpo_elevac_max = Column(Float)
-    
-    # Tiempos reales (para cuando finalice la prueba)
-    tiempo_real_elevacion = Column(Float, nullable=True)
-    estado_final = Column(String(20), default="PENDIENTE")
-    
-    fecha_creacion = Column(DateTime(timezone=True), server_default=func.now())
 
 class ErpCarretilla(Base):
     """
@@ -60,15 +41,67 @@ class ErpCarretilla(Base):
     fecha_importacion = Column(DateTime(timezone=True), server_default=func.now())
 
 
-class RegistroTelemetria(Base):
-    __tablename__ = "registros_telemetria"
+
+
+class LogTabla(Base):
+    __tablename__ = "LOG_TABLA"
 
     id = Column(Integer, primary_key=True, index=True)
-    prueba_id = Column(Integer, index=True) # Referencia lógica a PruebaElevacion
-    tiempo_transcurrido = Column(Float)
-    distancia_mm = Column(Float)
-    estado_movimiento = Column(String(50))
-    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # 1. Cabecera (ERP)
+    FECHA_MONTAJE = Column(String(20), nullable=True)
+    NSECUENCIA = Column(String(20), nullable=True)
+    NMODELO = Column(String(50), nullable=True)
+    NBASTIDOR = Column(String(100), nullable=True)
+    NMASTIL = Column(String(50), nullable=True)
+    ALTURA_MAX_INTERMEDIA = Column(Float, nullable=True)
+    CARGA_CONSIGNADA = Column(Float, nullable=True)
+    TIEMPO_ELEVACION_MIN_SINCARGA = Column(Float, nullable=True)
+    TIEMPO_ELEVACION_MAX_SINCARGA = Column(Float, nullable=True)
+    TIEMPO_DESCENSO_MIN_SINCARGA = Column(Float, nullable=True)
+    TIEMPO_DESCENSO_MAX_SINCARGA = Column(Float, nullable=True)
+    TIEMPO_ELEVACION_MIN_CARGA = Column(Float, nullable=True)
+    TIEMPO_ELEVACION_MAX_CARGA = Column(Float, nullable=True)
+    TIEMPO_DESCENSO_MIN_CARGA = Column(Float, nullable=True)
+    TIEMPO_DESCENSO_MAX_CARGA = Column(Float, nullable=True)
+
+    # 2. Etapa 2 (Multiload)
+    ALTURA_CAPTADA = Column(Float, nullable=True)
+    FECHA_HORA_INICIO_MULTILOAD = Column(String(50), nullable=True)
+    FECHA_HORA_FIN_MULTILOAD = Column(String(50), nullable=True)
+    ESTADO_MULTILOAD = Column(String(20), nullable=True)
+
+    # 3. Etapa 3 (Sin Carga)
+    TIEMPO_ELEVACION_MEDIDO_SINCARGA = Column(Float, nullable=True)
+    TIEMPO_DESCENSO_MEDIDO_SINCARGA = Column(Float, nullable=True)
+    FECHA_HORA_INICIO_SINCARGA = Column(String(50), nullable=True)
+    FECHA_HORA_FIN_SINCARGA = Column(String(50), nullable=True)
+    ESTADO_SINCARGA = Column(String(20), nullable=True)
+
+    # 4. Etapa 4 (Con Carga)
+    TIEMPO_ELEVACION_MEDIDO_CARGA = Column(Float, nullable=True)
+    TIEMPO_DESCENSO_MEDIDO_CARGA = Column(Float, nullable=True)
+    FECHA_HORA_INICIO_CARGA = Column(String(50), nullable=True)
+    FECHA_HORA_FIN_CARGA = Column(String(50), nullable=True)
+    ESTADO_DESCENSO_CARGA = Column(String(20), nullable=True)
+    CARGA_GET = Column(Float, nullable=True)
+
+    # 5. Etapa 5 (5 Minutos)
+    ALTURA_INICIAL = Column(Float, nullable=True)
+    ALTURA_FINAL = Column(Float, nullable=True)
+    DIFERENCIA_ALTURAS = Column(Float, nullable=True)
+    FECHA_HORA_INICIO_5MIN = Column(String(50), nullable=True)
+    FECHA_HORA_FIN_5MIN = Column(String(50), nullable=True)
+    ESTADO_CARGA_5_MIN = Column(String(20), nullable=True)
+
+    # 6. Globales
+    OK_NOK = Column(String(20), nullable=True)
+    REPETICIONES_SECUENCIA = Column(Integer, nullable=True)
+    FECHA_HORA_INICIO_SEC = Column(String(50), nullable=True)
+    FECHA_HORA_FIN_SEC = Column(String(50), nullable=True)
+    OPERARIO = Column(String(100), nullable=True)
+
+    fecha_creacion = Column(DateTime(timezone=True), server_default=func.now())
 
 def init_db():
     Base.metadata.create_all(bind=engine)
