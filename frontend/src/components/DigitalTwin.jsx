@@ -443,9 +443,6 @@ const ForkliftAssembly = ({ distance, palletState, onPalletAnimComplete, showSti
   const beaconRef = useRef();
   
   const animState = useRef({ phase: 'idle', t: 0 });
-  const [lockedStickerY, setLockedStickerY] = React.useState(null);
-  const fixedStickerGroupRef = useRef();
-
   const pendingSticker1 = useRef();
   const pendingSticker2 = useRef();
 
@@ -454,28 +451,7 @@ const ForkliftAssembly = ({ distance, palletState, onPalletAnimComplete, showSti
     const isVisible = Math.sin(state.clock.elapsedTime * 8) > 0;
     if (pendingSticker1.current) pendingSticker1.current.visible = isVisible;
     if (pendingSticker2.current) pendingSticker2.current.visible = isVisible;
-
-    // La pegatina fija sigue al mástil interior hasta que se confirme
-    if (zoomToStickers && lockedStickerY === null && fixedStickerGroupRef.current && innerMastRef.current) {
-      fixedStickerGroupRef.current.position.y = -0.3 + innerMastRef.current.position.y;
-    }
   });
-
-  useEffect(() => {
-    // Solo fijamos la posición permanentemente cuando se confirma la pegatina
-    if (showStickers && !zoomToStickers && lockedStickerY === null) {
-      const targetY = THREE.MathUtils.clamp(distance / 1000, 0, 5.0);
-      const extraLift = Math.max(0, targetY - 1.5);
-      setLockedStickerY(extraLift);
-    }
-  }, [showStickers, zoomToStickers, lockedStickerY, distance]);
-
-  useEffect(() => {
-    // Aplicamos la posición final si ya está bloqueada
-    if (lockedStickerY !== null && fixedStickerGroupRef.current) {
-      fixedStickerGroupRef.current.position.y = -0.3 + lockedStickerY;
-    }
-  }, [lockedStickerY]);
 
   // Sincronizar estados globales para la renderización condicional (un pequeño hack para evitar pasarlo por todo el árbol sin context)
   if (typeof window !== 'undefined') {
@@ -745,13 +721,20 @@ const ForkliftAssembly = ({ distance, palletState, onPalletAnimComplete, showSti
           <mesh position={[0.05, 1.3, -0.05]}><cylinderGeometry args={[0.035, 0.035, 2.5]} />{steelMat}</mesh>
         </group>
 
-        {/* Pegatina Fija en Mástil Exterior Izquierdo (X=-0.31) en la cara trasera */}
+        {/* ── PEGATINAS: cara trasera del mástil, enfrentadas, fijas a Y=1.5m ── */}
+        {/* Pegatina izquierda (rail exterior) — apunta hacia la derecha → */}
         {(showStickers || zoomToStickers) && (
-          <group position={[-0.31, 0, -0.15]}>
-            <group ref={fixedStickerGroupRef}>
-              <group ref={!showStickers && zoomToStickers ? pendingSticker1 : null}>
-                <Sticker2D pointsRight={true} />
-              </group>
+          <group position={[-0.3, 1.5, -0.09]}>
+            <group ref={!showStickers && zoomToStickers ? pendingSticker1 : null}>
+              <Sticker2D pointsRight={true} />
+            </group>
+          </group>
+        )}
+        {/* Pegatina derecha (rail interior) — apunta hacia la izquierda ← */}
+        {(showStickers || zoomToStickers) && (
+          <group position={[-0.12, 1.5, -0.09]}>
+            <group ref={!showStickers && zoomToStickers ? pendingSticker2 : null}>
+              <Sticker2D pointsRight={false} />
             </group>
           </group>
         )}
@@ -769,13 +752,6 @@ const ForkliftAssembly = ({ distance, palletState, onPalletAnimComplete, showSti
           {/* Cadenas de elevación */}
           <mesh position={[-0.1, 1.3, -0.02]}><boxGeometry args={[0.02, 2.5, 0.01]} />{blackMat}</mesh>
           <mesh position={[0.1, 1.3, -0.02]}><boxGeometry args={[0.02, 2.5, 0.01]} />{blackMat}</mesh>
-          
-          {/* Pegatina Móvil en Mástil Interior Izquierdo (X=-0.175) en la cara trasera */}
-          {(showStickers || zoomToStickers) && (
-            <group position={[-0.175, -0.3, -0.15]} ref={!showStickers && zoomToStickers ? pendingSticker2 : null}>
-              <Sticker2D pointsRight={false} />
-            </group>
-          )}
         </group>
 
         {/* --- CARRIAGE (Animated) --- */}
@@ -825,13 +801,10 @@ const ForkliftAssembly = ({ distance, palletState, onPalletAnimComplete, showSti
 const CameraAnimator = ({ zoomToStickers }) => {
   useFrame((state, delta) => {
     if (zoomToStickers && state.controls) {
-      const carriageY = window.__carriageY || 2.0;
-      const extraLift = Math.max(0, carriageY - 1.5);
-      const stickerWorldY = -0.3 + extraLift;
-
-      // Cámara por detrás de la carretilla (Z negativo) mirando hacia las pegatinas
-      state.camera.position.lerp(new THREE.Vector3(-0.4, stickerWorldY, -1.8), delta * 2);
-      state.controls.target.lerp(new THREE.Vector3(-0.25, stickerWorldY, 0), delta * 2);
+      // Las pegatinas est\u00e1n en la cara trasera (Z=-0.09) a Y=1.5m
+      // Cámara desde delante de la carretilla mirando hacia las pegatinas traseras
+      state.camera.position.lerp(new THREE.Vector3(-0.2, 1.5, -2.0), delta * 2);
+      state.controls.target.lerp(new THREE.Vector3(-0.2, 1.5, -0.09), delta * 2);
     }
   });
   return null;

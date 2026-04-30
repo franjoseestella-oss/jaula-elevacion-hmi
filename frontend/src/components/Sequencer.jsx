@@ -10,7 +10,7 @@ const API_BASE = 'http://localhost:8001';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const ds2s = (v) => (v != null ? `${(v / 10).toFixed(1)} s` : '—');
+const ds2s = (v) => (v != null ? `${(v / 100).toFixed(2).replace('.', ',')} s` : '—');
 const formatDuration = (secs) => {
   if (secs == null) return '—';
   if (secs < 60) return `${secs} s`;
@@ -115,6 +115,7 @@ const ActionBtn = ({ onClick, children, disabled = false, variant = 'primary' })
     primary: 'bg-logisnext-magenta/90 hover:bg-logisnext-magenta text-white shadow-[0_0_12px_rgba(221,40,118,0.3)]',
     secondary: 'bg-[#1d2930] hover:bg-[#2e404a] text-logisnext-lightslate border border-[#2e404a]',
     success: 'bg-green-700/80 hover:bg-green-600 text-white',
+    danger: 'bg-red-700/80 hover:bg-red-600 text-white shadow-[0_0_12px_rgba(239,68,68,0.3)]',
   };
   return (
     <button className={`${base} ${variants[variant]}`} onClick={onClick} disabled={disabled}>
@@ -123,9 +124,41 @@ const ActionBtn = ({ onClick, children, disabled = false, variant = 'primary' })
   );
 };
 
+// ─── Componente LED de la Cámara ─────────────────────────────────────────────
+const CameraLED = ({ state, blinkTick }) => {
+  let color = 'bg-gray-500';
+  let shadow = '';
+  let isBlinking = false;
+  
+  if (state === 'standby') {
+    color = 'bg-red-500';
+    shadow = 'shadow-[0_0_10px_rgba(239,68,68,0.8)]';
+    isBlinking = true;
+  } else if (state === 'standby-ok' || state === 'active') {
+    color = 'bg-green-500';
+    shadow = 'shadow-[0_0_10px_rgba(34,197,94,0.8)]';
+    isBlinking = true;
+  } else if (state === 'ok') {
+    color = 'bg-green-500';
+    shadow = 'shadow-[0_0_15px_rgba(34,197,94,0.9)]';
+    isBlinking = false;
+  } else if (state === 'nok') {
+    color = 'bg-red-500';
+    shadow = 'shadow-[0_0_15px_rgba(239,68,68,0.9)]';
+    isBlinking = false;
+  }
+
+
+  const opacity = (isBlinking && !blinkTick) ? 'opacity-30' : 'opacity-100';
+
+  return (
+    <div className={`w-3.5 h-3.5 rounded-full ${color} ${shadow} ${opacity} transition-opacity duration-200 border border-white/20`} />
+  );
+};
+
 // ─── Componente principal ────────────────────────────────────────────────────
 
-const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState, plcState, setStep2Overlay, sequencerRef, onSequenceEnd, onStepChange, operario }) => {
+const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState, plcState, setStep2Overlay, setTestHUDOverlay, sequencerRef, onSequenceEnd, onStepChange, operario, isSimulation }) => {
   const [stepStatus, setStepStatus] = useState([
     STEP_STATUS.ACTIVE,
     STEP_STATUS.PENDING,
@@ -141,6 +174,17 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   const [pegatinaPosicion, setPegatinaPosicion] = useState(null);
   const currentStep = stepStatus.findIndex(s => s === STEP_STATUS.ACTIVE);
   const isSequenceFinished = stepStatus[0] === STEP_STATUS.OK && !stepStatus.includes(STEP_STATUS.ACTIVE) && !stepStatus.includes(STEP_STATUS.PENDING);
+
+  // Helper para determinar la distancia de prueba (1m vs 2m)
+  const is1mTest = (() => {
+    const mastilStr = erpData?.mastil;
+    if (!mastilStr) return false;
+    const str = String(mastilStr).trim().toUpperCase();
+    if (str.startsWith('2F')) return true;
+    const match = str.match(/\d{3,}/);
+    if (match) return parseInt(match[0], 10) < 400;
+    return false;
+  })();
 
   // Guardar datos específicos de etapas para el log global
   const stageDataRef = useRef({
@@ -168,6 +212,160 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   const [manualDigits, setManualDigits] = useState('');    // dígitos teclados a mano
   const [timer5min, setTimer5min] = useState(null);
   const [visionOk, setVisionOk] = useState(false);
+  
+  // Estado para la prueba de cámara
+  // Estados: 'standby' | 'esperando_1500' | 'ascenso' | 'espera_arriba' | 'descenso' | 'ok' | 'nok'
+  const [cameraTestState, setCameraTestState] = useState('standby');
+  const [testAlarm, setTestAlarm] = useState(null); // 'ascenso_incompleto', 'descenso_incompleto'
+  const [simTimers, setSimTimers] = useState({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+  const [waitCountdown, setWaitCountdown] = useState(null); // cuenta atrás 3-2-1 en espera_arriba
+
+  // ── Temporizadores simulados basados en altura (window.__carriageY) ──
+  useEffect(() => {
+    if (!isSimulation) return;
+    if (cameraTestState === 'standby') {
+      setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+      setWaitCountdown(null);
+      setTestAlarm(null);
+      return;
+    }
+    
+    let reqId;
+    let tStartElev = null;
+    let tStartDesc = null;
+    
+    let lastH = window.__carriageY || 0;
+    let lastHChangeTime = Date.now();
+    let tTopReachTime = null;
+    // Para detectar el cruce de 1500 mm (1.5 m) SOLO en ascenso (viniendo de abajo)
+    let prevH = window.__carriageY || 0;
+    // Flag: solo permite disparar si la carretilla estuvo por debajo de 1.5m en algún momento
+    // Si al iniciar ya está por encima, hay que bajar primero
+    let hasBeenBelow1500 = (window.__carriageY || 0) < 1.5;
+
+    const testDist = is1mTest ? 1.0 : 2.0;
+
+    const loop = () => {
+      const h = window.__carriageY || 0;
+
+
+      // ── ESTADO: esperando_1500 — detectar cruce ascendente de 1.5m ──
+      if (cameraTestState === 'esperando_1500') {
+        // Registrar si en algún momento bajamos por debajo de 1.5m
+        if (h < 1.5) hasBeenBelow1500 = true;
+
+        // Solo disparar si venimos de abajo (hasBeenBelow1500 = true)
+        // y cruzamos 1.5m de forma ascendente (prevH < 1.5 → h >= 1.5)
+        if (hasBeenBelow1500 && prevH < 1.5 && h >= 1.5) {
+          setCameraTestState('ascenso');
+          prevH = h;
+          reqId = requestAnimationFrame(loop);
+          return;
+        }
+        prevH = h;
+        reqId = requestAnimationFrame(loop);
+        return;
+      }
+
+      // Control de parada incompleta (2 segundos sin variación de cota)
+      if (Math.abs(h - lastH) > 0.01) {
+        lastH = h;
+        lastHChangeTime = Date.now();
+      }
+
+      if (cameraTestState === 'ascenso' && h > 0.1 && h < 1.5 + testDist) {
+        if (Date.now() - lastHChangeTime > 2000) {
+          setTestAlarm('ascenso_incompleto');
+          setCameraTestState('nok');
+          return;
+        }
+      }
+
+      if (cameraTestState === 'descenso' && h < 1.5 + testDist - 0.05 && h > 1.5) {
+        if (Date.now() - lastHChangeTime > 2000) {
+          setTestAlarm('descenso_incompleto');
+          setCameraTestState('nok');
+          return;
+        }
+      }
+      
+
+
+      // ── Ascenso: detectar llegada arriba ──────────────────────────────────
+      if (cameraTestState === 'ascenso' && h >= 1.5 + testDist && !simTimers.finishedElev) {
+        // Marcar ascenso completo y pasar a espera_arriba
+        setSimTimers(prev => ({ ...prev, finishedElev: true, elev: prev.elev }));
+        setCameraTestState('espera_arriba');
+        setWaitCountdown(3);
+        tTopReachTime = null; // resetear para que se inicialice en espera_arriba
+      } else if (cameraTestState === 'ascenso') {
+        // Acumular timer ascenso
+        setSimTimers(prev => {
+          if (prev.finishedElev) return prev;
+          if (h >= 1.5) {
+            if (!tStartElev) tStartElev = Date.now();
+            return { ...prev, elev: Math.floor((Date.now() - tStartElev) / 10) };
+          }
+          return prev;
+        });
+      } else if (cameraTestState === 'espera_arriba') {
+        if (!tTopReachTime) tTopReachTime = Date.now();
+
+        const waited = Date.now() - tTopReachTime;
+
+        if (waited < 3000) {
+          // Antes de los 3s: si la carretilla baja, reiniciar el contador
+          if (h < 1.5 + testDist - 0.05) {
+            tTopReachTime = Date.now();
+          }
+          const remaining = Math.ceil((3000 - (Date.now() - tTopReachTime)) / 1000);
+          setWaitCountdown(Math.max(1, remaining));
+        } else {
+          // 3 segundos completados — mostrar GO! hasta que el operario baje
+          setWaitCountdown(0);
+          if (h < 1.5 + testDist - 0.05) {
+            setWaitCountdown(null);
+            setCameraTestState('descenso');
+            tStartDesc = null; // resetear para inicializar al entrar en descenso
+          }
+        }
+      } else if (cameraTestState === 'descenso') {
+        // ── Descenso completado: h vuelve a bajar de 1.5m ─────────────────
+        if (h <= 1.5 && !simTimers.finishedDesc) {
+          const elapsed = tStartDesc ? Math.floor((Date.now() - tStartDesc) / 10) : 0;
+          // Leer tolerancias ERP
+          const isSinCarga = currentStep === 2;
+          const minElev = isSinCarga ? erpData?.tpo_elev_min_scarga : erpData?.tpo_elevac_min;
+          const maxElev = isSinCarga ? erpData?.tpo_elev_max_scarga : erpData?.tpo_elevac_max;
+          const minDesc = isSinCarga ? erpData?.tpo_desc_min_scarga : erpData?.tpo_descenso_min;
+          const maxDesc = isSinCarga ? erpData?.tpo_desc_max_scarga : erpData?.tpo_descenso_max;
+
+          // Guardar tiempo final de descenso
+          setSimTimers(prev => ({ ...prev, finishedDesc: true, desc: elapsed }));
+
+          // Evaluar OK / NOK
+          const isElevOk = simTimers.elev >= minElev && simTimers.elev <= maxElev;
+          const isDescOk = elapsed >= minDesc && elapsed <= maxDesc;
+          setCameraTestState(isElevOk && isDescOk ? 'ok' : 'nok');
+        } else if (!simTimers.finishedDesc) {
+          // Acumular timer descenso
+          setSimTimers(prev => {
+            if (h <= 1.5 + testDist) {
+              if (!tStartDesc) tStartDesc = Date.now();
+              return { ...prev, desc: Math.floor((Date.now() - tStartDesc) / 10) };
+            }
+            return prev;
+          });
+        }
+      }
+
+      reqId = requestAnimationFrame(loop);
+    };
+
+    reqId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(reqId);
+  }, [isSimulation, cameraTestState, erpData, currentStep]);
+
   const inputRef = useRef(null);
 
   // Tolerancias
@@ -351,9 +549,33 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     // Si ya estaba desbloqueado → ejecutar acción de avance
     if (currentStep >= 1 && currentStep <= 4 && stepStarted[currentStep]) {
       if (stepStatus[2] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
-        markOk(2);
+        // NOK: REPETIR — reiniciar la prueba desde 'esperando_1500'
+        if (cameraTestState === 'nok') {
+          setCameraTestState('esperando_1500');
+          setTestAlarm(null);
+          setSimTimers({ tStart: null, tEndElev: null, tStartDesc: null, tEndDesc: null, finishedElev: false, finishedDesc: false });
+          setWaitCountdown(null);
+          return;
+        }
+        if (isSimulation && cameraTestState === 'standby') {
+          setCameraTestState('ascenso');
+        } else if (!isSimulation || cameraTestState === 'ok') {
+          markOk(2);
+        }
       } else if (stepStatus[3] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
-        markOk(3);
+        // NOK: REPETIR — reiniciar la prueba desde 'esperando_1500'
+        if (cameraTestState === 'nok') {
+          setCameraTestState('esperando_1500');
+          setTestAlarm(null);
+          setSimTimers({ tStart: null, tEndElev: null, tStartDesc: null, tEndDesc: null, finishedElev: false, finishedDesc: false });
+          setWaitCountdown(null);
+          return;
+        }
+        if (isSimulation && cameraTestState === 'standby') {
+          setCameraTestState('ascenso');
+        } else if (!isSimulation || cameraTestState === 'ok') {
+          markOk(3);
+        }
       } else if (stepStatus[4] === STEP_STATUS.ACTIVE) {
         if (timer5min === 0) {
           markOk(4);
@@ -377,6 +599,18 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       }
     }
   }, [plcState?.Ob_Pegatina_Colocada, stepStatus[1], erpData, tolerancias]);
+
+  // 3b. Pegatina Colocada con resultado NOK → CONTINUAR (avanzar paso sin repetir)
+  useEffect(() => {
+    if (plcState?.Ob_Pegatina_Colocada !== true) return;
+    if (cameraTestState !== 'nok') return;
+    const activeTestStep = stepStatus[2] === STEP_STATUS.ACTIVE ? 2
+      : stepStatus[3] === STEP_STATUS.ACTIVE ? 3 : null;
+    if (activeTestStep === null) return;
+    // Avanzar al siguiente paso (marcar NOK y continuar)
+    markOk(activeTestStep);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plcState?.Ob_Pegatina_Colocada]);
 
   // ── Overlay Datos Multiload (Paso 2) ───────────────────────────────────────
   useEffect(() => {
@@ -427,8 +661,25 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             } else {
               luzRoja = blinkTick;
             }
+          } else if (currentStep === 2 || currentStep === 3) { // Tests de elevación
+            if (cameraTestState === 'standby' || cameraTestState === 'esperando_1500') {
+               // Condiciones iniciales NO cumplidas → Rojo parpadeante
+               luzRoja = blinkTick;
+            }
+            else if (cameraTestState === 'ascenso' || cameraTestState === 'espera_arriba' || cameraTestState === 'descenso') {
+               // Prueba en curso → Verde parpadeante
+               luzVerde = blinkTick;
+            }
+            else if (cameraTestState === 'ok') {
+               // Prueba superada → Verde fijo
+               luzVerde = true;
+            }
+            else if (cameraTestState === 'nok') {
+               // Prueba fallida → Rojo fijo
+               luzRoja = true;
+            }
           }
-          // Para etapas 3,4,5 se podrían añadir lógicas similares si fuera necesario.
+          // Para etapas 4,5 se podrían añadir lógicas similares si fuera necesario.
         }
       } else if (currentStep === 0) {
         luzAzul = true;
@@ -450,7 +701,19 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     };
 
     updateLed();
-  }, [currentStep, stepStarted, erpData, plcState?.OW_Altura_Elevacion, tolerancias, blinkTick]);
+  }, [currentStep, stepStarted, erpData, plcState?.OW_Altura_Elevacion, tolerancias, blinkTick, cameraTestState, isSimulation]);
+
+  // Auto-avanzar después de 3s en OK
+  useEffect(() => {
+    let t;
+    if (cameraTestState === 'ok') {
+      t = setTimeout(() => {
+         if (currentStep === 2) markOk(2);
+         if (currentStep === 3) markOk(3);
+      }, 3000);
+    }
+    return () => clearTimeout(t);
+  }, [cameraTestState, currentStep]);
 
   // 3. Confirmar Pegatina (Repetir Secuencia) -> avanzar Paso 2 (Multiload)
   useEffect(() => {
@@ -593,9 +856,13 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     }
     // Ya desbloqueada — avanzar
     if (step >= 1 && step <= 4 && started[step]) {
-      if (statuses[2] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') markOk(2);
-      else if (statuses[3] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') markOk(3);
-      else if (statuses[4] === STEP_STATUS.ACTIVE) {
+      if (statuses[2] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') {
+        if (isSimulation && cameraTestState === 'standby') setCameraTestState('esperando_1500');
+        else if (!isSimulation || cameraTestState === 'ok') markOk(2);
+      } else if (statuses[3] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') {
+        if (isSimulation && cameraTestState === 'standby') setCameraTestState('esperando_1500');
+        else if (!isSimulation || cameraTestState === 'ok') markOk(3);
+      } else if (statuses[4] === STEP_STATUS.ACTIVE) {
         if (timer5min === 0) markOk(4);
         else if (timer5min === null && visionOk) startTimer5min?.();
       }
@@ -698,14 +965,94 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     }
   }, [currentStep, stepStatus, erpData, palletState, setPalletState]);
 
-  // ── PASO 3: Test sin carga — disparar animación si se saltó el 2 ────────────
+  // ── PASO 3: Test sin carga — preparar estado inicial ────────────
   useEffect(() => {
     if (currentStep === 2 && stepStatus[2] === STEP_STATUS.ACTIVE && erpData) {
-      if (palletState === 'idle') {
-        setPalletState('animating');
+      if (isSimulation) {
+        // Bajar la carga abajo automáticamente para iniciar la prueba
+        fetch(`${API_BASE}/plc/write`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ OW_Altura_Elevacion: 0 })
+        }).catch(console.error);
+        
+        // Reset camera state for this new step
+        setCameraTestState('standby');
       }
     }
-  }, [currentStep, stepStatus, erpData, palletState, setPalletState]);
+  }, [currentStep, stepStatus, erpData, isSimulation]);
+
+  // ── PASO 4: Test con carga ────────────────────────────────────────────
+  useEffect(() => {
+    if (currentStep === 3 && stepStatus[3] === STEP_STATUS.ACTIVE && erpData) {
+      if (isSimulation) {
+        // Recoger la carga
+        if (palletState === 'idle') setPalletState('animating');
+        setCameraTestState('standby');
+      }
+    }
+  }, [currentStep, stepStatus, erpData, isSimulation, palletState, setPalletState]);
+
+
+
+  // ── Sincronizar overlay de HUD ───────────────────────────────────────────
+  useEffect(() => {
+    if (setTestHUDOverlay) {
+      if ((currentStep === 2 || currentStep === 3) && stepStatus[currentStep] === STEP_STATUS.ACTIVE && erpData) {
+        let ledState = 'standby';
+        const elevMeters = isSimulation ? (window.__carriageY || 0) : (plcState?.OW_Altura_Elevacion || 0) / 1000;
+        
+        if (cameraTestState === 'standby') {
+           ledState = 'standby'; // rojo parpadeante
+        }
+        else if (cameraTestState === 'esperando_1500') {
+           ledState = 'standby'; // rojo parpadeante — esperando cruzar 1500mm
+        }
+        else if (cameraTestState === 'ascenso' || cameraTestState === 'espera_arriba' || cameraTestState === 'descenso') {
+           ledState = 'active'; // verde parpadeante — prueba en progreso
+        }
+        else if (cameraTestState === 'ok') ledState = 'ok';
+        else if (cameraTestState === 'nok') ledState = 'nok';
+
+        const isSinCarga = currentStep === 2;
+        const minElev = isSinCarga ? erpData.tpo_elev_min_scarga : erpData.tpo_elevac_min;
+        const maxElev = isSinCarga ? erpData.tpo_elev_max_scarga : erpData.tpo_elevac_max;
+        const minDesc = isSinCarga ? erpData.tpo_desc_min_scarga : erpData.tpo_descenso_min;
+        const maxDesc = isSinCarga ? erpData.tpo_desc_max_scarga : erpData.tpo_descenso_max;
+
+        // Solo mostrar tiempos si el test ya está en marcha (no antes de condición inicial)
+        const testIsRunning = ['ascenso', 'espera_arriba', 'descenso', 'ok', 'nok'].includes(cameraTestState);
+        const rawElev = isSimulation ? simTimers.elev : (plcState?.OW_Tiempo_Elevacion || 0);
+        const rawDesc = isSimulation ? simTimers.desc : (plcState?.OW_Tiempo_Descenso || 0);
+        const realElev = testIsRunning ? rawElev : null;
+        const realDesc = testIsRunning ? rawDesc : null;
+
+        setTestHUDOverlay({
+          title: isSinCarga ? 'TEST SIN CARGA' : 'TEST CON CARGA',
+          subtitle: `PRUEBA ${is1mTest ? '1m' : '2m'}${!isSinCarga ? ` | ${erpData.capac_interm_1 ?? '—'} kg` : ''}`,
+          cameraTestState,
+          ledState,
+          minElev: ds2s(minElev),
+          maxElev: ds2s(maxElev),
+          minDesc: ds2s(minDesc),
+          maxDesc: ds2s(maxDesc),
+          realElev: ds2s(realElev),
+          realDesc: ds2s(realDesc),
+          // Valores raw (centisegundos) para comparación en el HUD
+          _rawElev: realElev,
+          _rawDesc: realDesc,
+          _minElev: minElev,
+          _maxElev: maxElev,
+          _minDesc: minDesc,
+          _maxDesc: maxDesc,
+          waitCountdown,
+          testAlarm
+        });
+      } else {
+        setTestHUDOverlay(null);
+      }
+    }
+  }, [currentStep, stepStatus, erpData, cameraTestState, waitCountdown, plcState?.OW_Tiempo_Elevacion, plcState?.OW_Tiempo_Descenso, setTestHUDOverlay, isSimulation, simTimers]);
 
   // ── PASO 5: 5 minutos — decidir automáticamente al entrar ─────────────────
   useEffect(() => {
@@ -1028,34 +1375,102 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         </StepCard>
 
         {/* ── PASO 3: Test SIN CARGA ───────────────────────────────────────── */}
-        <StepCard num={3} icon={ArrowUpDown} title="Test sin carga" status={stepStatus[2]} canSkip onToggleSkip={() => toggleSkip(2)}>
-          {stepStatus[2] === STEP_STATUS.ACTIVE && erpData && (
-            <>
-              <DataLine label="Elevac. min" value={ds2s(erpData.tpo_elev_min_scarga)} />
-              <DataLine label="Elevac. max" value={ds2s(erpData.tpo_elev_max_scarga)} />
-              <DataLine label="Descenso min" value={ds2s(erpData.tpo_desc_min_scarga)} />
-              <DataLine label="Descenso max" value={ds2s(erpData.tpo_desc_max_scarga)} />
-              {!stepStarted[2] ? (
-                <div className="flex items-center gap-2 text-yellow-400 font-bold bg-yellow-400/10 p-2 mt-1 rounded border border-yellow-400/20 text-[9px]">
-                  <AlertTriangle size={12} /> ESPERANDO: Pulse INICIAR SECUENCIA
-                </div>
-              ) : (
-                <>
-                  <p className="text-[9px] text-logisnext-slate leading-relaxed mt-1">
-                    Retira la carga. Ejecuta ciclos de elevación y descenso sin carga dentro de los tiempos de tolerancia.
-                  </p>
-                  {palletState === 'animating' && (
-                    <div className="flex items-center gap-2 mt-2 py-1.5 px-2 bg-logisnext-magenta/10 border border-logisnext-magenta/30 rounded text-[9px] text-logisnext-magenta">
-                      <Loader2 size={12} className="animate-spin" /> Animación de recogida del palet en curso...
+        <StepCard 
+          num={3} 
+          icon={ArrowUpDown} 
+          title={`Test sin carga - PRUEBA ${erpData ? (is1mTest ? '1m' : '2m') : '—'}`} 
+          status={stepStatus[2]} 
+          canSkip 
+          onToggleSkip={() => toggleSkip(2)}
+        >
+          {stepStatus[2] === STEP_STATUS.ACTIVE && erpData && (() => {
+            const minElev = erpData.tpo_elev_min_scarga;
+            const maxElev = erpData.tpo_elev_max_scarga;
+            const minDesc = erpData.tpo_desc_min_scarga;
+            const maxDesc = erpData.tpo_desc_max_scarga;
+            
+            const realElev = isSimulation ? simTimers.elev : plcState?.OW_Tiempo_Elevacion;
+            const realDesc = isSimulation ? simTimers.desc : plcState?.OW_Tiempo_Descenso;
+
+            // Derivación del estado del LED
+            let ledState = 'standby';
+            if (cameraTestState === 'standby') {
+               const actualElev = isSimulation ? (window.__carriageY || 0) : (plcState?.OW_Altura_Elevacion || 0);
+               const isAtBottom = isSimulation ? (actualElev <= 0.1) : (actualElev <= 50);
+               ledState = isAtBottom ? 'standby-ok' : 'standby';
+            }
+            else if (cameraTestState === 'ascenso') {
+               const actualElev = isSimulation ? (window.__carriageY || 0) : (plcState?.OW_Altura_Elevacion || 0);
+               const isTiming = isSimulation ? (actualElev >= 1.5) : (actualElev >= 1500);
+               ledState = isTiming ? 'active' : 'standby';
+            }
+            else if (cameraTestState === 'espera_arriba' || cameraTestState === 'descenso') {
+               ledState = 'active';
+            }
+            else if (cameraTestState === 'ok') ledState = 'ok';
+            else if (cameraTestState === 'nok') ledState = 'nok';
+
+            return (
+              <>
+                {!isSimulation && (
+                  <div className="flex items-center justify-between bg-[#0a0f12] p-2 rounded-lg border border-[#2e404a] mb-2">
+                    <span className="text-[10px] text-logisnext-slate font-bold uppercase tracking-widest flex items-center gap-1.5">
+                      Cámara Basler
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] text-gray-400 font-mono">
+                        {cameraTestState === 'standby' && 'ESPERANDO CONDICIONES'}
+                        {cameraTestState === 'ascenso' && 'ASCENSO ACTIVO'}
+                        {cameraTestState === 'espera_arriba' && 'ESPERANDO ARRIBA'}
+                        {cameraTestState === 'descenso' && 'DESCENSO ACTIVO'}
+                        {cameraTestState === 'ok' && 'PRUEBA OK'}
+                        {cameraTestState === 'nok' && 'PRUEBA NOK'}
+                      </span>
+                      <CameraLED state={ledState} blinkTick={blinkTick} />
                     </div>
-                  )}
-                  <ActionBtn onClick={() => markOk(2)} variant="success" disabled={palletState === 'animating'}>
-                    <CheckCircle2 size={12} /> Test sin carga OK
-                  </ActionBtn>
-                </>
-              )}
-            </>
-          )}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div className="bg-[#1d2930]/50 p-2 rounded border border-[#2e404a]">
+                    <span className="text-[8px] text-logisnext-slate uppercase tracking-widest block mb-1">Ascenso (s)</span>
+                    <div className="flex justify-between items-end">
+                      <span className="text-xs font-mono font-black text-white">{ds2s(realElev)}</span>
+                      <span className="text-[8px] font-mono text-gray-500">[{ds2s(minElev)} - {ds2s(maxElev)}]</span>
+                    </div>
+                  </div>
+                  <div className="bg-[#1d2930]/50 p-2 rounded border border-[#2e404a]">
+                    <span className="text-[8px] text-logisnext-slate uppercase tracking-widest block mb-1">Descenso (s)</span>
+                    <div className="flex justify-between items-end">
+                      <span className="text-xs font-mono font-black text-white">{ds2s(realDesc)}</span>
+                      <span className="text-[8px] font-mono text-gray-500">[{ds2s(minDesc)} - {ds2s(maxDesc)}]</span>
+                    </div>
+                  </div>
+                </div>
+
+                {!stepStarted[2] ? (
+                  <div className="flex items-center gap-2 text-yellow-400 font-bold bg-yellow-400/10 p-2 mt-1 rounded border border-yellow-400/20 text-[9px]">
+                    <AlertTriangle size={12} /> ESPERANDO: Pulse INICIAR SECUENCIA
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-[9px] text-logisnext-slate leading-relaxed mt-1">
+                      Retira la carga y ejecuta la prueba. La cámara registrará los tiempos de ciclo.
+                    </p>
+                    {palletState === 'animating' && (
+                      <div className="flex items-center gap-2 mt-2 py-1.5 px-2 bg-logisnext-magenta/10 border border-logisnext-magenta/30 rounded text-[9px] text-logisnext-magenta">
+                        <Loader2 size={12} className="animate-spin" /> Animación de recogida del palet en curso...
+                      </div>
+                    )}
+                    
+
+
+
+                  </>
+                )}
+              </>
+            );
+          })()}
           {(stepStatus[2] === STEP_STATUS.PENDING) && (
             <div className="flex items-center gap-1.5 text-[9px] text-logisnext-slate">
               <Lock size={10} /> Pendiente paso anterior
@@ -1067,7 +1482,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         </StepCard>
 
         {/* ── PASO 4: Test CON CARGA ───────────────────────────────────────── */}
-        <StepCard num={4} icon={Weight} title="Test con carga" status={stepStatus[3]} canSkip onToggleSkip={() => toggleSkip(3)}>
+        <StepCard num={4} icon={Weight} title={`Test con carga - PRUEBA ${erpData ? (is1mTest ? '1m' : '2m') : '—'}`} status={stepStatus[3]} canSkip onToggleSkip={() => toggleSkip(3)}>
           {stepStatus[3] === STEP_STATUS.ACTIVE && erpData && (
             <>
               <DataLine label="Carga ref." value={erpData.capac_interm_1 != null ? `${erpData.capac_interm_1} kg` : '—'} highlight />
@@ -1084,9 +1499,28 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                   <p className="text-[9px] text-logisnext-slate leading-relaxed mt-1">
                     Carga la carretilla con la capacidad indicada y ejecuta ciclos de elevación y descenso dentro de los tiempos de tolerancia.
                   </p>
-                  <ActionBtn onClick={() => markOk(3)} variant="primary">
-                    <CheckCircle2 size={12} /> Test con carga OK
-                  </ActionBtn>
+                  {!isSimulation && (
+                    <ActionBtn onClick={() => markOk(3)} variant="primary">
+                      <CheckCircle2 size={12} /> Test con carga OK
+                    </ActionBtn>
+                  )}
+                  {isSimulation && cameraTestState === 'nok' && (
+                    <div className="mt-3 flex flex-col gap-2 p-2 bg-red-900/10 border border-red-500/30 rounded-lg">
+                      <span className="text-[10px] font-black text-red-400 text-center uppercase tracking-widest">
+                        {testAlarm ? (testAlarm === 'ascenso_incompleto' ? 'ASCENSO INCOMPLETO' : 'DESCENSO INCOMPLETO') : 'RESULTADO FUERA DE TOLERANCIA'}
+                      </span>
+                      <div className="flex gap-2">
+                        <ActionBtn onClick={() => { setCameraTestState('standby'); setTestAlarm(null); }} variant="secondary">
+                          <RotateCcw size={12} /> REPETIR (SI)
+                        </ActionBtn>
+                        {!testAlarm && (
+                          <ActionBtn onClick={() => markOk(3)} variant="danger">
+                            <SkipForward size={12} /> FORZAR OK
+                          </ActionBtn>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </>

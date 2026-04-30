@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { AlertTriangle, Play, CheckCircle2, PowerOff } from 'lucide-react';
+import { AlertTriangle, Play, CheckCircle2, PowerOff, Camera } from 'lucide-react';
 import Header from './components/Header';
 import LeftPanel from './components/LeftPanel';
 import DigitalTwin from './components/DigitalTwin';
@@ -27,6 +27,7 @@ function App() {
   const [palletState, setPalletState]   = useState('idle'); // idle | animating | picked_up
   const [simCarriageHeight, setSimCarriageHeight] = useState(0);
   const [step2Overlay, setStep2Overlay] = useState(null);
+  const [testHUDOverlay, setTestHUDOverlay] = useState(null);
   const [currentStep, setCurrentStep] = useState(0);
   
   // Ref para llamar funciones del Sequencer directamente (sin pasar por WebSocket)
@@ -200,6 +201,293 @@ function App() {
             </div>
           )}
 
+          {/* OVERLAY DE COMPARATIVA DE TIEMPOS Y CÁMARA (Para pasos 3 y 4) */}
+          {testHUDOverlay && (
+            <div className="absolute top-1/2 left-10 -translate-y-1/2 z-40 flex flex-col gap-3">
+              <div className="glass-panel p-5 rounded-2xl border border-[#2e404a] shadow-[0_20px_50px_rgba(0,0,0,0.5)] w-[22rem] backdrop-blur-xl">
+                {/* Header */}
+                <div className="flex items-center gap-3 mb-4 border-b border-[#2e404a] pb-3">
+                  <div className="bg-logisnext-magenta/20 p-2 rounded-lg">
+                    <Camera size={22} className="text-logisnext-magenta" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black text-white uppercase tracking-wider">{testHUDOverlay.title}</h2>
+                    <p className="text-[10px] text-logisnext-slate uppercase tracking-widest">{testHUDOverlay.subtitle}</p>
+                  </div>
+                </div>
+
+                {/* Estado prueba */}
+                <div className="flex items-center justify-between bg-[#0a0f12] px-3 py-2 rounded-lg border border-[#2e404a] mb-3">
+                  <span className="text-[10px] text-logisnext-slate font-bold uppercase tracking-widest">Estado Prueba</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-gray-300 font-mono font-bold">
+                      {testHUDOverlay.cameraTestState === 'standby' && 'ESPERANDO...'}
+                      {testHUDOverlay.cameraTestState === 'esperando_1500' && 'ESPERA 1500 mm ↑'}
+                      {testHUDOverlay.cameraTestState === 'ascenso' && 'ASCENSO ACTIVO'}
+                      {testHUDOverlay.cameraTestState === 'espera_arriba' && 'ESPERA ARRIBA'}
+                      {testHUDOverlay.cameraTestState === 'descenso' && 'DESCENSO ACTIVO'}
+                      {testHUDOverlay.cameraTestState === 'ok' && 'PRUEBA OK ✓'}
+                      {testHUDOverlay.cameraTestState === 'nok' && 'PRUEBA NOK ✗'}
+                    </span>
+                    <div className={`w-3.5 h-3.5 rounded-full border-2 ${
+                      testHUDOverlay.ledState === 'active' ? 'bg-green-400 border-green-200 animate-pulse shadow-[0_0_8px_#4ade80]' :
+                      testHUDOverlay.ledState === 'ok' ? 'bg-green-500 border-green-300 shadow-[0_0_10px_#22c55e]' :
+                      testHUDOverlay.ledState === 'nok' ? 'bg-red-500 border-red-300 shadow-[0_0_10px_#ef4444]' :
+                      'bg-red-600 border-red-400 animate-pulse shadow-[0_0_8px_#dc2626]'
+                    }`} />
+                  </div>
+                </div>
+
+                {/* Nota compacta cuando está en espera_arriba (el contador grande cubre la vista) */}
+                {testHUDOverlay.cameraTestState === 'espera_arriba' && (
+                  <div className="mb-3 flex items-center justify-center gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-xl py-2 px-3">
+                    <span className="text-yellow-400 text-xs font-black uppercase tracking-widest animate-pulse">⟱ ESPERA PARA DESCENDER</span>
+                  </div>
+                )}
+
+                {/* Bloques de tiempo */}
+                <div className="flex flex-col gap-2">
+                  {/* Ascenso */}
+                  {(() => {
+                    const elevVal = testHUDOverlay.realElev;
+                    const rawElev = testHUDOverlay._rawElev;
+                    const inRange = rawElev != null && testHUDOverlay._minElev != null
+                      ? rawElev >= testHUDOverlay._minElev && rawElev <= testHUDOverlay._maxElev : null;
+                    const isActive = testHUDOverlay.cameraTestState === 'ascenso';
+                    return (
+                      <div className={`p-3 rounded-xl border relative overflow-hidden transition-all ${
+                        inRange === true ? 'bg-green-900/20 border-green-500/50' :
+                        inRange === false ? 'bg-red-900/20 border-red-500/50' :
+                        isActive ? 'bg-blue-900/20 border-blue-500/40' : 'bg-[#1d2930]/60 border-[#2e404a]'
+                      }`}>
+                        <div className={`absolute top-0 left-0 w-1 h-full ${
+                          inRange === true ? 'bg-green-500' : inRange === false ? 'bg-red-500' :
+                          isActive ? 'bg-blue-400' : 'bg-blue-600/40'
+                        }`} />
+                        <div className="flex items-baseline justify-between mb-1">
+                          <span className="text-[10px] text-logisnext-slate uppercase tracking-widest">↑ Ascenso</span>
+                          {isActive && <span className="text-[9px] text-blue-400 font-bold animate-pulse">● MIDIENDO</span>}
+                        </div>
+                        <span className={`text-4xl font-mono font-black leading-none ${
+                          inRange === true ? 'text-green-400' : inRange === false ? 'text-red-400' :
+                          isActive ? 'text-blue-300' : 'text-gray-300'
+                        }`}>{elevVal ?? '—'}</span>
+                        <div className="mt-2 pt-2 border-t border-[#2e404a]/60 flex items-center gap-2">
+                          <span className="text-[10px] text-logisnext-slate font-bold">ERP:</span>
+                          <span className="text-sm font-mono font-bold text-gray-300">
+                            {testHUDOverlay.minElev ?? '—'} — {testHUDOverlay.maxElev ?? '—'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {/* Descenso */}
+                  {(() => {
+                    const descVal = testHUDOverlay.realDesc;
+                    const rawDesc = testHUDOverlay._rawDesc;
+                    const inRange = rawDesc != null && testHUDOverlay._minDesc != null
+                      ? rawDesc >= testHUDOverlay._minDesc && rawDesc <= testHUDOverlay._maxDesc : null;
+                    const isActive = testHUDOverlay.cameraTestState === 'descenso';
+                    return (
+                      <div className={`p-3 rounded-xl border relative overflow-hidden transition-all ${
+                        inRange === true ? 'bg-green-900/20 border-green-500/50' :
+                        inRange === false ? 'bg-red-900/20 border-red-500/50' :
+                        isActive ? 'bg-purple-900/20 border-purple-500/40' : 'bg-[#1d2930]/60 border-[#2e404a]'
+                      }`}>
+                        <div className={`absolute top-0 left-0 w-1 h-full ${
+                          inRange === true ? 'bg-green-500' : inRange === false ? 'bg-red-500' :
+                          isActive ? 'bg-purple-400' : 'bg-purple-600/40'
+                        }`} />
+                        <div className="flex items-baseline justify-between mb-1">
+                          <span className="text-[10px] text-logisnext-slate uppercase tracking-widest">↓ Descenso</span>
+                          {isActive && <span className="text-[9px] text-purple-400 font-bold animate-pulse">● MIDIENDO</span>}
+                        </div>
+                        <span className={`text-4xl font-mono font-black leading-none ${
+                          inRange === true ? 'text-green-400' : inRange === false ? 'text-red-400' :
+                          isActive ? 'text-purple-300' : 'text-gray-300'
+                        }`}>{descVal ?? '—'}</span>
+                        <div className="mt-2 pt-2 border-t border-[#2e404a]/60 flex items-center gap-2">
+                          <span className="text-[10px] text-logisnext-slate font-bold">ERP:</span>
+                          <span className="text-sm font-mono font-bold text-gray-300">
+                            {testHUDOverlay.minDesc ?? '—'} — {testHUDOverlay.maxDesc ?? '—'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── CUENTA ATRÁS GRANDE — centrada en la vista 3D ── */}
+          {testHUDOverlay?.cameraTestState === 'espera_arriba' && testHUDOverlay?.waitCountdown != null && (
+            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center pointer-events-none">
+              <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" />
+              <div className="relative flex flex-col items-center gap-2">
+                {testHUDOverlay.waitCountdown > 0 ? (
+                  <>
+                    <span className="text-yellow-300 text-base font-black uppercase tracking-[0.3em] drop-shadow-[0_0_20px_rgba(250,204,21,0.9)]">
+                      INICIO DESCENSO EN
+                    </span>
+                    <span
+                      className="font-black font-mono text-yellow-300 leading-none select-none"
+                      style={{
+                        fontSize: 'clamp(8rem, 22vw, 18rem)',
+                        textShadow: '0 0 80px rgba(250,204,21,0.9), 0 0 160px rgba(250,204,21,0.5)',
+                        animation: testHUDOverlay.waitCountdown <= 1 ? 'pulse 0.3s ease-in-out infinite' : 'pulse 0.8s ease-in-out infinite'
+                      }}
+                    >
+                      {testHUDOverlay.waitCountdown}
+                    </span>
+                    <span className="text-yellow-400 text-sm font-bold uppercase tracking-[0.4em] drop-shadow-[0_0_10px_rgba(250,204,21,0.7)]">
+                      {testHUDOverlay.waitCountdown === 1 ? 'segundo' : 'segundos'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span
+                      className="font-black font-mono text-green-400 leading-none select-none animate-pulse"
+                      style={{
+                        fontSize: 'clamp(6rem, 18vw, 14rem)',
+                        textShadow: '0 0 60px rgba(74,222,128,0.95), 0 0 120px rgba(74,222,128,0.5)'
+                      }}
+                    >
+                      GO!
+                    </span>
+                    <span
+                      className="text-green-400 font-black animate-bounce select-none"
+                      style={{
+                        fontSize: 'clamp(4rem, 12vw, 9rem)',
+                        textShadow: '0 0 40px rgba(74,222,128,0.9)'
+                      }}
+                    >
+                      ↓
+                    </span>
+                    <span className="text-green-300 text-base font-black uppercase tracking-[0.4em] animate-pulse drop-shadow-[0_0_15px_rgba(74,222,128,0.8)]">
+                      INICIAR DESCENSO
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── MODAL NOK — ¿Repetir la prueba? ── */}
+          {testHUDOverlay?.cameraTestState === 'nok' && (() => {
+            const alarm = testHUDOverlay?.testAlarm;
+            const isIncomplete = alarm === 'ascenso_incompleto' || alarm === 'descenso_incompleto';
+            const isAscIncomplete = alarm === 'ascenso_incompleto';
+
+            return (
+              <div className="absolute inset-0 z-50 flex items-center justify-center">
+                {/* Backdrop: pointer-events-none para no bloquear los botones de simulación */}
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-[3px] pointer-events-none" />
+                {/* Dialog */}
+                <div className={`relative flex flex-col items-center gap-6 bg-[#0d1a20] border-2 rounded-3xl px-14 py-10 max-w-lg w-full mx-8 ${
+                  isIncomplete
+                    ? 'border-orange-500/70 shadow-[0_0_80px_rgba(249,115,22,0.4)]'
+                    : 'border-red-500/70 shadow-[0_0_80px_rgba(239,68,68,0.4)]'
+                }`}>
+                  {/* Icono */}
+                  <div className={`flex items-center justify-center w-20 h-20 rounded-full border-2 ${
+                    isIncomplete
+                      ? 'bg-orange-500/20 border-orange-500/50 shadow-[0_0_30px_rgba(249,115,22,0.4)]'
+                      : 'bg-red-500/20 border-red-500/50 shadow-[0_0_30px_rgba(239,68,68,0.4)]'
+                  }`}>
+                    <span className="text-4xl">{isIncomplete ? '⚠' : '✕'}</span>
+                  </div>
+
+                  {/* Título */}
+                  <div className="flex flex-col items-center gap-2 text-center">
+                    {isIncomplete ? (
+                      <>
+                        <span className="text-orange-400 text-sm font-black uppercase tracking-[0.25em]">
+                          MOVIMIENTO INCOMPLETO
+                        </span>
+                        <h2 className="text-white text-3xl font-black tracking-wide">
+                          {isAscIncomplete ? 'Ascenso Incompleto' : 'Descenso Incompleto'}
+                        </h2>
+                        <p className="text-gray-400 text-sm font-medium">
+                          {isAscIncomplete
+                            ? 'La carretilla no alcanzó la altura máxima requerida. La prueba ha sido cancelada.'
+                            : 'La carretilla no completó el descenso hasta la posición inicial. La prueba ha sido cancelada.'}
+                        </p>
+                        {/* Indicador visual del movimiento fallido */}
+                        <div className={`mt-2 flex items-center gap-3 px-6 py-3 rounded-xl border ${
+                          isAscIncomplete
+                            ? 'bg-orange-900/20 border-orange-500/40'
+                            : 'bg-orange-900/20 border-orange-500/40'
+                        }`}>
+                          <span className="text-orange-300 text-3xl font-black">
+                            {isAscIncomplete ? '↑' : '↓'}
+                          </span>
+                          <div className="text-left">
+                            <div className="text-orange-300 font-black text-sm uppercase tracking-widest">
+                              {isAscIncomplete ? 'ASCENSO' : 'DESCENSO'}
+                            </div>
+                            <div className="text-gray-400 text-xs">
+                              Detenido sin completar el recorrido (timeout 2s)
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-red-400 text-sm font-black uppercase tracking-[0.25em]">RESULTADO FUERA DE TOLERANCIA</span>
+                        <h2 className="text-white text-3xl font-black tracking-wide">¿Repetir la prueba?</h2>
+                        <p className="text-gray-400 text-sm font-medium">Los tiempos registrados no cumplen las tolerancias del ERP.</p>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Datos fallo — solo para fallo de tolerancia */}
+                  {!isIncomplete && (
+                    <div className="w-full grid grid-cols-2 gap-3">
+                      {[
+                        { label: '↑ Ascenso', val: testHUDOverlay.realElev, min: testHUDOverlay.minElev, max: testHUDOverlay.maxElev, raw: testHUDOverlay._rawElev, rMin: testHUDOverlay._minElev, rMax: testHUDOverlay._maxElev },
+                        { label: '↓ Descenso', val: testHUDOverlay.realDesc, min: testHUDOverlay.minDesc, max: testHUDOverlay.maxDesc, raw: testHUDOverlay._rawDesc, rMin: testHUDOverlay._minDesc, rMax: testHUDOverlay._maxDesc }
+                      ].map(({ label, val, min, max, raw, rMin, rMax }) => {
+                        const ok = raw != null && rMin != null ? raw >= rMin && raw <= rMax : null;
+                        return (
+                          <div key={label} className={`p-3 rounded-xl border text-center ${ok ? 'border-green-500/40 bg-green-900/10' : 'border-red-500/40 bg-red-900/10'}`}>
+                            <span className="text-[10px] text-gray-400 uppercase tracking-widest block mb-1">{label}</span>
+                            <span className={`text-2xl font-mono font-black ${ok ? 'text-green-400' : 'text-red-400'}`}>{val ?? '—'}</span>
+                            <div className="text-[10px] text-gray-500 font-mono mt-1">ERP: {min} – {max}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Botones */}
+                  <div className="flex gap-4 w-full">
+                    <button
+                      onClick={() => pulsePlc('Ob_Inciar_Secuencia')}
+                      className="flex-1 flex flex-col items-center gap-1 py-4 rounded-2xl bg-gradient-to-b from-green-500 to-green-700 border-2 border-green-400/50 text-white font-black text-lg uppercase tracking-wider shadow-[0_0_20px_rgba(34,197,94,0.4)] hover:shadow-[0_0_30px_rgba(34,197,94,0.7)] hover:scale-[1.03] active:scale-95 transition-all"
+                    >
+                      <span className="text-2xl">▶</span>
+                      <span>SÍ — Repetir</span>
+                      <span className="text-[10px] font-normal opacity-70 normal-case">Iniciar secuencia</span>
+                    </button>
+                    {/* NO CONTINUAR solo disponible si el fallo es de tolerancia, no de movimiento incompleto */}
+                    {!isIncomplete && (
+                      <button
+                        onClick={() => pulsePlc('Ob_Pegatina_Colocada')}
+                        className="flex-1 flex flex-col items-center gap-1 py-4 rounded-2xl bg-gradient-to-b from-gray-600 to-gray-800 border-2 border-gray-500/50 text-white font-black text-lg uppercase tracking-wider shadow-[0_0_10px_rgba(0,0,0,0.4)] hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:scale-[1.03] active:scale-95 transition-all"
+                      >
+                        <span className="text-2xl">✓</span>
+                        <span>NO — Continuar</span>
+                        <span className="text-[10px] font-normal opacity-70 normal-case">Poner pegatina</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+
           <TelemetryHUD telemetry={telemetry} cycleTimer={cycleTimer} />
           <DigitalTwin 
             distance={telemetry.distance} 
@@ -214,7 +502,7 @@ function App() {
 
           {/* Slider flotante para el movimiento del carro (Solo Simulación) */}
           {isSimulation && (
-            <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col items-center gap-4 bg-[#0a0f12]/80 backdrop-blur-md p-4 rounded-full border border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.15)] z-20">
+            <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col items-center gap-4 bg-[#0a0f12]/80 backdrop-blur-md p-4 rounded-full border border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.15)] z-[60]">
               <span className="text-blue-400 text-xs font-black uppercase tracking-widest bg-blue-500/10 px-2 py-1 rounded">8.7m</span>
               <input 
                 type="range" 
@@ -226,15 +514,18 @@ function App() {
                   const val = parseFloat(e.target.value);
                   setSimCarriageHeight(val);
                   
-                  // Lógica física simulada: Si no hay pallet en horquillas, el láser Wenglor principal lee el suelo (0). 
-                  // Si hay pallet, lee la distancia al pallet (altura del carro + grosor del pallet).
-                  const isPickedUp = palletState === 'picked_up' || (palletState === 'animating' && window.__animPhase !== 'idle');
-                  const laserValue = isPickedUp ? val + 185 : 0;
-                  
-                  // Guardamos variable virtual para que el DigitalTwin renderice bien el carro en simulación
+                  // En simulación: escribir window.__carriageY DIRECTAMENTE en metros
+                  // para que el Sequencer detecte el cruce de 1500mm independientemente del pallet
                   if (typeof window !== 'undefined') {
+                    window.__carriageY = val / 1000;
                     window.__simCarriageHeight = val;
                   }
+
+                  // Lógica física simulada para el láser Wenglor:
+                  // Si hay pallet en horquillas: lee la distancia al pallet (altura del carro + grosor del pallet)
+                  // Si no hay pallet: el láser lee el suelo (0) — pero el carro sigue moviéndose
+                  const isPickedUp = palletState === 'picked_up' || (palletState === 'animating' && window.__animPhase !== 'idle');
+                  const laserValue = isPickedUp ? val + 185 : val; // sin carga: usar altura directa
 
                   try {
                     await fetch('http://localhost:8001/plc/write', {
@@ -253,7 +544,7 @@ function App() {
 
           {/* Botonera de pulsadores simulada (Solo Simulación) */}
           {isSimulation && (
-            <div className="absolute left-6 bottom-6 flex gap-3 bg-[#0a0f12]/90 backdrop-blur-md p-4 rounded-xl border border-gray-800 shadow-2xl z-20">
+            <div className="absolute left-6 bottom-6 flex gap-3 bg-[#0a0f12]/90 backdrop-blur-md p-4 rounded-xl border border-gray-800 shadow-2xl z-[60]">
               <div className="flex flex-col items-center">
                 <button
                   onClick={() => pulsePlc('Ob_Inciar_Secuencia')}
@@ -299,7 +590,9 @@ function App() {
             onErpData={setErpData} 
             onOpenErp={() => setErpModalOpen(true)} 
             plcState={telemetry?.plc}
+            isSimulation={isSimulation}
             setStep2Overlay={setStep2Overlay}
+            setTestHUDOverlay={setTestHUDOverlay}
             onSequenceEnd={resetCycleTimer}
           />
         </div>
