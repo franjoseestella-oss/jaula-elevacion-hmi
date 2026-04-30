@@ -16,6 +16,10 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
   const [toleranciaPositiva, setToleranciaPositiva] = useState(() => parseInt(localStorage.getItem('toleranciaPositiva')) || 50);
   const [toleranciaNegativa, setToleranciaNegativa] = useState(() => parseInt(localStorage.getItem('toleranciaNegativa')) || 50);
 
+  // Parámetros Prueba 5 minutos
+  const [test5mDuration, setTest5mDuration] = useState(() => parseInt(localStorage.getItem('test5mDuration')) || 300);
+  const [test5mTolerancia, setTest5mTolerancia] = useState(() => parseInt(localStorage.getItem('test5mTolerancia')) || 15);
+
   // Estado local para las salidas del PLC
   const [luces, setLuces] = useState({ Ob_LUZ_VERDE: false, Ob_LUZ_AZUL: false, Ob_LUZ_ROJA: false });
 
@@ -37,8 +41,11 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
     console.log("Guardando config Datalogic:", { connType, ip, port, comPort, baudRate });
     localStorage.setItem('toleranciaPositiva', toleranciaPositiva);
     localStorage.setItem('toleranciaNegativa', toleranciaNegativa);
+    localStorage.setItem('test5mDuration', test5mDuration);
+    localStorage.setItem('test5mTolerancia', test5mTolerancia);
     // Notificar al sistema para actualizar tolerancias si es necesario
     window.dispatchEvent(new Event('toleranciaChanged'));
+    window.dispatchEvent(new Event('test5mConfigChanged'));
     onClose();
   };
 
@@ -112,6 +119,17 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
             >
               <Activity size={14} />
               Tolerancia
+            </button>
+            <button
+              onClick={() => setActiveTab('prueba5m')}
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                activeTab === 'prueba5m'
+                  ? 'bg-logisnext-magenta/20 text-logisnext-magenta border border-logisnext-magenta/30'
+                  : 'text-logisnext-slate hover:bg-[#1d2930] hover:text-white border border-transparent'
+              }`}
+            >
+              <TestTube size={14} />
+              Prueba 5 Min
             </button>
           </div>
 
@@ -254,6 +272,46 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
                         value={toleranciaNegativa}
                         onChange={(e) => setToleranciaNegativa(e.target.value)}
                         className="bg-[#0a0f12] border border-red-500/30 rounded-lg px-4 py-3 text-white text-sm font-black outline-none focus:border-red-400 transition-colors"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'prueba5m' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-logisnext-magenta/50 pb-1 inline-block">
+                    Prueba 5 Minutos (Mx / XL)
+                  </h3>
+                </div>
+
+                <div className="bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-5 space-y-6">
+                  <p className="text-xs text-logisnext-lightslate font-medium">
+                    Configure la duración de la prueba de estabilidad en carga y la tolerancia máxima permitida de caída (variación en milímetros) respecto a la altura inicial.
+                  </p>
+                  <div className="grid grid-cols-2 gap-6">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
+                        Duración (segundos)
+                      </label>
+                      <input
+                        type="number"
+                        value={test5mDuration}
+                        onChange={(e) => setTest5mDuration(e.target.value)}
+                        className="bg-[#0a0f12] border border-[#2e404a] rounded-lg px-4 py-3 text-white text-sm font-black outline-none focus:border-logisnext-magenta transition-colors"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
+                        Tolerancia de caída (mm)
+                      </label>
+                      <input
+                        type="number"
+                        value={test5mTolerancia}
+                        onChange={(e) => setTest5mTolerancia(e.target.value)}
+                        className="bg-[#0a0f12] border border-[#2e404a] rounded-lg px-4 py-3 text-white text-sm font-black outline-none focus:border-logisnext-magenta transition-colors"
                       />
                     </div>
                   </div>

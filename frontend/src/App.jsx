@@ -201,6 +201,28 @@ function App() {
             </div>
           )}
 
+          {/* BANNER GIGANTE DE CARGA (Para Test con Carga) */}
+          {erpData && (currentStep === 3 || currentStep === 4) && (
+            <div className={`absolute top-10 right-10 z-50 px-6 py-4 rounded-2xl border-2 backdrop-blur-md shadow-2xl flex flex-col gap-3 ${
+              (telemetry.plc?.OW_Pallet || 0) * 250 === erpData.capac_interm_1
+                ? 'bg-green-600/80 border-green-400' 
+                : 'bg-[#0a0f12]/90 border-logisnext-magenta'
+            }`}>
+              <h3 className="text-xs font-black uppercase tracking-widest text-gray-300 border-b border-white/20 pb-2">Control de Carga</h3>
+              <div className="flex justify-between items-center gap-8">
+                <span className="text-sm font-bold text-gray-400 tracking-wider">CARGA REQUERIDA (ERP)</span>
+                <span className="text-xl font-black text-logisnext-magenta">{erpData.capac_interm_1 || 0} kg</span>
+              </div>
+              <div className="flex justify-between items-end gap-8">
+                <span className="text-sm font-bold text-gray-400 tracking-wider">CARGA ACTUAL (PLC)</span>
+                <div className="flex flex-col items-end">
+                  <span className="text-2xl font-black text-white">{(telemetry.plc?.OW_Pallet || 0) * 250} kg</span>
+                  <span className="text-[10px] text-gray-400">({telemetry.plc?.OW_Pallet || 0} pallets × 250kg)</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* OVERLAY DE COMPARATIVA DE TIEMPOS Y CÁMARA (Para pasos 3 y 4) */}
           {testHUDOverlay && (
             <div className="absolute top-1/2 left-10 -translate-y-1/2 z-40 flex flex-col gap-3">
@@ -378,6 +400,7 @@ function App() {
             const alarm = testHUDOverlay?.testAlarm;
             const isIncomplete = alarm === 'ascenso_incompleto' || alarm === 'descenso_incompleto';
             const isAscIncomplete = alarm === 'ascenso_incompleto';
+            const isLoadError = typeof alarm === 'string' && alarm.startsWith('Carga incorrecta');
 
             return (
               <div className="absolute inset-0 z-50 flex items-center justify-center">
@@ -400,7 +423,30 @@ function App() {
 
                   {/* Título */}
                   <div className="flex flex-col items-center gap-2 text-center">
-                    {isIncomplete ? (
+                    {isLoadError ? (
+                      <>
+                        <span className="text-red-400 text-sm font-black uppercase tracking-[0.25em]">
+                          CARGA O COTA INCORRECTA
+                        </span>
+                        <h2 className="text-white text-3xl font-black tracking-wide">
+                          Condiciones no cumplidas
+                        </h2>
+                        <p className="text-gray-400 text-sm font-medium">
+                          La carga no corresponde con lo que propone el ERP. Revise los pallets de hierro y madera.
+                        </p>
+                        <div className="mt-2 flex items-center gap-3 px-6 py-3 rounded-xl border bg-red-900/20 border-red-500/40">
+                          <span className="text-red-300 text-3xl font-black">⚖️</span>
+                          <div className="text-left">
+                            <div className="text-red-300 font-black text-sm uppercase tracking-widest">
+                              VALIDACIÓN DE CARGA
+                            </div>
+                            <div className="text-gray-400 text-xs">
+                              {alarm}
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    ) : isIncomplete ? (
                       <>
                         <span className="text-orange-400 text-sm font-black uppercase tracking-[0.25em]">
                           MOVIMIENTO INCOMPLETO
@@ -442,7 +488,7 @@ function App() {
                   </div>
 
                   {/* Datos fallo — solo para fallo de tolerancia */}
-                  {!isIncomplete && (
+                  {!isIncomplete && !isLoadError && (
                     <div className="w-full grid grid-cols-2 gap-3">
                       {[
                         { label: '↑ Ascenso', val: testHUDOverlay.realElev, min: testHUDOverlay.minElev, max: testHUDOverlay.maxElev, raw: testHUDOverlay._rawElev, rMin: testHUDOverlay._minElev, rMax: testHUDOverlay._maxElev },
@@ -470,8 +516,8 @@ function App() {
                       <span>SÍ — Repetir</span>
                       <span className="text-[10px] font-normal opacity-70 normal-case">Iniciar secuencia</span>
                     </button>
-                    {/* NO CONTINUAR solo disponible si el fallo es de tolerancia, no de movimiento incompleto */}
-                    {!isIncomplete && (
+                    {/* NO CONTINUAR solo disponible si el fallo es de tolerancia, no de movimiento incompleto ni de carga */}
+                    {!isIncomplete && !isLoadError && (
                       <button
                         onClick={() => pulsePlc('Ob_Pegatina_Colocada')}
                         className="flex-1 flex flex-col items-center gap-1 py-4 rounded-2xl bg-gradient-to-b from-gray-600 to-gray-800 border-2 border-gray-500/50 text-white font-black text-lg uppercase tracking-wider shadow-[0_0_10px_rgba(0,0,0,0.4)] hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:scale-[1.03] active:scale-95 transition-all"
@@ -488,11 +534,13 @@ function App() {
           })()}
 
 
-          <TelemetryHUD telemetry={telemetry} cycleTimer={cycleTimer} />
+          <TelemetryHUD telemetry={telemetry} cycleTimer={cycleTimer} isSimulation={isSimulation} />
           <DigitalTwin 
+            currentStep={currentStep}
             distance={telemetry.distance} 
             plcState={telemetry.plc} 
             palletState={palletState} 
+            erpData={erpData}
             onPalletAnimComplete={() => setPalletState('picked_up')} 
             showStickers={telemetry.plc?.Ob_Pegatina_Colocada || currentStep > 1}
             zoomToStickers={currentStep === 1 && step2Overlay?.isOk && !telemetry.plc?.Ob_Pegatina_Colocada}
@@ -502,7 +550,7 @@ function App() {
 
           {/* Slider flotante para el movimiento del carro (Solo Simulación) */}
           {isSimulation && (
-            <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col items-center gap-4 bg-[#0a0f12]/80 backdrop-blur-md p-4 rounded-full border border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.15)] z-[60]">
+            <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col items-center gap-4 bg-[#0a0f12]/80 backdrop-blur-md p-4 rounded-full border border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.15)] z-40">
               <span className="text-blue-400 text-xs font-black uppercase tracking-widest bg-blue-500/10 px-2 py-1 rounded">8.7m</span>
               <input 
                 type="range" 
@@ -542,9 +590,9 @@ function App() {
             </div>
           )}
 
-          {/* Botonera de pulsadores simulada (Solo Simulación) */}
+          {/* Botonera de pulsadores simulada y control de pallets (Solo Simulación) */}
           {isSimulation && (
-            <div className="absolute left-6 bottom-6 flex gap-3 bg-[#0a0f12]/90 backdrop-blur-md p-4 rounded-xl border border-gray-800 shadow-2xl z-[60]">
+            <div className="absolute left-6 bottom-6 flex gap-3 bg-[#0a0f12]/90 backdrop-blur-md p-4 rounded-xl border border-gray-800 shadow-2xl z-40">
               <div className="flex flex-col items-center">
                 <button
                   onClick={() => pulsePlc('Ob_Inciar_Secuencia')}
@@ -573,6 +621,57 @@ function App() {
                   <PowerOff size={20} className="text-white" />
                 </button>
                 <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider">Abortar<br/>Secuencia</span>
+              </div>
+
+              <div className="flex flex-col items-center border-l border-gray-700 pl-3 ml-1">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const current = telemetry?.plc?.OW_Pallet || 0;
+                      if (current > 0) {
+                        fetch('http://localhost:8001/plc/write', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ OW_Pallet: current - 1 })
+                        }).catch(console.error);
+                      }
+                    }}
+                    className="w-8 h-8 rounded-full bg-[#1d2930] text-white hover:bg-gray-600 transition-colors"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min="0"
+                    value={telemetry?.plc?.OW_Pallet || 0}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (!isNaN(val) && val >= 0) {
+                        fetch('http://localhost:8001/plc/write', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ OW_Pallet: val })
+                        }).catch(console.error);
+                      }
+                    }}
+                    className="bg-[#0a0f12] text-white font-mono text-sm px-1 py-1 rounded border border-gray-700 w-12 text-center outline-none focus:border-blue-500"
+                  />
+                  <button
+                    onClick={() => {
+                      const current = telemetry?.plc?.OW_Pallet || 0;
+                      fetch('http://localhost:8001/plc/write', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ OW_Pallet: current + 1 })
+                      }).catch(console.error);
+                    }}
+                    className="w-8 h-8 rounded-full bg-[#1d2930] text-white hover:bg-gray-600 transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
+                <span className="mt-1 text-[9px] font-black uppercase text-gray-400 tracking-wider">Pallets Sim.</span>
+                <span className="text-[10px] font-bold text-yellow-400">{(telemetry?.plc?.OW_Pallet || 0) * 250} kg</span>
               </div>
             </div>
           )}

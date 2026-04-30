@@ -143,7 +143,7 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
 
               {[
                 { id: 'OW_Altura_Elevacion', label: 'Láser Altura Elevación', isAnalog: true, unit: 'mm' },
-                { id: 'OW_Pallet', label: 'Láser Altura Pallet', isAnalog: true, unit: 'mm' },
+                { id: 'OW_Pallet', label: 'Número de Pallets (Carga)', isAnalog: true, unit: ' uds' },
                 { id: 'Ob_Dtec_Valla_1_trabajo_LH', label: 'Valla 1 Trabajo LH', isAnalog: false },
                 { id: 'Ob_Dtec_Valla_2_trabajo_RH', label: 'Valla 2 Trabajo RH', isAnalog: false }
               ].map((sensor) => {
@@ -160,9 +160,16 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
                           {(() => {
                             let val = isSimulation ? Number(analogs[sensor.id] || 0) : (value !== undefined ? Number(value) : null);
                             if (val === null) return '---';
-                            // Convertir ambos sensores a metros (dividiendo por 1000)
-                            return (val / 1000).toFixed(2);
-                          })()} <span className="text-[10px] text-blue-400/70">m</span>
+                            if (sensor.id === 'OW_Altura_Elevacion') {
+                              return (val / 1000).toFixed(2);
+                            }
+                            return val.toFixed(0);
+                          })()} <span className="text-[10px] text-blue-400/70">{sensor.id === 'OW_Altura_Elevacion' ? 'm' : sensor.unit.trim()}</span>
+                          {sensor.id === 'OW_Pallet' && (
+                            <span className="ml-2 text-xs text-yellow-400 font-bold">
+                              ({(isSimulation ? Number(analogs[sensor.id] || 0) : (value !== undefined ? Number(value) : 0)) * 250} kg)
+                            </span>
+                          )}
                         </span>
                       </div>
                     ) : (

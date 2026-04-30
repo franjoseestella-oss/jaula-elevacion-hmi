@@ -147,7 +147,41 @@ const WoodenPallet = ({ position }) => {
   );
 };
 
-const CageAssembly = ({ plcState }) => {
+
+
+// ── COMPONENTE PALET DE LA PILA (PESO DE PRUEBA) ──
+const StackPallet = ({ position, weight }) => {
+  return (
+    <group position={position}>
+      {/* Estructura principal del peso */}
+      <mesh><boxGeometry args={[1.6, 0.2, 1.0]} /><meshStandardMaterial color="#cccccc" metalness={0.2} roughness={0.8} /></mesh>
+      
+      {/* Huecos para las horquillas en la parte FRONTAL (-Z) */}
+      <mesh position={[-0.35, 0, -0.51]}><boxGeometry args={[0.25, 0.1, 0.05]} /><meshBasicMaterial color="#111111" /></mesh>
+      <mesh position={[0.35, 0, -0.51]}><boxGeometry args={[0.25, 0.1, 0.05]} /><meshBasicMaterial color="#111111" /></mesh>
+      
+      {/* Pegatina de texto Frontal (orientada hacia la carretilla) */}
+      <mesh position={[0, 0, -0.505]} rotation={[0, Math.PI, 0]}><planeGeometry args={[0.3, 0.1]} /><meshBasicMaterial color="#ffffff" /></mesh>
+      <Text position={[0, 0, -0.51]} rotation={[0, Math.PI, 0]} fontSize={0.07} color="#000000" fontWeight="bold" anchorX="center" anchorY="middle">
+        {weight}
+      </Text>
+
+      {/* Pegatina de texto Lateral Izquierdo */}
+      <mesh position={[-0.805, 0, 0]} rotation={[0, -Math.PI/2, 0]}><planeGeometry args={[0.3, 0.1]} /><meshBasicMaterial color="#ffffff" /></mesh>
+      <Text position={[-0.81, 0, 0]} rotation={[0, -Math.PI/2, 0]} fontSize={0.07} color="#000000" fontWeight="bold" anchorX="center" anchorY="middle">
+        {weight}
+      </Text>
+
+      {/* Pegatina de texto Lateral Derecho */}
+      <mesh position={[0.805, 0, 0]} rotation={[0, Math.PI/2, 0]}><planeGeometry args={[0.3, 0.1]} /><meshBasicMaterial color="#ffffff" /></mesh>
+      <Text position={[0.81, 0, 0]} rotation={[0, Math.PI/2, 0]} fontSize={0.07} color="#000000" fontWeight="bold" anchorX="center" anchorY="middle">
+        {weight}
+      </Text>
+    </group>
+  );
+};
+
+const CageAssembly = ({ plcState, currentStep, erpData }) => {
   const gateRef = useRef();
   const frontGateRef = useRef();
   const laser1Ref = useRef();
@@ -286,43 +320,34 @@ const CageAssembly = ({ plcState }) => {
 
       {/* ── CARGAS (PESOS DE PRUEBA) EN EL FRENTE (Z=2.2) ── */}
       <group position={[0, 0, 2.2]}>
-        {Array.from({ length: 18 }).map((_, i) => {
-          const weight = 4500 - (i * 250);
-          return (
-            <group key={i} position={[0, 0.1 + i * 0.22, 0]}>
-              {/* Estructura principal del peso */}
-              <mesh><boxGeometry args={[1.6, 0.2, 1.0]} /><meshStandardMaterial color="#cccccc" metalness={0.2} roughness={0.8} /></mesh>
-              
-              {/* Huecos para las horquillas en la parte FRONTAL (-Z) */}
-              <mesh position={[-0.35, 0, -0.51]}><boxGeometry args={[0.25, 0.1, 0.05]} /><meshBasicMaterial color="#111111" /></mesh>
-              <mesh position={[0.35, 0, -0.51]}><boxGeometry args={[0.25, 0.1, 0.05]} /><meshBasicMaterial color="#111111" /></mesh>
-              
-              {/* Pegatina de texto Frontal (orientada hacia la carretilla) */}
-              <mesh position={[0, 0, -0.505]} rotation={[0, Math.PI, 0]}><planeGeometry args={[0.3, 0.1]} /><meshBasicMaterial color="#ffffff" /></mesh>
-              <Text position={[0, 0, -0.51]} rotation={[0, Math.PI, 0]} fontSize={0.07} color="#000000" fontWeight="bold" anchorX="center" anchorY="middle">
-                {weight}
-              </Text>
+        {(() => {
+          const showWhitePallets = currentStep === 3 || currentStep === 4;
+          const targetWeight = erpData?.capac_interm_1 || 0;
+          const pickedUpCount = (showWhitePallets && typeof window !== 'undefined' && window.__hasPalletOnForks) 
+            ? Math.max(0, Math.floor(targetWeight / 250)) : 0;
+          
+          const remainingCount = Math.max(0, 18 - pickedUpCount);
 
-              {/* Pegatina de texto Lateral Izquierdo */}
-              <mesh position={[-0.805, 0, 0]} rotation={[0, -Math.PI/2, 0]}><planeGeometry args={[0.3, 0.1]} /><meshBasicMaterial color="#ffffff" /></mesh>
-              <Text position={[-0.81, 0, 0]} rotation={[0, -Math.PI/2, 0]} fontSize={0.07} color="#000000" fontWeight="bold" anchorX="center" anchorY="middle">
-                {weight}
-              </Text>
+          return Array.from({ length: remainingCount }).map((_, i) => {
+            const weight = 4500 - (i * 250);
+            return (
+              <StackPallet key={`ground-${i}`} position={[0, 0.1 + i * 0.22, 0]} weight={weight} />
+            );
+          });
+        })()}
 
-              {/* Pegatina de texto Lateral Derecho */}
-              <mesh position={[0.805, 0, 0]} rotation={[0, Math.PI/2, 0]}><planeGeometry args={[0.3, 0.1]} /><meshBasicMaterial color="#ffffff" /></mesh>
-              <Text position={[0.81, 0, 0]} rotation={[0, Math.PI/2, 0]} fontSize={0.07} color="#000000" fontWeight="bold" anchorX="center" anchorY="middle">
-                {weight}
-              </Text>
-            </group>
-          );
-        })}
         {/* Palet de madera adicional (solo si está 'idle' o en las primeras fases de 'animating') */}
         {(() => {
           const hasPallet = !window.__palletState || window.__palletState === 'idle' || (window.__palletState === 'animating' && (window.__palletPhase === 'raising_forks' || window.__palletPhase === 'moving_fwd'));
           if (typeof window !== 'undefined') window.__hasPalletOnStack = hasPallet;
+          
+          const showWhitePallets = currentStep === 3 || currentStep === 4;
+          const targetWeight = erpData?.capac_interm_1 || 0;
+          const pickedUpCount = (showWhitePallets && window.__hasPalletOnForks) ? Math.max(0, Math.floor(targetWeight / 250)) : 0;
+          const remainingCount = Math.max(0, 18 - pickedUpCount);
+
           return hasPallet && (
-            <WoodenPallet position={[0, 0.1 + 18 * 0.22, 0]} />
+            <WoodenPallet position={[0, 0.1 + remainingCount * 0.22, 0]} />
           );
         })()}
       </group>
@@ -435,7 +460,7 @@ const Sticker2D = ({ pointsRight }) => (
   </group>
 );
 
-const ForkliftAssembly = ({ distance, palletState, onPalletAnimComplete, showStickers, zoomToStickers }) => {
+const ForkliftAssembly = ({ currentStep, erpData, distance, palletState, onPalletAnimComplete, showStickers, zoomToStickers }) => {
   const forkliftRef = useRef();
   const carriageRef = useRef();
   const middleMastRef = useRef();
@@ -782,8 +807,18 @@ const ForkliftAssembly = ({ distance, palletState, onPalletAnimComplete, showSti
           {(() => {
             const isPickedUp = palletState === 'picked_up' || (palletState === 'animating' && animState.current.phase !== 'raising_forks' && animState.current.phase !== 'moving_fwd' && animState.current.phase !== 'idle');
             if (typeof window !== 'undefined') window.__hasPalletOnForks = isPickedUp;
+            
+            const showWhitePallets = currentStep === 3 || currentStep === 4;
+            const targetWeight = erpData?.capac_interm_1 || 0;
+            const whitePalletCount = showWhitePallets ? Math.max(0, Math.floor(targetWeight / 250)) : 0;
+            
             return isPickedUp && (
-              <WoodenPallet position={[0, 0.05, 0.6]} />
+              <group>
+                {Array.from({ length: whitePalletCount }).map((_, i) => (
+                  <StackPallet key={i} position={[0, 0.15 + (i * 0.22), 0.6]} weight={(whitePalletCount - i) * 250} />
+                ))}
+                <WoodenPallet position={[0, 0.05 + (whitePalletCount * 0.22), 0.6]} />
+              </group>
             );
           })()}
           
@@ -810,7 +845,7 @@ const CameraAnimator = ({ zoomToStickers }) => {
   return null;
 };
 
-const DigitalTwin = ({ distance, plcState, palletState, onPalletAnimComplete, showStickers, zoomToStickers }) => {
+const DigitalTwin = ({ currentStep, distance, plcState, palletState, erpData, onPalletAnimComplete, showStickers, zoomToStickers }) => {
   return (
     <div className="w-full h-full bg-gradient-to-b from-[#1d2930] to-[#0f171e]">
       <Canvas camera={{ position: [4, 3, 5], fov: 50 }}>
@@ -819,8 +854,8 @@ const DigitalTwin = ({ distance, plcState, palletState, onPalletAnimComplete, sh
         <pointLight position={[-10, -10, -10]} intensity={0.5} />
         <Environment preset="warehouse" blur={0.8} />
         
-        <CageAssembly plcState={plcState} />
-        <ForkliftAssembly distance={distance} palletState={palletState} onPalletAnimComplete={onPalletAnimComplete} showStickers={showStickers} zoomToStickers={zoomToStickers} />
+        <CageAssembly plcState={plcState} currentStep={currentStep} erpData={erpData} />
+        <ForkliftAssembly distance={distance} palletState={palletState} erpData={erpData} currentStep={currentStep} onPalletAnimComplete={onPalletAnimComplete} showStickers={showStickers} zoomToStickers={zoomToStickers} />
         <CameraAnimator zoomToStickers={zoomToStickers} />
         
         {/* Suelo Industrial */}

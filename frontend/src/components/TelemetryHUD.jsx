@@ -1,7 +1,7 @@
 import React from 'react';
 import { Target, Clock } from 'lucide-react';
 
-const TelemetryHUD = ({ telemetry, cycleTimer = 0 }) => {
+const TelemetryHUD = ({ telemetry, cycleTimer = 0, isSimulation }) => {
   const isRunning = cycleTimer > 0;
 
   // Formatear como MM:SS.d si >= 60s, si no como SS.dd s
@@ -41,6 +41,8 @@ const TelemetryHUD = ({ telemetry, cycleTimer = 0 }) => {
           </svg>
         </div>
       </div>
+
+
 
       {/* Cycle Time — controlado por secuencia */}
       <div className="glass-panel p-5 rounded-xl w-72 pointer-events-auto text-right relative overflow-hidden group">
