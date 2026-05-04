@@ -8,6 +8,104 @@ const LogViewer = ({ isOpen, onClose }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const [filterSec, setFilterSec] = useState('');
+  const [filterBast, setFilterBast] = useState('');
+  const [filterDateStart, setFilterDateStart] = useState('');
+  const [filterDateEnd, setFilterDateEnd] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+
+  const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'desc' });
+
+  const parseLocalDate = (dateStr) => {
+    if (!dateStr) return null;
+    const parts = dateStr.split(', ');
+    if (parts.length === 2) {
+      const dateSplits = parts[0].split('/');
+      if (dateSplits.length === 3) {
+        return new Date(`${dateSplits[2]}-${dateSplits[1].padStart(2, '0')}-${dateSplits[0].padStart(2, '0')}T${parts[1]}`);
+      }
+    }
+    const d = new Date(dateStr);
+    return isNaN(d) ? null : d;
+  };
+
+  const getDuration = (start, end) => {
+    const t1 = parseLocalDate(start);
+    const t2 = parseLocalDate(end);
+    if (t1 && t2) {
+      const diff = Math.floor((t2 - t1) / 1000);
+      if (diff < 0) return '-';
+      return `${Math.floor(diff / 60)}m ${diff % 60}s`;
+    }
+    return '-';
+  };
+
+  const filteredLogs = logs.filter(log => {
+    if (filterSec && (!log.NSECUENCIA || !log.NSECUENCIA.includes(filterSec))) return false;
+    if (filterBast && (!log.NBASTIDOR || !log.NBASTIDOR.toLowerCase().includes(filterBast.toLowerCase()))) return false;
+    if (filterStatus && log.OK_NOK !== filterStatus) return false;
+    
+    if (filterDateStart || filterDateEnd) {
+      const d = parseLocalDate(log.FECHA_HORA_INICIO_SEC);
+      if (d) {
+        const dateStr = d.toISOString().split('T')[0];
+        if (filterDateStart && dateStr < filterDateStart) return false;
+        if (filterDateEnd && dateStr > filterDateEnd) return false;
+      }
+    }
+    return true;
+  });
+
+  const parseSortValue = (val) => {
+    if (val === undefined || val === null || val === '-') return -Infinity; // Sort nulls at bottom
+    if (typeof val === 'string' && val.includes('/')) {
+      const dateObj = parseLocalDate(val);
+      if (dateObj && !isNaN(dateObj)) return dateObj.getTime();
+    }
+    if (val !== '' && !isNaN(Number(val))) return Number(val);
+    return String(val).toLowerCase();
+  };
+
+  const sortedLogs = React.useMemo(() => {
+    let sortableLogs = [...filteredLogs];
+    if (sortConfig !== null) {
+      sortableLogs.sort((a, b) => {
+        let valA = parseSortValue(a[sortConfig.key]);
+        let valB = parseSortValue(b[sortConfig.key]);
+        
+        if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return sortableLogs;
+  }, [filteredLogs, sortConfig]);
+
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const renderTh = (label, sortKey, className = "") => (
+    <th 
+      key={sortKey}
+      className={`px-4 py-4 border-b border-[#2e404a] align-middle cursor-pointer hover:bg-[#1d2930] transition-colors ${className}`}
+      onClick={() => handleSort(sortKey)}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span>{label}</span>
+        {sortConfig?.key === sortKey ? (
+          <span className="ml-1 text-logisnext-magenta font-black">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+        ) : (
+          <span className="ml-1 text-logisnext-lightslate/30">↕</span>
+        )}
+      </div>
+    </th>
+  );
+
   const fetchLogs = async () => {
     setLoading(true);
     setError(null);
@@ -49,6 +147,12 @@ const LogViewer = ({ isOpen, onClose }) => {
 
           <div className="flex items-center gap-4">
             <button
+              onClick={() => { setFilterSec(''); setFilterBast(''); setFilterDateStart(''); setFilterDateEnd(''); setFilterStatus(''); }}
+              className="px-4 py-2 bg-transparent hover:bg-[#1d2930] text-logisnext-lightslate text-sm font-bold rounded-lg transition-colors border border-transparent hover:border-[#2e404a]"
+            >
+              LIMPIAR FILTROS
+            </button>
+            <button
               onClick={fetchLogs}
               className="flex items-center gap-2 px-4 py-2 bg-[#1d2930] hover:bg-[#2e404a] text-white text-sm font-bold rounded-lg transition-colors border border-[#2e404a]"
             >
@@ -61,6 +165,35 @@ const LogViewer = ({ isOpen, onClose }) => {
             >
               <X size={20} />
             </button>
+          </div>
+        </div>
+
+        {/* Filter Bar */}
+        <div className="bg-[#11191e] border-b border-[#2e404a] p-4 flex flex-wrap gap-6 items-end shrink-0 shadow-inner">
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Secuencia</label>
+            <input type="text" placeholder="Ej: 0296" value={filterSec} onChange={e=>setFilterSec(e.target.value)} className="bg-[#0a0f12] text-sm border border-[#2e404a] text-white p-2 rounded focus:border-logisnext-magenta outline-none w-32" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Bastidor</label>
+            <input type="text" placeholder="Ej: SFB09..." value={filterBast} onChange={e=>setFilterBast(e.target.value)} className="bg-[#0a0f12] text-sm border border-[#2e404a] text-white p-2 rounded focus:border-logisnext-magenta outline-none w-48" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Creado (Desde)</label>
+            <input type="date" style={{ colorScheme: 'dark' }} value={filterDateStart} onChange={e=>setFilterDateStart(e.target.value)} className="bg-[#0a0f12] text-sm border border-[#2e404a] text-logisnext-lightslate p-2 rounded focus:border-logisnext-magenta outline-none cursor-pointer w-36" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Creado (Hasta)</label>
+            <input type="date" style={{ colorScheme: 'dark' }} value={filterDateEnd} onChange={e=>setFilterDateEnd(e.target.value)} className="bg-[#0a0f12] text-sm border border-[#2e404a] text-logisnext-lightslate p-2 rounded focus:border-logisnext-magenta outline-none cursor-pointer w-36" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Estado Global</label>
+            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="bg-[#0a0f12] text-sm border border-[#2e404a] text-white p-2 rounded focus:border-logisnext-magenta outline-none cursor-pointer w-36">
+              <option value="">TODOS</option>
+              <option value="OK">OK</option>
+              <option value="NOK">NOK</option>
+              <option value="ABORTADO">ABORTADO</option>
+            </select>
           </div>
         </div>
 
@@ -83,77 +216,115 @@ const LogViewer = ({ isOpen, onClose }) => {
               <p className="text-xl font-bold tracking-widest opacity-50">NO HAY REGISTROS DISPONIBLES</p>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-[#2e404a] custom-scrollbar">
+            <div className="overflow-x-auto rounded-xl border border-[#2e404a] custom-scrollbar pb-10">
               <table className="w-full text-left text-sm text-gray-300">
-                <thead className="text-xs uppercase bg-[#151f25] text-logisnext-lightslate font-black tracking-wider whitespace-nowrap">
+                <thead className="text-[10px] uppercase bg-[#151f25] text-logisnext-lightslate font-black tracking-wider whitespace-nowrap select-none">
                   <tr>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">ID</th>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Fecha</th>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Secuencia</th>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Modelo</th>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Bastidor</th>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Mástil</th>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Operario</th>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Altura ERP (mm)</th>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Carga ERP (kg)</th>
-                    
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Multiload</th>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Altura Cap. (mm)</th>
-                    
-                    <th className="px-4 py-4 border-b border-[#2e404a]">S/Carga</th>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Elev. SC (s)</th>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Desc. SC (s)</th>
-                    
-                    <th className="px-4 py-4 border-b border-[#2e404a]">C/Carga</th>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Carga Real (kg)</th>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Elev. CC (s)</th>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Desc. CC (s)</th>
-                    
-                    <th className="px-4 py-4 border-b border-[#2e404a]">5 Minutos</th>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Alt. Inicial (mm)</th>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Alt. Final (mm)</th>
-                    <th className="px-4 py-4 border-b border-[#2e404a]">Caída (mm)</th>
-                    
-                    <th className="px-4 py-4 border-b border-[#2e404a] text-center sticky right-0 bg-[#151f25] shadow-[-5px_0_10px_rgba(0,0,0,0.5)]">Estado Global</th>
+                    {renderTh("ID", "id")}
+                    {renderTh("F. Montaje", "FECHA_MONTAJE")}
+                    {renderTh("Operario", "OPERARIO")}
+                    {renderTh("Secuencia", "NSECUENCIA")}
+                    {renderTh("Modelo", "NMODELO")}
+                    {renderTh("Bastidor", "NBASTIDOR")}
+                    {renderTh("Mástil", "NMASTIL")}
+                    {renderTh("Alt. ERP", "ALTURA_MAX_INTERMEDIA")}
+                    {renderTh("Alt. Captada", "ALTURA_CAPTADA")}
+                    {renderTh("Ini Multiload", "FECHA_HORA_INICIO_MULTILOAD")}
+                    {renderTh("Fin Multiload", "FECHA_HORA_FIN_MULTILOAD")}
+                    {renderTh("Est. Multiload", "ESTADO_MULTILOAD")}
+                    {renderTh("Elev. Min SC", "TIEMPO_ELEVACION_MIN_SINCARGA")}
+                    {renderTh("Elev. Max SC", "TIEMPO_ELEVACION_MAX_SINCARGA")}
+                    {renderTh("Elev. Med SC", "TIEMPO_ELEVACION_MEDIDO_SINCARGA")}
+                    {renderTh("Desc. Min SC", "TIEMPO_DESCENSO_MIN_SINCARGA")}
+                    {renderTh("Desc. Max SC", "TIEMPO_DESCENSO_MAX_SINCARGA")}
+                    {renderTh("Desc. Med SC", "TIEMPO_DESCENSO_MEDIDO_SINCARGA")}
+                    {renderTh("Ini S/Carga", "FECHA_HORA_INICIO_SINCARGA")}
+                    {renderTh("Fin S/Carga", "FECHA_HORA_FIN_SINCARGA")}
+                    {renderTh("Est. S/Carga", "ESTADO_SINCARGA")}
+                    {renderTh("Elev. Min CC", "TIEMPO_ELEVACION_MIN_CARGA")}
+                    {renderTh("Elev. Max CC", "TIEMPO_ELEVACION_MAX_CARGA")}
+                    {renderTh("Elev. Med CC", "TIEMPO_ELEVACION_MEDIDO_CARGA")}
+                    {renderTh("Desc. Min CC", "TIEMPO_DESCENSO_MIN_CARGA")}
+                    {renderTh("Desc. Max CC", "TIEMPO_DESCENSO_MAX_CARGA")}
+                    {renderTh("Desc. Med CC", "TIEMPO_DESCENSO_MEDIDO_CARGA")}
+                    {renderTh("Ini C/Carga", "FECHA_HORA_INICIO_CARGA")}
+                    {renderTh("Fin C/Carga", "FECHA_HORA_FIN_CARGA")}
+                    {renderTh("Est. C/Carga", "ESTADO_DESCENSO_CARGA")}
+                    {renderTh("Carga ERP", "CARGA_CONSIGNADA")}
+                    {renderTh("Carga Get", "CARGA_GET")}
+                    {renderTh("Alt. Inicial 5M", "ALTURA_INICIAL")}
+                    {renderTh("Alt. Final 5M", "ALTURA_FINAL")}
+                    {renderTh("Caída 5M", "DIFERENCIA_ALTURAS")}
+                    {renderTh("Ini 5Min", "FECHA_HORA_INICIO_5MIN")}
+                    {renderTh("Fin 5Min", "FECHA_HORA_FIN_5MIN")}
+                    {renderTh("Est. 5Min", "ESTADO_CARGA_5_MIN")}
+                    {renderTh("Reps", "REPETICIONES_SECUENCIA")}
+                    {renderTh("Ini Sec.", "FECHA_HORA_INICIO_SEC")}
+                    {renderTh("Fin Sec.", "FECHA_HORA_FIN_SEC")}
+                    {renderTh("Duración Sec.", "FECHA_HORA_INICIO_SEC", "text-logisnext-magenta")}
+                    <th className="px-4 py-4 border-b border-[#2e404a] text-center sticky right-0 bg-[#151f25] shadow-[-5px_0_10px_rgba(0,0,0,0.5)] z-10 cursor-pointer hover:bg-[#1d2930] transition-colors" onClick={() => handleSort('OK_NOK')}>
+                      <div className="flex items-center justify-center gap-2">
+                        <span>Estado Global</span>
+                        {sortConfig?.key === 'OK_NOK' ? (
+                          <span className="ml-1 text-logisnext-magenta font-black">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
+                        ) : (
+                          <span className="ml-1 text-logisnext-lightslate/30">↕</span>
+                        )}
+                      </div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#2e404a] bg-[#0a0f12] whitespace-nowrap">
-                  {logs.map((log) => (
+                  {sortedLogs.map((log) => (
                     <tr key={log.id} className="hover:bg-[#151f25] transition-colors">
                       <td className="px-4 py-3 font-mono text-xs">{log.id}</td>
-                      <td className="px-4 py-3">{log.FECHA_HORA_INICIO_SEC || '-'}</td>
-                      <td className="px-4 py-3 font-bold text-white">{log.NSECUENCIA || '-'}</td>
-                      <td className="px-4 py-3">{log.NMODELO || '-'}</td>
-                      <td className="px-4 py-3">{log.NBASTIDOR || '-'}</td>
-                      <td className="px-4 py-3">{log.NMASTIL || '-'}</td>
+                      <td className="px-4 py-3">{log.FECHA_MONTAJE || '-'}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <User size={14} className="text-logisnext-lightslate" />
                           <span>{log.OPERARIO || '-'}</span>
                         </div>
                       </td>
-                      
+                      <td className="px-4 py-3 font-bold text-white">{log.NSECUENCIA || '-'}</td>
+                      <td className="px-4 py-3">{log.NMODELO || '-'}</td>
+                      <td className="px-4 py-3">{log.NBASTIDOR || '-'}</td>
+                      <td className="px-4 py-3">{log.NMASTIL || '-'}</td>
                       <td className="px-4 py-3 font-mono">{log.ALTURA_MAX_INTERMEDIA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono">{log.CARGA_CONSIGNADA ?? '-'}</td>
-
-                      <td className="px-4 py-3"><StatusBadge status={log.ESTADO_MULTILOAD} /></td>
                       <td className="px-4 py-3 font-mono">{log.ALTURA_CAPTADA ?? '-'}</td>
-
-                      <td className="px-4 py-3"><StatusBadge status={log.ESTADO_SINCARGA} /></td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_INICIO_MULTILOAD ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_FIN_MULTILOAD ?? '-'}</td>
+                      <td className="px-4 py-3"><StatusBadge status={log.ESTADO_MULTILOAD} /></td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{log.TIEMPO_ELEVACION_MIN_SINCARGA ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{log.TIEMPO_ELEVACION_MAX_SINCARGA ?? '-'}</td>
                       <td className="px-4 py-3 font-mono">{log.TIEMPO_ELEVACION_MEDIDO_SINCARGA ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{log.TIEMPO_DESCENSO_MIN_SINCARGA ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{log.TIEMPO_DESCENSO_MAX_SINCARGA ?? '-'}</td>
                       <td className="px-4 py-3 font-mono">{log.TIEMPO_DESCENSO_MEDIDO_SINCARGA ?? '-'}</td>
-
-                      <td className="px-4 py-3"><StatusBadge status={log.ESTADO_DESCENSO_CARGA} /></td>
-                      <td className="px-4 py-3 font-mono">{log.CARGA_GET ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_INICIO_SINCARGA ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_FIN_SINCARGA ?? '-'}</td>
+                      <td className="px-4 py-3"><StatusBadge status={log.ESTADO_SINCARGA} /></td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{log.TIEMPO_ELEVACION_MIN_CARGA ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{log.TIEMPO_ELEVACION_MAX_CARGA ?? '-'}</td>
                       <td className="px-4 py-3 font-mono">{log.TIEMPO_ELEVACION_MEDIDO_CARGA ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{log.TIEMPO_DESCENSO_MIN_CARGA ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{log.TIEMPO_DESCENSO_MAX_CARGA ?? '-'}</td>
                       <td className="px-4 py-3 font-mono">{log.TIEMPO_DESCENSO_MEDIDO_CARGA ?? '-'}</td>
-
-                      <td className="px-4 py-3"><StatusBadge status={log.ESTADO_CARGA_5_MIN} /></td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_INICIO_CARGA ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_FIN_CARGA ?? '-'}</td>
+                      <td className="px-4 py-3"><StatusBadge status={log.ESTADO_DESCENSO_CARGA} /></td>
+                      <td className="px-4 py-3 font-mono">{log.CARGA_CONSIGNADA ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono">{log.CARGA_GET ?? '-'}</td>
                       <td className="px-4 py-3 font-mono">{log.ALTURA_INICIAL ?? '-'}</td>
                       <td className="px-4 py-3 font-mono">{log.ALTURA_FINAL ?? '-'}</td>
                       <td className="px-4 py-3 font-mono text-yellow-500">{log.DIFERENCIA_ALTURAS ?? '-'}</td>
-
-                      <td className="px-4 py-3 flex justify-center sticky right-0 bg-inherit shadow-[-5px_0_10px_rgba(0,0,0,0.2)]">
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_INICIO_5MIN ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_FIN_5MIN ?? '-'}</td>
+                      <td className="px-4 py-3"><StatusBadge status={log.ESTADO_CARGA_5_MIN} /></td>
+                      <td className="px-4 py-3 font-mono">{log.REPETICIONES_SECUENCIA ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_INICIO_SEC ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_FIN_SEC ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono font-bold text-logisnext-magenta">{getDuration(log.FECHA_HORA_INICIO_SEC, log.FECHA_HORA_FIN_SEC)}</td>
+                      <td className="px-4 py-3 flex justify-center sticky right-0 bg-inherit shadow-[-5px_0_10px_rgba(0,0,0,0.2)] z-10">
                         <GlobalStatusBadge status={log.OK_NOK} />
                       </td>
                     </tr>

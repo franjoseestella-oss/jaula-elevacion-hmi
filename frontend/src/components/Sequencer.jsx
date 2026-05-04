@@ -415,51 +415,46 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
     const logData = {
       FECHA_MONTAJE: erp?.fecha_montaje,
+      OPERARIO: operario ? `${operario.NOMBRE || ''} ${operario.APELLIDOS || ''}`.trim() : 'Desconocido',
       NSECUENCIA: erp?.secuencia,
       NMODELO: erp?.modelo,
       NBASTIDOR: erp?.bastidor,
       NMASTIL: erp?.mastil,
       ALTURA_MAX_INTERMEDIA: erp?.altura_max_interm,
-      CARGA_CONSIGNADA: erp?.capac_interm_1,
-      TIEMPO_ELEVACION_MIN_SINCARGA: erp?.tpo_elev_min_scarga,
-      TIEMPO_ELEVACION_MAX_SINCARGA: erp?.tpo_elev_max_scarga,
-      TIEMPO_DESCENSO_MIN_SINCARGA: erp?.tpo_desc_min_scarga,
-      TIEMPO_DESCENSO_MAX_SINCARGA: erp?.tpo_desc_max_scarga,
-      TIEMPO_ELEVACION_MIN_CARGA: erp?.tpo_elevac_min,
-      TIEMPO_ELEVACION_MAX_CARGA: erp?.tpo_elevac_max,
-      TIEMPO_DESCENSO_MIN_CARGA: erp?.tpo_descenso_min,
-      TIEMPO_DESCENSO_MAX_CARGA: erp?.tpo_descenso_max,
-
       ALTURA_CAPTADA: pegatinaPosicion,
       FECHA_HORA_INICIO_MULTILOAD: stepStartTime[1] ? new Date(stepStartTime[1]).toLocaleString() : null,
       FECHA_HORA_FIN_MULTILOAD: stepStartTime[1] && stepDurations[1] ? new Date(stepStartTime[1] + stepDurations[1] * 1000).toLocaleString() : null,
       ESTADO_MULTILOAD: stepStatus[1] === STEP_STATUS.OK ? 'OK' : (stepStatus[1] === STEP_STATUS.SKIP ? 'NO APLICA' : 'NOK'),
-
+      TIEMPO_ELEVACION_MIN_SINCARGA: erp?.tpo_elev_min_scarga,
+      TIEMPO_ELEVACION_MAX_SINCARGA: erp?.tpo_elev_max_scarga,
       TIEMPO_ELEVACION_MEDIDO_SINCARGA: sData[3].elev,
+      TIEMPO_DESCENSO_MIN_SINCARGA: erp?.tpo_desc_min_scarga,
+      TIEMPO_DESCENSO_MAX_SINCARGA: erp?.tpo_desc_max_scarga,
       TIEMPO_DESCENSO_MEDIDO_SINCARGA: sData[3].desc,
       FECHA_HORA_INICIO_SINCARGA: stepStartTime[2] ? new Date(stepStartTime[2]).toLocaleString() : null,
       FECHA_HORA_FIN_SINCARGA: stepStartTime[2] && stepDurations[2] ? new Date(stepStartTime[2] + stepDurations[2] * 1000).toLocaleString() : null,
       ESTADO_SINCARGA: stepStatus[2] === STEP_STATUS.OK ? 'OK' : (stepStatus[2] === STEP_STATUS.SKIP ? 'NO APLICA' : 'NOK'),
-
+      TIEMPO_ELEVACION_MIN_CARGA: erp?.tpo_elevac_min,
+      TIEMPO_ELEVACION_MAX_CARGA: erp?.tpo_elevac_max,
       TIEMPO_ELEVACION_MEDIDO_CARGA: sData[4].elev,
+      TIEMPO_DESCENSO_MIN_CARGA: erp?.tpo_descenso_min,
+      TIEMPO_DESCENSO_MAX_CARGA: erp?.tpo_descenso_max,
       TIEMPO_DESCENSO_MEDIDO_CARGA: sData[4].desc,
       FECHA_HORA_INICIO_CARGA: stepStartTime[3] ? new Date(stepStartTime[3]).toLocaleString() : null,
       FECHA_HORA_FIN_CARGA: stepStartTime[3] && stepDurations[3] ? new Date(stepStartTime[3] + stepDurations[3] * 1000).toLocaleString() : null,
       ESTADO_DESCENSO_CARGA: stepStatus[3] === STEP_STATUS.OK ? 'OK' : (stepStatus[3] === STEP_STATUS.SKIP ? 'NO APLICA' : 'NOK'),
+      CARGA_CONSIGNADA: erp?.capac_interm_1,
       CARGA_GET: sData[4].cargaGet,
-
       ALTURA_INICIAL: sData[5].altura_inicial,
       ALTURA_FINAL: sData[5].altura_final,
       DIFERENCIA_ALTURAS: sData[5].diff,
       FECHA_HORA_INICIO_5MIN: stepStartTime[4] ? new Date(stepStartTime[4]).toLocaleString() : null,
       FECHA_HORA_FIN_5MIN: stepStartTime[4] && stepDurations[4] ? new Date(stepStartTime[4] + stepDurations[4] * 1000).toLocaleString() : null,
       ESTADO_CARGA_5_MIN: stepStatus[4] === STEP_STATUS.OK ? 'OK' : (stepStatus[4] === STEP_STATUS.SKIP ? 'NO APLICA' : 'NOK'),
-
       OK_NOK: globalStatus,
       REPETICIONES_SECUENCIA: 1,
       FECHA_HORA_INICIO_SEC: new Date(startSec).toLocaleString(),
-      FECHA_HORA_FIN_SEC: new Date(endSec).toLocaleString(),
-      OPERARIO: operario ? `${operario.NOMBRE || ''} ${operario.APELLIDOS || ''}`.trim() : 'Desconocido'
+      FECHA_HORA_FIN_SEC: new Date(endSec).toLocaleString()
     };
 
     try {
@@ -481,6 +476,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       4: { elev: null, desc: null, cargaGet: null },
       5: { altura_inicial: null, altura_final: null, diff: null }
     };
+    stepInitRef.current = {};
     setPegatinaPosicion(null);
     setSeqInput('');
     setSeqError('');
@@ -488,6 +484,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     setManualDigits('');
     setTimer5min(null);
     setTest5mState('idle');
+    setCameraTestState('standby');
+    setTestAlarm(null);
+    setWaitCountdown(null);
+    setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
     if (setStep2Overlay) setStep2Overlay(null);
     if (setPalletState) setPalletState('idle');
     if (onErpData) onErpData(null);
@@ -1237,7 +1237,14 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           </div>
           <div className="flex flex-col">
             <h2 className="font-black text-white uppercase tracking-widest text-sm">SECUENCIA</h2>
-            <span className="text-[9px] text-logisnext-lightslate font-bold uppercase tracking-widest">Protocolo de Prueba</span>
+            <span className="text-[9px] text-logisnext-lightslate font-bold uppercase tracking-widest">
+              Protocolo de Prueba
+            </span>
+            {operario && (
+              <span className="text-[9px] text-logisnext-magenta font-black uppercase tracking-widest mt-0.5">
+                Op: {`${operario.NOMBRE || ''} ${operario.APELLIDOS || ''}`.trim()}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">
