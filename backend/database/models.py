@@ -96,10 +96,10 @@ class LogTabla(Base):
     ESTADO_CARGA_5_MIN = Column(String(20), nullable=True)
 
     # 6. Final
-    OK_NOK = Column(String(20), nullable=True)
     REPETICIONES_SECUENCIA = Column(Integer, nullable=True)
     FECHA_HORA_INICIO_SEC = Column(String(50), nullable=True)
     FECHA_HORA_FIN_SEC = Column(String(50), nullable=True)
+    OK_NOK = Column(String(20), nullable=True)
 
     fecha_creacion = Column(DateTime(timezone=True), server_default=func.now())
 

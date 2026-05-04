@@ -451,10 +451,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       FECHA_HORA_INICIO_5MIN: stepStartTime[4] ? new Date(stepStartTime[4]).toLocaleString() : null,
       FECHA_HORA_FIN_5MIN: stepStartTime[4] && stepDurations[4] ? new Date(stepStartTime[4] + stepDurations[4] * 1000).toLocaleString() : null,
       ESTADO_CARGA_5_MIN: stepStatus[4] === STEP_STATUS.OK ? 'OK' : (stepStatus[4] === STEP_STATUS.SKIP ? 'NO APLICA' : 'NOK'),
-      OK_NOK: globalStatus,
       REPETICIONES_SECUENCIA: 1,
       FECHA_HORA_INICIO_SEC: new Date(startSec).toLocaleString(),
-      FECHA_HORA_FIN_SEC: new Date(endSec).toLocaleString()
+      FECHA_HORA_FIN_SEC: new Date(endSec).toLocaleString(),
+      OK_NOK: globalStatus
     };
 
     try {
