@@ -62,3 +62,7 @@ def create_log(db: Session, log_data: dict) -> LogTabla:
 def get_logs(db: Session, skip: int = 0, limit: int = 200) -> List[LogTabla]:
     """Obtiene el historial de LOG_TABLA."""
     return db.query(LogTabla).order_by(LogTabla.id.desc()).offset(skip).limit(limit).all()
+
+def get_last_log_for_bastidor(db: Session, bastidor: str) -> Optional[LogTabla]:
+    """Obtiene el último registro de LOG_TABLA para un bastidor."""
+    return db.query(LogTabla).filter(LogTabla.NBASTIDOR == bastidor).order_by(LogTabla.id.desc()).first()

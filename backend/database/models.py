@@ -49,8 +49,8 @@ class LogTabla(Base):
     id = Column(Integer, primary_key=True, index=True)
     
     # 1. Identificación y Generales
-    FECHA_MONTAJE = Column(String(20), nullable=True)
     OPERARIO = Column(String(100), nullable=True)
+    FECHA_MONTAJE = Column(String(20), nullable=True)
     NSECUENCIA = Column(String(20), nullable=True)
     NMODELO = Column(String(50), nullable=True)
     NBASTIDOR = Column(String(100), nullable=True)
@@ -83,7 +83,7 @@ class LogTabla(Base):
     TIEMPO_DESCENSO_MEDIDO_CARGA = Column(Float, nullable=True)
     FECHA_HORA_INICIO_CARGA = Column(String(50), nullable=True)
     FECHA_HORA_FIN_CARGA = Column(String(50), nullable=True)
-    ESTADO_DESCENSO_CARGA = Column(String(20), nullable=True)
+    ESTADO_CARGA = Column(String(20), nullable=True)
     CARGA_CONSIGNADA = Column(Float, nullable=True)
     CARGA_GET = Column(Float, nullable=True)
 
@@ -99,6 +99,7 @@ class LogTabla(Base):
     REPETICIONES_SECUENCIA = Column(Integer, nullable=True)
     FECHA_HORA_INICIO_SEC = Column(String(50), nullable=True)
     FECHA_HORA_FIN_SEC = Column(String(50), nullable=True)
+    DURACION_SEC = Column(String(50), nullable=True)
     OK_NOK = Column(String(20), nullable=True)
 
     fecha_creacion = Column(DateTime(timezone=True), server_default=func.now())

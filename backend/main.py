@@ -564,6 +564,19 @@ def read_logs(skip: int = 0, limit: int = 200, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/logs/bastidor/{bastidor}")
+def read_last_log_for_bastidor(bastidor: str, db: Session = Depends(get_db)):
+    try:
+        from database.crud import get_last_log_for_bastidor
+        log = get_last_log_for_bastidor(db, bastidor)
+        if not log:
+            raise HTTPException(status_code=404, detail="Log not found")
+        return log
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ─────────────────────────────────────────────────────────────
 # Health check
 # ─────────────────────────────────────────────────────────────

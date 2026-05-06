@@ -10,7 +10,7 @@ const API_BASE = 'http://localhost:8001';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const ds2s = (v) => (v != null ? `${(v / 100).toFixed(2).replace('.', ',')} s` : '—');
+const ds2s = (v) => (v != null ? `${(v / 10).toFixed(1).replace('.', ',')} s` : '—');
 const formatDuration = (secs) => {
   if (secs == null) return '—';
   if (secs < 60) return `${secs} s`;
@@ -231,6 +231,13 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   const [simTimers, setSimTimers] = useState({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
   const [waitCountdown, setWaitCountdown] = useState(null); // cuenta atrás 3-2-1 en espera_arriba
 
+  // Modal para repetir prueba
+  const [repeatModal, setRepeatModal] = useState({
+    show: false,
+    log: null,
+    selections: [true, true, true, true]
+  });
+
   // ── Temporizadores simulados basados en altura (window.__carriageY) ──
   useEffect(() => {
     if (!isSimulation) return;
@@ -315,7 +322,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           if (prev.finishedElev) return prev;
           if (h >= 1.5) {
             if (!tStartElev) tStartElev = Date.now();
-            return { ...prev, elev: Math.floor((Date.now() - tStartElev) / 10) };
+            return { ...prev, elev: Math.floor((Date.now() - tStartElev) / 100) };
           }
           return prev;
         });
@@ -343,7 +350,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       } else if (cameraTestState === 'descenso') {
         // ── Descenso completado: h vuelve a bajar de 1.5m ─────────────────
         if (h <= 1.5 && !simTimers.finishedDesc) {
-          const elapsed = tStartDesc ? Math.floor((Date.now() - tStartDesc) / 10) : 0;
+          const elapsed = tStartDesc ? Math.floor((Date.now() - tStartDesc) / 100) : 0;
           // Leer tolerancias ERP
           const isSinCarga = currentStep === 2;
           const minElev = isSinCarga ? erpData?.tpo_elev_min_scarga : erpData?.tpo_elevac_min;
@@ -363,7 +370,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           setSimTimers(prev => {
             if (h <= 1.5 + testDist) {
               if (!tStartDesc) tStartDesc = Date.now();
-              return { ...prev, desc: Math.floor((Date.now() - tStartDesc) / 10) };
+              return { ...prev, desc: Math.floor((Date.now() - tStartDesc) / 100) };
             }
             return prev;
           });
@@ -407,54 +414,80 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   }, []);
 
   // ── Guardar Log Global ────────────────────────────────────────────────────
-  const saveLog = async (globalStatus) => {
+  const saveLog = async (overrideStatus) => {
     const startSec = stepStartTime[0] || Date.now();
     const endSec = Date.now();
     const erp = erpDataRef.current;
     const sData = stageDataRef.current;
 
+    // Calcular estados basados en tiempos para la Etapa 3 (Sin Carga)
+    const elevSin = sData[3].elev;
+    const descSin = sData[3].desc;
+    const okElevSin = elevSin !== null && elevSin !== undefined && elevSin >= (erp?.tpo_elev_min_scarga || 0) && elevSin <= (erp?.tpo_elev_max_scarga || 9999);
+    const okDescSin = descSin !== null && descSin !== undefined && descSin >= (erp?.tpo_desc_min_scarga || 0) && descSin <= (erp?.tpo_desc_max_scarga || 9999);
+    let estadoSinCarga = stepStatus[2] === STEP_STATUS.SKIP ? 'NO APLICA' : (okElevSin && okDescSin ? 'OK' : 'NOK');
+    if (stepStatus[2] === STEP_STATUS.ACTIVE || stepStatus[2] === STEP_STATUS.PENDING) estadoSinCarga = 'NO COMPLETADO';
+
+    // Calcular estados basados en tiempos para la Etapa 4 (Con Carga)
+    const elevCar = sData[4].elev;
+    const descCar = sData[4].desc;
+    const okElevCar = elevCar !== null && elevCar !== undefined && elevCar >= (erp?.tpo_elevac_min || 0) && elevCar <= (erp?.tpo_elevac_max || 9999);
+    const okDescCar = descCar !== null && descCar !== undefined && descCar >= (erp?.tpo_descenso_min || 0) && descCar <= (erp?.tpo_descenso_max || 9999);
+    let estadoConCarga = stepStatus[3] === STEP_STATUS.SKIP ? 'NO APLICA' : (okElevCar && okDescCar ? 'OK' : 'NOK');
+    if (stepStatus[3] === STEP_STATUS.ACTIVE || stepStatus[3] === STEP_STATUS.PENDING) estadoConCarga = 'NO COMPLETADO';
+
+    const estadoMultiload = stepStatus[1] === STEP_STATUS.OK ? 'OK' : (stepStatus[1] === STEP_STATUS.SKIP ? 'NO APLICA' : 'NOK');
+    const estado5Min = stepStatus[4] === STEP_STATUS.OK ? 'OK' : (stepStatus[4] === STEP_STATUS.SKIP ? 'NO APLICA' : 'NOK');
+
+    let calculatedStatus = 'OK';
+    if (estadoMultiload === 'NOK' || estadoSinCarga === 'NOK' || estadoConCarga === 'NOK' || estado5Min === 'NOK') {
+      calculatedStatus = 'NOK';
+    }
+    const finalGlobalStatus = overrideStatus === 'NOK' ? 'NOK' : calculatedStatus;
+
     const logData = {
-      FECHA_MONTAJE: erp?.fecha_montaje,
       OPERARIO: operario ? `${operario.NOMBRE || ''} ${operario.APELLIDOS || ''}`.trim() : 'Desconocido',
+      FECHA_MONTAJE: erp?.fecha_montaje,
       NSECUENCIA: erp?.secuencia,
       NMODELO: erp?.modelo,
       NBASTIDOR: erp?.bastidor,
       NMASTIL: erp?.mastil,
       ALTURA_MAX_INTERMEDIA: erp?.altura_max_interm,
       ALTURA_CAPTADA: pegatinaPosicion,
-      FECHA_HORA_INICIO_MULTILOAD: stepStartTime[1] ? new Date(stepStartTime[1]).toLocaleString() : null,
-      FECHA_HORA_FIN_MULTILOAD: stepStartTime[1] && stepDurations[1] ? new Date(stepStartTime[1] + stepDurations[1] * 1000).toLocaleString() : null,
-      ESTADO_MULTILOAD: stepStatus[1] === STEP_STATUS.OK ? 'OK' : (stepStatus[1] === STEP_STATUS.SKIP ? 'NO APLICA' : 'NOK'),
-      TIEMPO_ELEVACION_MIN_SINCARGA: erp?.tpo_elev_min_scarga,
-      TIEMPO_ELEVACION_MAX_SINCARGA: erp?.tpo_elev_max_scarga,
-      TIEMPO_ELEVACION_MEDIDO_SINCARGA: sData[3].elev,
-      TIEMPO_DESCENSO_MIN_SINCARGA: erp?.tpo_desc_min_scarga,
-      TIEMPO_DESCENSO_MAX_SINCARGA: erp?.tpo_desc_max_scarga,
-      TIEMPO_DESCENSO_MEDIDO_SINCARGA: sData[3].desc,
-      FECHA_HORA_INICIO_SINCARGA: stepStartTime[2] ? new Date(stepStartTime[2]).toLocaleString() : null,
-      FECHA_HORA_FIN_SINCARGA: stepStartTime[2] && stepDurations[2] ? new Date(stepStartTime[2] + stepDurations[2] * 1000).toLocaleString() : null,
-      ESTADO_SINCARGA: stepStatus[2] === STEP_STATUS.OK ? 'OK' : (stepStatus[2] === STEP_STATUS.SKIP ? 'NO APLICA' : 'NOK'),
-      TIEMPO_ELEVACION_MIN_CARGA: erp?.tpo_elevac_min,
-      TIEMPO_ELEVACION_MAX_CARGA: erp?.tpo_elevac_max,
-      TIEMPO_ELEVACION_MEDIDO_CARGA: sData[4].elev,
-      TIEMPO_DESCENSO_MIN_CARGA: erp?.tpo_descenso_min,
-      TIEMPO_DESCENSO_MAX_CARGA: erp?.tpo_descenso_max,
-      TIEMPO_DESCENSO_MEDIDO_CARGA: sData[4].desc,
-      FECHA_HORA_INICIO_CARGA: stepStartTime[3] ? new Date(stepStartTime[3]).toLocaleString() : null,
-      FECHA_HORA_FIN_CARGA: stepStartTime[3] && stepDurations[3] ? new Date(stepStartTime[3] + stepDurations[3] * 1000).toLocaleString() : null,
-      ESTADO_DESCENSO_CARGA: stepStatus[3] === STEP_STATUS.OK ? 'OK' : (stepStatus[3] === STEP_STATUS.SKIP ? 'NO APLICA' : 'NOK'),
+      FECHA_HORA_INICIO_MULTILOAD: stepStartTime[1] ? new Date(stepStartTime[1]).toISOString() : null,
+      FECHA_HORA_FIN_MULTILOAD: stepStartTime[1] && stepDurations[1] ? new Date(stepStartTime[1] + stepDurations[1] * 1000).toISOString() : null,
+      ESTADO_MULTILOAD: estadoMultiload,
+      TIEMPO_ELEVACION_MIN_SINCARGA: erp?.tpo_elev_min_scarga != null ? erp.tpo_elev_min_scarga / 10 : null,
+      TIEMPO_ELEVACION_MAX_SINCARGA: erp?.tpo_elev_max_scarga != null ? erp.tpo_elev_max_scarga / 10 : null,
+      TIEMPO_ELEVACION_MEDIDO_SINCARGA: sData[3].elev != null ? sData[3].elev / 10 : null,
+      TIEMPO_DESCENSO_MIN_SINCARGA: erp?.tpo_desc_min_scarga != null ? erp.tpo_desc_min_scarga / 10 : null,
+      TIEMPO_DESCENSO_MAX_SINCARGA: erp?.tpo_desc_max_scarga != null ? erp.tpo_desc_max_scarga / 10 : null,
+      TIEMPO_DESCENSO_MEDIDO_SINCARGA: sData[3].desc != null ? sData[3].desc / 10 : null,
+      FECHA_HORA_INICIO_SINCARGA: stepStartTime[2] ? new Date(stepStartTime[2]).toISOString() : null,
+      FECHA_HORA_FIN_SINCARGA: stepStartTime[2] && stepDurations[2] ? new Date(stepStartTime[2] + stepDurations[2] * 1000).toISOString() : null,
+      ESTADO_SINCARGA: estadoSinCarga,
+      TIEMPO_ELEVACION_MIN_CARGA: erp?.tpo_elevac_min != null ? erp.tpo_elevac_min / 10 : null,
+      TIEMPO_ELEVACION_MAX_CARGA: erp?.tpo_elevac_max != null ? erp.tpo_elevac_max / 10 : null,
+      TIEMPO_ELEVACION_MEDIDO_CARGA: sData[4].elev != null ? sData[4].elev / 10 : null,
+      TIEMPO_DESCENSO_MIN_CARGA: erp?.tpo_descenso_min != null ? erp.tpo_descenso_min / 10 : null,
+      TIEMPO_DESCENSO_MAX_CARGA: erp?.tpo_descenso_max != null ? erp.tpo_descenso_max / 10 : null,
+      TIEMPO_DESCENSO_MEDIDO_CARGA: sData[4].desc != null ? sData[4].desc / 10 : null,
+      FECHA_HORA_INICIO_CARGA: stepStartTime[3] ? new Date(stepStartTime[3]).toISOString() : null,
+      FECHA_HORA_FIN_CARGA: stepStartTime[3] && stepDurations[3] ? new Date(stepStartTime[3] + stepDurations[3] * 1000).toISOString() : null,
+      ESTADO_CARGA: estadoConCarga,
       CARGA_CONSIGNADA: erp?.capac_interm_1,
       CARGA_GET: sData[4].cargaGet,
       ALTURA_INICIAL: sData[5].altura_inicial,
       ALTURA_FINAL: sData[5].altura_final,
       DIFERENCIA_ALTURAS: sData[5].diff,
-      FECHA_HORA_INICIO_5MIN: stepStartTime[4] ? new Date(stepStartTime[4]).toLocaleString() : null,
-      FECHA_HORA_FIN_5MIN: stepStartTime[4] && stepDurations[4] ? new Date(stepStartTime[4] + stepDurations[4] * 1000).toLocaleString() : null,
-      ESTADO_CARGA_5_MIN: stepStatus[4] === STEP_STATUS.OK ? 'OK' : (stepStatus[4] === STEP_STATUS.SKIP ? 'NO APLICA' : 'NOK'),
+      FECHA_HORA_INICIO_5MIN: stepStartTime[4] ? new Date(stepStartTime[4]).toISOString() : null,
+      FECHA_HORA_FIN_5MIN: stepStartTime[4] && stepDurations[4] ? new Date(stepStartTime[4] + stepDurations[4] * 1000).toISOString() : null,
+      ESTADO_CARGA_5_MIN: estado5Min,
       REPETICIONES_SECUENCIA: 1,
-      FECHA_HORA_INICIO_SEC: new Date(startSec).toLocaleString(),
-      FECHA_HORA_FIN_SEC: new Date(endSec).toLocaleString(),
-      OK_NOK: globalStatus
+      FECHA_HORA_INICIO_SEC: new Date(startSec).toISOString(),
+      FECHA_HORA_FIN_SEC: new Date(endSec).toISOString(),
+      DURACION_SEC: formatDuration(Math.floor((endSec - startSec) / 1000)),
+      OK_NOK: finalGlobalStatus
     };
 
     try {
@@ -501,13 +534,70 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
   // ── Auto-Avanzar PASO 1 si se carga desde ERP Modal ───────────────
   useEffect(() => {
-    if (erpData && stepStatus[0] === STEP_STATUS.ACTIVE) {
-      setScannedSeq(null);
-      setSeqError('');
-      markOk(0); // Avanzar a Paso 2 (Iniciar prueba)
+    const initErpSequence = async () => {
+      if (erpData && stepStatus[0] === STEP_STATUS.ACTIVE) {
+        setScannedSeq(null);
+        setSeqError('');
 
-    }
-  }, [erpData, stepStatus, plcState]);
+        let skip1 = false, skip2 = false, skip3 = false, skip4 = false;
+
+        try {
+          const res = await fetch(`${API_BASE}/api/logs/bastidor/${encodeURIComponent(erpData.bastidor)}`);
+          if (res.ok) {
+            const log = await res.json();
+            if (log) {
+               // Mostrar modal para seleccionar qué repetir
+               setRepeatModal({
+                 show: true,
+                 log: log,
+                 selections: [
+                   log.ESTADO_MULTILOAD !== 'OK',
+                   log.ESTADO_SINCARGA !== 'OK',
+                   log.ESTADO_CARGA !== 'OK',
+                   log.ESTADO_CARGA_5_MIN !== 'OK'
+                 ]
+               });
+               return; // Detenemos aquí, el usuario debe confirmar el modal
+            }
+          }
+        } catch (e) {
+          console.error("Error fetching previous log", e);
+        }
+
+        // Si no hay log anterior, avanzamos normalmente
+        setStepStatus(prev => {
+          const next = [...prev];
+          next[0] = STEP_STATUS.OK;
+          next[1] = STEP_STATUS.ACTIVE;
+          return next;
+        });
+      }
+    };
+    
+    initErpSequence();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [erpData, plcState]);
+
+  const handleRepeatConfirm = () => {
+    setStepStatus(prev => {
+      const next = [...prev];
+      next[0] = STEP_STATUS.OK; // Paso 1 completado
+      next[1] = repeatModal.selections[0] ? STEP_STATUS.PENDING : STEP_STATUS.SKIP;
+      next[2] = repeatModal.selections[1] ? STEP_STATUS.PENDING : STEP_STATUS.SKIP;
+      next[3] = repeatModal.selections[2] ? STEP_STATUS.PENDING : STEP_STATUS.SKIP;
+      next[4] = repeatModal.selections[3] ? STEP_STATUS.PENDING : STEP_STATUS.SKIP;
+      
+      // Buscar el siguiente paso que deba estar activo
+      for (let i = 1; i < next.length; i++) {
+        if (next[i] === STEP_STATUS.PENDING) {
+          next[i] = STEP_STATUS.ACTIVE;
+          break;
+        }
+      }
+      return next;
+    });
+    setRepeatModal({ ...repeatModal, show: false });
+  };
 
   // ── Abortar prueba en curso si se abre la jaula ───────────────
   useEffect(() => {
@@ -805,13 +895,17 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
     // Guardar telemetría de fin de etapa según índice
     const pState = plcStateRef.current;
+    const simTimes = simTimersRef.current;
     if (idx === 2) { // Fin Etapa 3 (Sin Carga)
-      stageDataRef.current[3] = { elev: pState?.OW_Tiempo_Elevacion, desc: pState?.OW_Tiempo_Descenso };
+      stageDataRef.current[3] = { 
+        elev: isSimulation ? simTimes.elev : pState?.OW_Tiempo_Elevacion, 
+        desc: isSimulation ? simTimes.desc : pState?.OW_Tiempo_Descenso 
+      };
     } else if (idx === 3) { // Fin Etapa 4 (Con Carga)
       stageDataRef.current[4] = {
-        elev: pState?.OW_Tiempo_Elevacion,
-        desc: pState?.OW_Tiempo_Descenso,
-        cargaGet: pState?.Ob_Palets_Carga ? pState.Ob_Palets_Carga * 250 : null
+        elev: isSimulation ? simTimes.elev : pState?.OW_Tiempo_Elevacion,
+        desc: isSimulation ? simTimes.desc : pState?.OW_Tiempo_Descenso,
+        cargaGet: pState?.OW_Pallet ? pState.OW_Pallet * 250 : null
       };
     } else if (idx === 4) { // Fin Etapa 5 (5 min)
       stageDataRef.current[5].altura_final = pState?.OW_Altura_Elevacion;
@@ -853,12 +947,15 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   const erpDataRef = useRef(erpData);
   const toleranciasRef = useRef(tolerancias);
   const plcStateRef = useRef(plcState);
+  const simTimersRef = useRef(simTimers);
+
   useEffect(() => { stepStatusRef.current = stepStatus; }, [stepStatus]);
   useEffect(() => { stepStartedRef.current = stepStarted; }, [stepStarted]);
   useEffect(() => { currentStepRef.current = currentStep; }, [currentStep]);
   useEffect(() => { erpDataRef.current = erpData; }, [erpData]);
   useEffect(() => { toleranciasRef.current = tolerancias; }, [tolerancias]);
   useEffect(() => { plcStateRef.current = plcState; }, [plcState]);
+  useEffect(() => { simTimersRef.current = simTimers; }, [simTimers]);
 
   // Registrar timestamp de inicio cuando un paso se activa
   useEffect(() => {
@@ -1884,6 +1981,56 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           ))}
         </div>
       </div>
+
+      {/* ── Modal de Repetición ────────────────────────────────────────── */}
+      {repeatModal.show && (
+        <div className="absolute inset-0 bg-[#0d1a20]/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-6 text-center animate-in fade-in">
+          <div className="w-full bg-[#1d2930] rounded-xl border border-[#2e404a] shadow-2xl p-5">
+            <div className="flex justify-center mb-3">
+              <div className="w-10 h-10 bg-yellow-500/20 rounded-full flex items-center justify-center text-yellow-400">
+                <AlertTriangle size={20} />
+              </div>
+            </div>
+            <h3 className="text-white text-xs font-black tracking-widest uppercase mb-1">
+              Secuencia Repetida
+            </h3>
+            <p className="text-[10px] text-logisnext-slate mb-4 leading-relaxed">
+              El bastidor <span className="text-logisnext-magenta font-mono">{erpData?.bastidor}</span> ya fue probado.<br/><br/>
+              Selecciona qué etapas repetir (las no superadas se marcan por defecto).
+            </p>
+            
+            <div className="space-y-2 mb-5 text-left bg-[#0a0f12] p-3 rounded-lg border border-[#2e404a]">
+              {[
+                { label: 'Paso 2: Multiload', idx: 0, old: repeatModal.log?.ESTADO_MULTILOAD },
+                { label: 'Paso 3: Sin Carga', idx: 1, old: repeatModal.log?.ESTADO_SINCARGA },
+                { label: 'Paso 4: Con Carga', idx: 2, old: repeatModal.log?.ESTADO_CARGA },
+                { label: 'Paso 5: Prueba 5M', idx: 3, old: repeatModal.log?.ESTADO_CARGA_5_MIN },
+              ].map(item => (
+                <label key={item.idx} className={`flex items-center gap-2 text-[10px] uppercase font-bold tracking-wider cursor-pointer p-1.5 rounded transition-colors ${repeatModal.selections[item.idx] ? 'bg-logisnext-magenta/10 text-white border border-logisnext-magenta/30' : 'text-logisnext-slate border border-transparent hover:bg-[#1d2930]'}`}>
+                  <input 
+                    type="checkbox" 
+                    checked={repeatModal.selections[item.idx]} 
+                    onChange={() => {
+                      const newSels = [...repeatModal.selections];
+                      newSels[item.idx] = !newSels[item.idx];
+                      setRepeatModal(prev => ({ ...prev, selections: newSels }));
+                    }}
+                    className="accent-logisnext-magenta w-3 h-3 cursor-pointer"
+                  />
+                  {item.label}
+                  <span className={`ml-auto text-[8px] font-mono px-1 rounded ${item.old === 'OK' ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400'}`}>
+                    {item.old || 'PEND'}
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <ActionBtn onClick={handleRepeatConfirm} variant="primary">
+              Continuar <CheckCircle2 size={12} className="ml-1" />
+            </ActionBtn>
+          </div>
+        </div>
+      )}
     </aside>
   );
 };

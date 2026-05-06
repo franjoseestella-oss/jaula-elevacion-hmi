@@ -338,9 +338,9 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
                   onClick={() => setDetalle(item)}
                   className={`grid gap-0 px-4 py-2.5 border-b cursor-pointer transition-all group ${
                     item.estado_prueba === 'FINALIZADO_OK'
-                      ? 'bg-green-900/10 border-green-500/30 hover:bg-green-900/20'
+                      ? 'bg-green-600/30 border-green-500/80 hover:bg-green-500/50 shadow-[inset_4px_0_0_rgba(34,197,94,1)]'
                       : item.estado_prueba === 'ERROR'
-                      ? 'bg-red-900/10 border-red-500/30 hover:bg-red-900/20'
+                      ? 'bg-red-600/30 border-red-500/80 hover:bg-red-500/50 shadow-[inset_4px_0_0_rgba(239,68,68,1)]'
                       : 'border-[#1a262d]/60 hover:bg-logisnext-magenta/5 hover:border-logisnext-magenta/20'
                   }`}
                   style={{ gridTemplateColumns: '1.6fr 0.7fr 1.2fr 0.9fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 40px' }}

@@ -3,6 +3,18 @@ import { X, RefreshCw, FileText, Download, Activity, Clock, User, CheckCircle2, 
 
 const API_BASE = 'http://localhost:8001';
 
+const formatNumber = (val) => {
+  if (val === null || val === undefined || val === '') return '-';
+  return String(val).replace('.', ',');
+};
+
+const formatDateToLocalString = (dateStr) => {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  if (!isNaN(d)) return d.toLocaleString();
+  return dateStr; // fallback to raw
+};
+
 const LogViewer = ({ isOpen, onClose }) => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,15 +30,21 @@ const LogViewer = ({ isOpen, onClose }) => {
 
   const parseLocalDate = (dateStr) => {
     if (!dateStr) return null;
-    const parts = dateStr.split(', ');
-    if (parts.length === 2) {
+    
+    // Attempt standard parse first
+    const d = new Date(dateStr);
+    if (!isNaN(d)) return d;
+
+    const parts = dateStr.split(/, | /);
+    if (parts.length >= 2) {
       const dateSplits = parts[0].split('/');
       if (dateSplits.length === 3) {
-        return new Date(`${dateSplits[2]}-${dateSplits[1].padStart(2, '0')}-${dateSplits[0].padStart(2, '0')}T${parts[1]}`);
+        const isoStr = `${dateSplits[2]}-${dateSplits[1].padStart(2, '0')}-${dateSplits[0].padStart(2, '0')}T${parts[1]}`;
+        const d2 = new Date(isoStr);
+        if (!isNaN(d2)) return d2;
       }
     }
-    const d = new Date(dateStr);
-    return isNaN(d) ? null : d;
+    return null;
   };
 
   const getDuration = (start, end) => {
@@ -221,8 +239,8 @@ const LogViewer = ({ isOpen, onClose }) => {
                 <thead className="text-[10px] uppercase bg-[#151f25] text-logisnext-lightslate font-black tracking-wider whitespace-nowrap select-none">
                   <tr>
                     {renderTh("ID", "id")}
-                    {renderTh("F. Montaje", "FECHA_MONTAJE")}
                     {renderTh("Operario", "OPERARIO")}
+                    {renderTh("F. Montaje", "FECHA_MONTAJE")}
                     {renderTh("Secuencia", "NSECUENCIA")}
                     {renderTh("Modelo", "NMODELO")}
                     {renderTh("Bastidor", "NBASTIDOR")}
@@ -249,7 +267,7 @@ const LogViewer = ({ isOpen, onClose }) => {
                     {renderTh("Desc. Med CC", "TIEMPO_DESCENSO_MEDIDO_CARGA")}
                     {renderTh("Ini C/Carga", "FECHA_HORA_INICIO_CARGA")}
                     {renderTh("Fin C/Carga", "FECHA_HORA_FIN_CARGA")}
-                    {renderTh("Est. C/Carga", "ESTADO_DESCENSO_CARGA")}
+                    {renderTh("Est. C/Carga", "ESTADO_CARGA")}
                     {renderTh("Carga ERP", "CARGA_CONSIGNADA")}
                     {renderTh("Carga Get", "CARGA_GET")}
                     {renderTh("Alt. Inicial 5M", "ALTURA_INICIAL")}
@@ -261,7 +279,7 @@ const LogViewer = ({ isOpen, onClose }) => {
                     {renderTh("Reps", "REPETICIONES_SECUENCIA")}
                     {renderTh("Ini Sec.", "FECHA_HORA_INICIO_SEC")}
                     {renderTh("Fin Sec.", "FECHA_HORA_FIN_SEC")}
-                    {renderTh("Duración Sec.", "FECHA_HORA_INICIO_SEC", "text-logisnext-magenta")}
+                    {renderTh("Duración Sec.", "DURACION_SEC", "text-logisnext-magenta")}
                     <th className="px-4 py-4 border-b border-[#2e404a] text-center sticky right-0 bg-[#151f25] shadow-[-5px_0_10px_rgba(0,0,0,0.5)] z-10 cursor-pointer hover:bg-[#1d2930] transition-colors" onClick={() => handleSort('OK_NOK')}>
                       <div className="flex items-center justify-center gap-2">
                         <span>Estado Global</span>
@@ -278,52 +296,52 @@ const LogViewer = ({ isOpen, onClose }) => {
                   {sortedLogs.map((log) => (
                     <tr key={log.id} className="hover:bg-[#151f25] transition-colors">
                       <td className="px-4 py-3 font-mono text-xs">{log.id}</td>
-                      <td className="px-4 py-3">{log.FECHA_MONTAJE || '-'}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <User size={14} className="text-logisnext-lightslate" />
                           <span>{log.OPERARIO || '-'}</span>
                         </div>
                       </td>
+                      <td className="px-4 py-3">{log.FECHA_MONTAJE || '-'}</td>
                       <td className="px-4 py-3 font-bold text-white">{log.NSECUENCIA || '-'}</td>
                       <td className="px-4 py-3">{log.NMODELO || '-'}</td>
                       <td className="px-4 py-3">{log.NBASTIDOR || '-'}</td>
                       <td className="px-4 py-3">{log.NMASTIL || '-'}</td>
-                      <td className="px-4 py-3 font-mono">{log.ALTURA_MAX_INTERMEDIA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono">{log.ALTURA_CAPTADA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_INICIO_MULTILOAD ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_FIN_MULTILOAD ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono">{formatNumber(log.ALTURA_MAX_INTERMEDIA)}</td>
+                      <td className="px-4 py-3 font-mono">{formatNumber(log.ALTURA_CAPTADA)}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{formatDateToLocalString(log.FECHA_HORA_INICIO_MULTILOAD)}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{formatDateToLocalString(log.FECHA_HORA_FIN_MULTILOAD)}</td>
                       <td className="px-4 py-3"><StatusBadge status={log.ESTADO_MULTILOAD} /></td>
-                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{log.TIEMPO_ELEVACION_MIN_SINCARGA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{log.TIEMPO_ELEVACION_MAX_SINCARGA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono">{log.TIEMPO_ELEVACION_MEDIDO_SINCARGA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{log.TIEMPO_DESCENSO_MIN_SINCARGA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{log.TIEMPO_DESCENSO_MAX_SINCARGA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono">{log.TIEMPO_DESCENSO_MEDIDO_SINCARGA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_INICIO_SINCARGA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_FIN_SINCARGA ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatNumber(log.TIEMPO_ELEVACION_MIN_SINCARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatNumber(log.TIEMPO_ELEVACION_MAX_SINCARGA)}</td>
+                      <td className="px-4 py-3 font-mono">{formatNumber(log.TIEMPO_ELEVACION_MEDIDO_SINCARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatNumber(log.TIEMPO_DESCENSO_MIN_SINCARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatNumber(log.TIEMPO_DESCENSO_MAX_SINCARGA)}</td>
+                      <td className="px-4 py-3 font-mono">{formatNumber(log.TIEMPO_DESCENSO_MEDIDO_SINCARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{formatDateToLocalString(log.FECHA_HORA_INICIO_SINCARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{formatDateToLocalString(log.FECHA_HORA_FIN_SINCARGA)}</td>
                       <td className="px-4 py-3"><StatusBadge status={log.ESTADO_SINCARGA} /></td>
-                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{log.TIEMPO_ELEVACION_MIN_CARGA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{log.TIEMPO_ELEVACION_MAX_CARGA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono">{log.TIEMPO_ELEVACION_MEDIDO_CARGA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{log.TIEMPO_DESCENSO_MIN_CARGA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{log.TIEMPO_DESCENSO_MAX_CARGA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono">{log.TIEMPO_DESCENSO_MEDIDO_CARGA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_INICIO_CARGA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_FIN_CARGA ?? '-'}</td>
-                      <td className="px-4 py-3"><StatusBadge status={log.ESTADO_DESCENSO_CARGA} /></td>
-                      <td className="px-4 py-3 font-mono">{log.CARGA_CONSIGNADA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono">{log.CARGA_GET ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono">{log.ALTURA_INICIAL ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono">{log.ALTURA_FINAL ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono text-yellow-500">{log.DIFERENCIA_ALTURAS ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_INICIO_5MIN ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_FIN_5MIN ?? '-'}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatNumber(log.TIEMPO_ELEVACION_MIN_CARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatNumber(log.TIEMPO_ELEVACION_MAX_CARGA)}</td>
+                      <td className="px-4 py-3 font-mono">{formatNumber(log.TIEMPO_ELEVACION_MEDIDO_CARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatNumber(log.TIEMPO_DESCENSO_MIN_CARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatNumber(log.TIEMPO_DESCENSO_MAX_CARGA)}</td>
+                      <td className="px-4 py-3 font-mono">{formatNumber(log.TIEMPO_DESCENSO_MEDIDO_CARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{formatDateToLocalString(log.FECHA_HORA_INICIO_CARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{formatDateToLocalString(log.FECHA_HORA_FIN_CARGA)}</td>
+                      <td className="px-4 py-3"><StatusBadge status={log.ESTADO_CARGA} /></td>
+                      <td className="px-4 py-3 font-mono">{formatNumber(log.CARGA_CONSIGNADA)}</td>
+                      <td className="px-4 py-3 font-mono">{formatNumber(log.CARGA_GET)}</td>
+                      <td className="px-4 py-3 font-mono">{formatNumber(log.ALTURA_INICIAL)}</td>
+                      <td className="px-4 py-3 font-mono">{formatNumber(log.ALTURA_FINAL)}</td>
+                      <td className="px-4 py-3 font-mono text-yellow-500">{formatNumber(log.DIFERENCIA_ALTURAS)}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{formatDateToLocalString(log.FECHA_HORA_INICIO_5MIN)}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{formatDateToLocalString(log.FECHA_HORA_FIN_5MIN)}</td>
                       <td className="px-4 py-3"><StatusBadge status={log.ESTADO_CARGA_5_MIN} /></td>
                       <td className="px-4 py-3 font-mono">{log.REPETICIONES_SECUENCIA ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_INICIO_SEC ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{log.FECHA_HORA_FIN_SEC ?? '-'}</td>
-                      <td className="px-4 py-3 font-mono font-bold text-logisnext-magenta">{getDuration(log.FECHA_HORA_INICIO_SEC, log.FECHA_HORA_FIN_SEC)}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{formatDateToLocalString(log.FECHA_HORA_INICIO_SEC)}</td>
+                      <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{formatDateToLocalString(log.FECHA_HORA_FIN_SEC)}</td>
+                      <td className="px-4 py-3 font-mono font-bold text-logisnext-magenta">{log.DURACION_SEC || getDuration(log.FECHA_HORA_INICIO_SEC, log.FECHA_HORA_FIN_SEC)}</td>
                       <td className="px-4 py-3 flex justify-center sticky right-0 bg-inherit shadow-[-5px_0_10px_rgba(0,0,0,0.2)] z-10">
                         <GlobalStatusBadge status={log.OK_NOK} />
                       </td>
