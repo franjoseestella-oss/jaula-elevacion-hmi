@@ -18,8 +18,8 @@ const fmtDate = (s) => {
   return s;
 };
 
-// Convierte centésimas de segundo a "s" con 2 decimales
-const cs2s = (v) => (v !== null && v !== undefined ? `${(v / 100).toFixed(2).replace('.', ',')} s` : '—');
+// Convierte decimas de segundo a "s" con 1 decimal
+const cs2s = (v) => (v !== null && v !== undefined ? `${(v / 10).toFixed(1).replace('.', ',')} s` : '—');
 
 // ── Badge de fuente ───────────────────────────────────────────────────────────
 const SourceBadge = ({ fuente }) => {
@@ -375,19 +375,19 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
                   </span>
                   {/* Tpo elevac min c/carga */}
                   <span className="font-mono text-xs text-emerald-400/80">
-                    {item.tpo_elevac_min != null ? (item.tpo_elevac_min / 100).toFixed(2).replace('.', ',') : '—'}
+                    {item.tpo_elevac_min != null ? (item.tpo_elevac_min / 10).toFixed(1).replace('.', ',') : '—'}
                   </span>
                   {/* Tpo elevac max c/carga */}
                   <span className="font-mono text-xs text-emerald-400/60">
-                    {item.tpo_elevac_max != null ? (item.tpo_elevac_max / 100).toFixed(2).replace('.', ',') : '—'}
+                    {item.tpo_elevac_max != null ? (item.tpo_elevac_max / 10).toFixed(1).replace('.', ',') : '—'}
                   </span>
                   {/* Tpo descenso min c/carga */}
                   <span className="font-mono text-xs text-violet-400/80">
-                    {item.tpo_descenso_min != null ? (item.tpo_descenso_min / 100).toFixed(2).replace('.', ',') : '—'}
+                    {item.tpo_descenso_min != null ? (item.tpo_descenso_min / 10).toFixed(1).replace('.', ',') : '—'}
                   </span>
                   {/* Tpo descenso max c/carga */}
                   <span className="font-mono text-xs text-violet-400/60">
-                    {item.tpo_descenso_max != null ? (item.tpo_descenso_max / 100).toFixed(2).replace('.', ',') : '—'}
+                    {item.tpo_descenso_max != null ? (item.tpo_descenso_max / 10).toFixed(1).replace('.', ',') : '—'}
                   </span>
                   {/* Fecha montaje */}
                   <span className="font-mono text-[10px] text-logisnext-slate/70">

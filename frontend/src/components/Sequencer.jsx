@@ -535,11 +535,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   // ── Auto-Avanzar PASO 1 si se carga desde ERP Modal ───────────────
   useEffect(() => {
     const initErpSequence = async () => {
-      if (erpData && stepStatus[0] === STEP_STATUS.ACTIVE) {
+      if (erpData && stepStatus[0] === STEP_STATUS.ACTIVE && !repeatModal.show) {
         setScannedSeq(null);
         setSeqError('');
-
-        let skip1 = false, skip2 = false, skip3 = false, skip4 = false;
 
         try {
           const res = await fetch(`${API_BASE}/api/logs/bastidor/${encodeURIComponent(erpData.bastidor)}`);
@@ -551,10 +549,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                  show: true,
                  log: log,
                  selections: [
-                   log.ESTADO_MULTILOAD !== 'OK',
-                   log.ESTADO_SINCARGA !== 'OK',
-                   log.ESTADO_CARGA !== 'OK',
-                   log.ESTADO_CARGA_5_MIN !== 'OK'
+                   !log.ESTADO_MULTILOAD || log.ESTADO_MULTILOAD === 'PEND',
+                   !log.ESTADO_SINCARGA || log.ESTADO_SINCARGA === 'PEND',
+                   !log.ESTADO_CARGA || log.ESTADO_CARGA === 'PEND',
+                   !log.ESTADO_CARGA_5_MIN || log.ESTADO_CARGA_5_MIN === 'PEND'
                  ]
                });
                return; // Detenemos aquí, el usuario debe confirmar el modal
@@ -576,7 +574,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     
     initErpSequence();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [erpData, plcState]);
+  }, [erpData, stepStatus, repeatModal.show]);
 
   const handleRepeatConfirm = () => {
     setStepStatus(prev => {
@@ -1984,29 +1982,29 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
       {/* ── Modal de Repetición ────────────────────────────────────────── */}
       {repeatModal.show && (
-        <div className="absolute inset-0 bg-[#0d1a20]/95 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-6 text-center animate-in fade-in">
-          <div className="w-full bg-[#1d2930] rounded-xl border border-[#2e404a] shadow-2xl p-5">
-            <div className="flex justify-center mb-3">
-              <div className="w-10 h-10 bg-yellow-500/20 rounded-full flex items-center justify-center text-yellow-400">
-                <AlertTriangle size={20} />
+        <div className="fixed inset-0 bg-[#0d1a20]/90 backdrop-blur-md z-[100] flex flex-col items-center justify-center p-6 text-center animate-in fade-in">
+          <div className="w-[600px] max-w-[95vw] bg-[#1d2930] rounded-xl border border-[#2e404a] shadow-[0_0_60px_rgba(0,0,0,0.6)] p-8">
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center text-yellow-400">
+                <AlertTriangle size={32} />
               </div>
             </div>
-            <h3 className="text-white text-xs font-black tracking-widest uppercase mb-1">
+            <h3 className="text-white text-xl font-black tracking-widest uppercase mb-2">
               Secuencia Repetida
             </h3>
-            <p className="text-[10px] text-logisnext-slate mb-4 leading-relaxed">
-              El bastidor <span className="text-logisnext-magenta font-mono">{erpData?.bastidor}</span> ya fue probado.<br/><br/>
+            <p className="text-sm text-logisnext-slate mb-6 leading-relaxed px-4">
+              El bastidor <span className="text-logisnext-magenta font-mono text-base">{erpData?.bastidor}</span> ya fue probado.<br/><br/>
               Selecciona qué etapas repetir (las no superadas se marcan por defecto).
             </p>
             
-            <div className="space-y-2 mb-5 text-left bg-[#0a0f12] p-3 rounded-lg border border-[#2e404a]">
+            <div className="space-y-3 mb-8 text-left bg-[#0a0f12] p-5 rounded-lg border border-[#2e404a] mx-4">
               {[
                 { label: 'Paso 2: Multiload', idx: 0, old: repeatModal.log?.ESTADO_MULTILOAD },
                 { label: 'Paso 3: Sin Carga', idx: 1, old: repeatModal.log?.ESTADO_SINCARGA },
                 { label: 'Paso 4: Con Carga', idx: 2, old: repeatModal.log?.ESTADO_CARGA },
                 { label: 'Paso 5: Prueba 5M', idx: 3, old: repeatModal.log?.ESTADO_CARGA_5_MIN },
               ].map(item => (
-                <label key={item.idx} className={`flex items-center gap-2 text-[10px] uppercase font-bold tracking-wider cursor-pointer p-1.5 rounded transition-colors ${repeatModal.selections[item.idx] ? 'bg-logisnext-magenta/10 text-white border border-logisnext-magenta/30' : 'text-logisnext-slate border border-transparent hover:bg-[#1d2930]'}`}>
+                <label key={item.idx} className={`flex items-center gap-3 text-sm uppercase font-bold tracking-wider cursor-pointer p-3 rounded transition-colors ${repeatModal.selections[item.idx] ? 'bg-logisnext-magenta/10 text-white border border-logisnext-magenta/30 shadow-inner' : 'text-logisnext-slate border border-transparent hover:bg-[#1d2930]'}`}>
                   <input 
                     type="checkbox" 
                     checked={repeatModal.selections[item.idx]} 
@@ -2015,18 +2013,18 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                       newSels[item.idx] = !newSels[item.idx];
                       setRepeatModal(prev => ({ ...prev, selections: newSels }));
                     }}
-                    className="accent-logisnext-magenta w-3 h-3 cursor-pointer"
+                    className="accent-logisnext-magenta w-5 h-5 cursor-pointer"
                   />
                   {item.label}
-                  <span className={`ml-auto text-[8px] font-mono px-1 rounded ${item.old === 'OK' ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400'}`}>
+                  <span className={`ml-auto text-xs font-mono px-2 py-1 rounded ${item.old === 'OK' ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400'}`}>
                     {item.old || 'PEND'}
                   </span>
                 </label>
               ))}
             </div>
 
-            <ActionBtn onClick={handleRepeatConfirm} variant="primary">
-              Continuar <CheckCircle2 size={12} className="ml-1" />
+            <ActionBtn onClick={handleRepeatConfirm} variant="primary" className="py-4 text-base w-64 mx-auto font-black shadow-[0_0_20px_rgba(221,40,118,0.4)] hover:shadow-[0_0_30px_rgba(221,40,118,0.6)]">
+              Continuar <CheckCircle2 size={18} className="ml-2" />
             </ActionBtn>
           </div>
         </div>

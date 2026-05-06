@@ -10,7 +10,7 @@ const DataRow = ({ label, value, highlight = false }) => (
   </div>
 );
 
-const cs2s = (v) => (v != null ? (v / 100).toFixed(2).replace('.', ',') : null);
+const cs2s = (v) => (v != null ? (v / 10).toFixed(1).replace('.', ',') : null);
 
 const LeftPanel = ({ data, onErpData }) => {
   return (
