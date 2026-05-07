@@ -8,6 +8,11 @@ const formatNumber = (val) => {
   return String(val).replace('.', ',');
 };
 
+const formatTime = (val) => {
+  if (val === null || val === undefined || val === '') return '-';
+  return Number(val).toFixed(3).replace('.', ',');
+};
+
 const formatDateToLocalString = (dateStr) => {
   if (!dateStr) return '-';
   const d = new Date(dateStr);
@@ -312,21 +317,21 @@ const LogViewer = ({ isOpen, onClose }) => {
                       <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{formatDateToLocalString(log.FECHA_HORA_INICIO_MULTILOAD)}</td>
                       <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{formatDateToLocalString(log.FECHA_HORA_FIN_MULTILOAD)}</td>
                       <td className="px-4 py-3"><StatusBadge status={log.ESTADO_MULTILOAD} /></td>
-                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatNumber(log.TIEMPO_ELEVACION_MIN_SINCARGA)}</td>
-                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatNumber(log.TIEMPO_ELEVACION_MAX_SINCARGA)}</td>
-                      <td className="px-4 py-3 font-mono">{formatNumber(log.TIEMPO_ELEVACION_MEDIDO_SINCARGA)}</td>
-                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatNumber(log.TIEMPO_DESCENSO_MIN_SINCARGA)}</td>
-                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatNumber(log.TIEMPO_DESCENSO_MAX_SINCARGA)}</td>
-                      <td className="px-4 py-3 font-mono">{formatNumber(log.TIEMPO_DESCENSO_MEDIDO_SINCARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatTime(log.TIEMPO_ELEVACION_MIN_SINCARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatTime(log.TIEMPO_ELEVACION_MAX_SINCARGA)}</td>
+                      <td className="px-4 py-3 font-mono">{formatTime(log.TIEMPO_ELEVACION_MEDIDO_SINCARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatTime(log.TIEMPO_DESCENSO_MIN_SINCARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatTime(log.TIEMPO_DESCENSO_MAX_SINCARGA)}</td>
+                      <td className="px-4 py-3 font-mono">{formatTime(log.TIEMPO_DESCENSO_MEDIDO_SINCARGA)}</td>
                       <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{formatDateToLocalString(log.FECHA_HORA_INICIO_SINCARGA)}</td>
                       <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{formatDateToLocalString(log.FECHA_HORA_FIN_SINCARGA)}</td>
                       <td className="px-4 py-3"><StatusBadge status={log.ESTADO_SINCARGA} /></td>
-                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatNumber(log.TIEMPO_ELEVACION_MIN_CARGA)}</td>
-                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatNumber(log.TIEMPO_ELEVACION_MAX_CARGA)}</td>
-                      <td className="px-4 py-3 font-mono">{formatNumber(log.TIEMPO_ELEVACION_MEDIDO_CARGA)}</td>
-                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatNumber(log.TIEMPO_DESCENSO_MIN_CARGA)}</td>
-                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatNumber(log.TIEMPO_DESCENSO_MAX_CARGA)}</td>
-                      <td className="px-4 py-3 font-mono">{formatNumber(log.TIEMPO_DESCENSO_MEDIDO_CARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatTime(log.TIEMPO_ELEVACION_MIN_CARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatTime(log.TIEMPO_ELEVACION_MAX_CARGA)}</td>
+                      <td className="px-4 py-3 font-mono">{formatTime(log.TIEMPO_ELEVACION_MEDIDO_CARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatTime(log.TIEMPO_DESCENSO_MIN_CARGA)}</td>
+                      <td className="px-4 py-3 font-mono text-logisnext-lightslate">{formatTime(log.TIEMPO_DESCENSO_MAX_CARGA)}</td>
+                      <td className="px-4 py-3 font-mono">{formatTime(log.TIEMPO_DESCENSO_MEDIDO_CARGA)}</td>
                       <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{formatDateToLocalString(log.FECHA_HORA_INICIO_CARGA)}</td>
                       <td className="px-4 py-3 font-mono text-xs text-logisnext-lightslate">{formatDateToLocalString(log.FECHA_HORA_FIN_CARGA)}</td>
                       <td className="px-4 py-3"><StatusBadge status={log.ESTADO_CARGA} /></td>

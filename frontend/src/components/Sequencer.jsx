@@ -10,7 +10,7 @@ const API_BASE = 'http://localhost:8001';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const ds2s = (v) => (v != null ? `${(v / 10).toFixed(1).replace('.', ',')} s` : '—');
+const ds2s = (v) => (v != null ? `${(v / 100).toFixed(3).replace('.', ',')} s` : '—');
 const formatDuration = (secs) => {
   if (secs == null) return '—';
   if (secs < 60) return `${secs} s`;
@@ -322,7 +322,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           if (prev.finishedElev) return prev;
           if (h >= 1.5) {
             if (!tStartElev) tStartElev = Date.now();
-            return { ...prev, elev: Math.floor((Date.now() - tStartElev) / 100) };
+            return { ...prev, elev: Math.floor((Date.now() - tStartElev) / 10) };
           }
           return prev;
         });
@@ -350,7 +350,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       } else if (cameraTestState === 'descenso') {
         // ── Descenso completado: h vuelve a bajar de 1.5m ─────────────────
         if (h <= 1.5 && !simTimers.finishedDesc) {
-          const elapsed = tStartDesc ? Math.floor((Date.now() - tStartDesc) / 100) : 0;
+          const elapsed = tStartDesc ? Math.floor((Date.now() - tStartDesc) / 10) : 0;
           // Leer tolerancias ERP
           const isSinCarga = currentStep === 2;
           const minElev = isSinCarga ? erpData?.tpo_elev_min_scarga : erpData?.tpo_elevac_min;
@@ -370,7 +370,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           setSimTimers(prev => {
             if (h <= 1.5 + testDist) {
               if (!tStartDesc) tStartDesc = Date.now();
-              return { ...prev, desc: Math.floor((Date.now() - tStartDesc) / 100) };
+              return { ...prev, desc: Math.floor((Date.now() - tStartDesc) / 10) };
             }
             return prev;
           });
@@ -469,23 +469,23 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       ESTADO_MULTILOAD: estadoMultiload,
 
       // Etapa 2: Sin Carga
-      TIEMPO_ELEVACION_MIN_SINCARGA: erp?.tpo_elev_min_scarga != null ? erp.tpo_elev_min_scarga / 10 : null,
-      TIEMPO_ELEVACION_MAX_SINCARGA: erp?.tpo_elev_max_scarga != null ? erp.tpo_elev_max_scarga / 10 : null,
-      TIEMPO_ELEVACION_MEDIDO_SINCARGA: stepStatus[2] === STEP_STATUS.SKIP ? prevLog.TIEMPO_ELEVACION_MEDIDO_SINCARGA : (sData[3].elev != null ? sData[3].elev / 10 : null),
-      TIEMPO_DESCENSO_MIN_SINCARGA: erp?.tpo_desc_min_scarga != null ? erp.tpo_desc_min_scarga / 10 : null,
-      TIEMPO_DESCENSO_MAX_SINCARGA: erp?.tpo_desc_max_scarga != null ? erp.tpo_desc_max_scarga / 10 : null,
-      TIEMPO_DESCENSO_MEDIDO_SINCARGA: stepStatus[2] === STEP_STATUS.SKIP ? prevLog.TIEMPO_DESCENSO_MEDIDO_SINCARGA : (sData[3].desc != null ? sData[3].desc / 10 : null),
+      TIEMPO_ELEVACION_MIN_SINCARGA: erp?.tpo_elev_min_scarga != null ? erp.tpo_elev_min_scarga / 100 : null,
+      TIEMPO_ELEVACION_MAX_SINCARGA: erp?.tpo_elev_max_scarga != null ? erp.tpo_elev_max_scarga / 100 : null,
+      TIEMPO_ELEVACION_MEDIDO_SINCARGA: stepStatus[2] === STEP_STATUS.SKIP ? prevLog.TIEMPO_ELEVACION_MEDIDO_SINCARGA : (sData[3].elev != null ? sData[3].elev / 100 : null),
+      TIEMPO_DESCENSO_MIN_SINCARGA: erp?.tpo_desc_min_scarga != null ? erp.tpo_desc_min_scarga / 100 : null,
+      TIEMPO_DESCENSO_MAX_SINCARGA: erp?.tpo_desc_max_scarga != null ? erp.tpo_desc_max_scarga / 100 : null,
+      TIEMPO_DESCENSO_MEDIDO_SINCARGA: stepStatus[2] === STEP_STATUS.SKIP ? prevLog.TIEMPO_DESCENSO_MEDIDO_SINCARGA : (sData[3].desc != null ? sData[3].desc / 100 : null),
       FECHA_HORA_INICIO_SINCARGA: stepStatus[2] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_INICIO_SINCARGA : (stepStartTime[2] ? new Date(stepStartTime[2]).toISOString() : null),
       FECHA_HORA_FIN_SINCARGA: stepStatus[2] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_FIN_SINCARGA : (stepStartTime[2] && stepDurations[2] ? new Date(stepStartTime[2] + stepDurations[2] * 1000).toISOString() : null),
       ESTADO_SINCARGA: estadoSinCarga,
 
       // Etapa 3: Con Carga
-      TIEMPO_ELEVACION_MIN_CARGA: erp?.tpo_elevac_min != null ? erp.tpo_elevac_min / 10 : null,
-      TIEMPO_ELEVACION_MAX_CARGA: erp?.tpo_elevac_max != null ? erp.tpo_elevac_max / 10 : null,
-      TIEMPO_ELEVACION_MEDIDO_CARGA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.TIEMPO_ELEVACION_MEDIDO_CARGA : (sData[4].elev != null ? sData[4].elev / 10 : null),
-      TIEMPO_DESCENSO_MIN_CARGA: erp?.tpo_descenso_min != null ? erp.tpo_descenso_min / 10 : null,
-      TIEMPO_DESCENSO_MAX_CARGA: erp?.tpo_descenso_max != null ? erp.tpo_descenso_max / 10 : null,
-      TIEMPO_DESCENSO_MEDIDO_CARGA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.TIEMPO_DESCENSO_MEDIDO_CARGA : (sData[4].desc != null ? sData[4].desc / 10 : null),
+      TIEMPO_ELEVACION_MIN_CARGA: erp?.tpo_elevac_min != null ? erp.tpo_elevac_min / 100 : null,
+      TIEMPO_ELEVACION_MAX_CARGA: erp?.tpo_elevac_max != null ? erp.tpo_elevac_max / 100 : null,
+      TIEMPO_ELEVACION_MEDIDO_CARGA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.TIEMPO_ELEVACION_MEDIDO_CARGA : (sData[4].elev != null ? sData[4].elev / 100 : null),
+      TIEMPO_DESCENSO_MIN_CARGA: erp?.tpo_descenso_min != null ? erp.tpo_descenso_min / 100 : null,
+      TIEMPO_DESCENSO_MAX_CARGA: erp?.tpo_descenso_max != null ? erp.tpo_descenso_max / 100 : null,
+      TIEMPO_DESCENSO_MEDIDO_CARGA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.TIEMPO_DESCENSO_MEDIDO_CARGA : (sData[4].desc != null ? sData[4].desc / 100 : null),
       FECHA_HORA_INICIO_CARGA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_INICIO_CARGA : (stepStartTime[3] ? new Date(stepStartTime[3]).toISOString() : null),
       FECHA_HORA_FIN_CARGA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_FIN_CARGA : (stepStartTime[3] && stepDurations[3] ? new Date(stepStartTime[3] + stepDurations[3] * 1000).toISOString() : null),
       ESTADO_CARGA: estadoConCarga,
