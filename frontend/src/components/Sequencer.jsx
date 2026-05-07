@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useImperativeHandle } from 'react';
 import {
   Layers, Barcode, ArrowUpDown, Timer, Weight,
   CheckCircle2, AlertTriangle, SkipForward, Loader2,
-  RotateCcw, Ruler, Lock, Hash, Database, XCircle, Play
+  RotateCcw, Ruler, Lock, Hash, Database, XCircle, Play, X
 } from 'lucide-react';
 
 
@@ -109,7 +109,7 @@ const DataLine = ({ label, value, highlight = false }) => (
   </div>
 );
 
-const ActionBtn = ({ onClick, children, disabled = false, variant = 'primary' }) => {
+const ActionBtn = ({ onClick, children, disabled = false, variant = 'primary', className = '' }) => {
   const base = 'w-full py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5';
   const variants = {
     primary: 'bg-logisnext-magenta/90 hover:bg-logisnext-magenta text-white shadow-[0_0_12px_rgba(221,40,118,0.3)]',
@@ -118,7 +118,7 @@ const ActionBtn = ({ onClick, children, disabled = false, variant = 'primary' })
     danger: 'bg-red-700/80 hover:bg-red-600 text-white shadow-[0_0_12px_rgba(239,68,68,0.3)]',
   };
   return (
-    <button className={`${base} ${variants[variant]}`} onClick={onClick} disabled={disabled}>
+    <button className={`${base} ${variants[variant]} ${className}`} onClick={onClick} disabled={disabled}>
       {children}
     </button>
   );
@@ -218,7 +218,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     duration: parseInt(localStorage.getItem('test5mDuration')) || 300,
     tolerancia: parseInt(localStorage.getItem('test5mTolerancia')) || 15
   });
-  
+
   // Refs para lógica de la etapa 5
   const stage5InitialHeightRef = useRef(null);
   const stage5StableStartRef = useRef(null);
@@ -419,25 +419,33 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     const endSec = Date.now();
     const erp = erpDataRef.current;
     const sData = stageDataRef.current;
+    const prevLog = repeatModal.log || {};
 
-    // Calcular estados basados en tiempos para la Etapa 3 (Sin Carga)
+    // Etapa 1: Multiload
+    let estadoMultiload = stepStatus[1] === STEP_STATUS.OK ? 'OK' : 'NOK';
+    if (stepStatus[1] === STEP_STATUS.SKIP) estadoMultiload = prevLog.ESTADO_MULTILOAD || 'NO APLICA';
+
+    // Etapa 2: Sin Carga
     const elevSin = sData[3].elev;
     const descSin = sData[3].desc;
     const okElevSin = elevSin !== null && elevSin !== undefined && elevSin >= (erp?.tpo_elev_min_scarga || 0) && elevSin <= (erp?.tpo_elev_max_scarga || 9999);
     const okDescSin = descSin !== null && descSin !== undefined && descSin >= (erp?.tpo_desc_min_scarga || 0) && descSin <= (erp?.tpo_desc_max_scarga || 9999);
-    let estadoSinCarga = stepStatus[2] === STEP_STATUS.SKIP ? 'NO APLICA' : (okElevSin && okDescSin ? 'OK' : 'NOK');
+    let estadoSinCarga = (okElevSin && okDescSin) ? 'OK' : 'NOK';
     if (stepStatus[2] === STEP_STATUS.ACTIVE || stepStatus[2] === STEP_STATUS.PENDING) estadoSinCarga = 'NO COMPLETADO';
+    if (stepStatus[2] === STEP_STATUS.SKIP) estadoSinCarga = prevLog.ESTADO_SINCARGA || 'NO APLICA';
 
-    // Calcular estados basados en tiempos para la Etapa 4 (Con Carga)
+    // Etapa 3: Con Carga
     const elevCar = sData[4].elev;
     const descCar = sData[4].desc;
     const okElevCar = elevCar !== null && elevCar !== undefined && elevCar >= (erp?.tpo_elevac_min || 0) && elevCar <= (erp?.tpo_elevac_max || 9999);
     const okDescCar = descCar !== null && descCar !== undefined && descCar >= (erp?.tpo_descenso_min || 0) && descCar <= (erp?.tpo_descenso_max || 9999);
-    let estadoConCarga = stepStatus[3] === STEP_STATUS.SKIP ? 'NO APLICA' : (okElevCar && okDescCar ? 'OK' : 'NOK');
+    let estadoConCarga = (okElevCar && okDescCar) ? 'OK' : 'NOK';
     if (stepStatus[3] === STEP_STATUS.ACTIVE || stepStatus[3] === STEP_STATUS.PENDING) estadoConCarga = 'NO COMPLETADO';
+    if (stepStatus[3] === STEP_STATUS.SKIP) estadoConCarga = prevLog.ESTADO_CARGA || 'NO APLICA';
 
-    const estadoMultiload = stepStatus[1] === STEP_STATUS.OK ? 'OK' : (stepStatus[1] === STEP_STATUS.SKIP ? 'NO APLICA' : 'NOK');
-    const estado5Min = stepStatus[4] === STEP_STATUS.OK ? 'OK' : (stepStatus[4] === STEP_STATUS.SKIP ? 'NO APLICA' : 'NOK');
+    // Etapa 4: 5 Minutos
+    let estado5Min = stepStatus[4] === STEP_STATUS.OK ? 'OK' : 'NOK';
+    if (stepStatus[4] === STEP_STATUS.SKIP) estado5Min = prevLog.ESTADO_CARGA_5_MIN || 'NO APLICA';
 
     let calculatedStatus = 'OK';
     if (estadoMultiload === 'NOK' || estadoSinCarga === 'NOK' || estadoConCarga === 'NOK' || estado5Min === 'NOK') {
@@ -453,37 +461,47 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       NBASTIDOR: erp?.bastidor,
       NMASTIL: erp?.mastil,
       ALTURA_MAX_INTERMEDIA: erp?.altura_max_interm,
-      ALTURA_CAPTADA: pegatinaPosicion,
-      FECHA_HORA_INICIO_MULTILOAD: stepStartTime[1] ? new Date(stepStartTime[1]).toISOString() : null,
-      FECHA_HORA_FIN_MULTILOAD: stepStartTime[1] && stepDurations[1] ? new Date(stepStartTime[1] + stepDurations[1] * 1000).toISOString() : null,
+      ALTURA_CAPTADA: stepStatus[1] === STEP_STATUS.SKIP ? prevLog.ALTURA_CAPTADA : pegatinaPosicion,
+
+      // Etapa 1: Multiload
+      FECHA_HORA_INICIO_MULTILOAD: stepStatus[1] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_INICIO_MULTILOAD : (stepStartTime[1] ? new Date(stepStartTime[1]).toISOString() : null),
+      FECHA_HORA_FIN_MULTILOAD: stepStatus[1] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_FIN_MULTILOAD : (stepStartTime[1] && stepDurations[1] ? new Date(stepStartTime[1] + stepDurations[1] * 1000).toISOString() : null),
       ESTADO_MULTILOAD: estadoMultiload,
+
+      // Etapa 2: Sin Carga
       TIEMPO_ELEVACION_MIN_SINCARGA: erp?.tpo_elev_min_scarga != null ? erp.tpo_elev_min_scarga / 10 : null,
       TIEMPO_ELEVACION_MAX_SINCARGA: erp?.tpo_elev_max_scarga != null ? erp.tpo_elev_max_scarga / 10 : null,
-      TIEMPO_ELEVACION_MEDIDO_SINCARGA: sData[3].elev != null ? sData[3].elev / 10 : null,
+      TIEMPO_ELEVACION_MEDIDO_SINCARGA: stepStatus[2] === STEP_STATUS.SKIP ? prevLog.TIEMPO_ELEVACION_MEDIDO_SINCARGA : (sData[3].elev != null ? sData[3].elev / 10 : null),
       TIEMPO_DESCENSO_MIN_SINCARGA: erp?.tpo_desc_min_scarga != null ? erp.tpo_desc_min_scarga / 10 : null,
       TIEMPO_DESCENSO_MAX_SINCARGA: erp?.tpo_desc_max_scarga != null ? erp.tpo_desc_max_scarga / 10 : null,
-      TIEMPO_DESCENSO_MEDIDO_SINCARGA: sData[3].desc != null ? sData[3].desc / 10 : null,
-      FECHA_HORA_INICIO_SINCARGA: stepStartTime[2] ? new Date(stepStartTime[2]).toISOString() : null,
-      FECHA_HORA_FIN_SINCARGA: stepStartTime[2] && stepDurations[2] ? new Date(stepStartTime[2] + stepDurations[2] * 1000).toISOString() : null,
+      TIEMPO_DESCENSO_MEDIDO_SINCARGA: stepStatus[2] === STEP_STATUS.SKIP ? prevLog.TIEMPO_DESCENSO_MEDIDO_SINCARGA : (sData[3].desc != null ? sData[3].desc / 10 : null),
+      FECHA_HORA_INICIO_SINCARGA: stepStatus[2] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_INICIO_SINCARGA : (stepStartTime[2] ? new Date(stepStartTime[2]).toISOString() : null),
+      FECHA_HORA_FIN_SINCARGA: stepStatus[2] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_FIN_SINCARGA : (stepStartTime[2] && stepDurations[2] ? new Date(stepStartTime[2] + stepDurations[2] * 1000).toISOString() : null),
       ESTADO_SINCARGA: estadoSinCarga,
+
+      // Etapa 3: Con Carga
       TIEMPO_ELEVACION_MIN_CARGA: erp?.tpo_elevac_min != null ? erp.tpo_elevac_min / 10 : null,
       TIEMPO_ELEVACION_MAX_CARGA: erp?.tpo_elevac_max != null ? erp.tpo_elevac_max / 10 : null,
-      TIEMPO_ELEVACION_MEDIDO_CARGA: sData[4].elev != null ? sData[4].elev / 10 : null,
+      TIEMPO_ELEVACION_MEDIDO_CARGA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.TIEMPO_ELEVACION_MEDIDO_CARGA : (sData[4].elev != null ? sData[4].elev / 10 : null),
       TIEMPO_DESCENSO_MIN_CARGA: erp?.tpo_descenso_min != null ? erp.tpo_descenso_min / 10 : null,
       TIEMPO_DESCENSO_MAX_CARGA: erp?.tpo_descenso_max != null ? erp.tpo_descenso_max / 10 : null,
-      TIEMPO_DESCENSO_MEDIDO_CARGA: sData[4].desc != null ? sData[4].desc / 10 : null,
-      FECHA_HORA_INICIO_CARGA: stepStartTime[3] ? new Date(stepStartTime[3]).toISOString() : null,
-      FECHA_HORA_FIN_CARGA: stepStartTime[3] && stepDurations[3] ? new Date(stepStartTime[3] + stepDurations[3] * 1000).toISOString() : null,
+      TIEMPO_DESCENSO_MEDIDO_CARGA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.TIEMPO_DESCENSO_MEDIDO_CARGA : (sData[4].desc != null ? sData[4].desc / 10 : null),
+      FECHA_HORA_INICIO_CARGA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_INICIO_CARGA : (stepStartTime[3] ? new Date(stepStartTime[3]).toISOString() : null),
+      FECHA_HORA_FIN_CARGA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_FIN_CARGA : (stepStartTime[3] && stepDurations[3] ? new Date(stepStartTime[3] + stepDurations[3] * 1000).toISOString() : null),
       ESTADO_CARGA: estadoConCarga,
       CARGA_CONSIGNADA: erp?.capac_interm_1,
-      CARGA_GET: sData[4].cargaGet,
-      ALTURA_INICIAL: sData[5].altura_inicial,
-      ALTURA_FINAL: sData[5].altura_final,
-      DIFERENCIA_ALTURAS: sData[5].diff,
-      FECHA_HORA_INICIO_5MIN: stepStartTime[4] ? new Date(stepStartTime[4]).toISOString() : null,
-      FECHA_HORA_FIN_5MIN: stepStartTime[4] && stepDurations[4] ? new Date(stepStartTime[4] + stepDurations[4] * 1000).toISOString() : null,
+      CARGA_GET: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.CARGA_GET : sData[4].cargaGet,
+
+      // Etapa 4: 5 Minutos
+      ALTURA_INICIAL: stepStatus[4] === STEP_STATUS.SKIP ? prevLog.ALTURA_INICIAL : sData[5].altura_inicial,
+      ALTURA_FINAL: stepStatus[4] === STEP_STATUS.SKIP ? prevLog.ALTURA_FINAL : sData[5].altura_final,
+      DIFERENCIA_ALTURAS: stepStatus[4] === STEP_STATUS.SKIP ? prevLog.DIFERENCIA_ALTURAS : sData[5].diff,
+      FECHA_HORA_INICIO_5MIN: stepStatus[4] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_INICIO_5MIN : (stepStartTime[4] ? new Date(stepStartTime[4]).toISOString() : null),
+      FECHA_HORA_FIN_5MIN: stepStatus[4] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_FIN_5MIN : (stepStartTime[4] && stepDurations[4] ? new Date(stepStartTime[4] + stepDurations[4] * 1000).toISOString() : null),
       ESTADO_CARGA_5_MIN: estado5Min,
-      REPETICIONES_SECUENCIA: 1,
+
+      // Secuencia Global
+      REPETICIONES_SECUENCIA: prevLog.REPETICIONES_SECUENCIA ? prevLog.REPETICIONES_SECUENCIA + 1 : 1,
       FECHA_HORA_INICIO_SEC: new Date(startSec).toISOString(),
       FECHA_HORA_FIN_SEC: new Date(endSec).toISOString(),
       DURACION_SEC: formatDuration(Math.floor((endSec - startSec) / 1000)),
@@ -521,13 +539,13 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     setTestAlarm(null);
     setWaitCountdown(null);
     setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+    setRepeatModal({ show: false, log: null, selections: [true, true, true, true] });
     if (setStep2Overlay) setStep2Overlay(null);
     if (setPalletState) setPalletState('idle');
     if (onErpData) onErpData(null);
   };
 
-  const handleAbort = async () => {
-    await saveLog('NOK');
+  const handleAbort = () => {
     if (onSequenceEnd) onSequenceEnd();
     resetSequence();
   };
@@ -544,18 +562,18 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           if (res.ok) {
             const log = await res.json();
             if (log) {
-               // Mostrar modal para seleccionar qué repetir
-               setRepeatModal({
-                 show: true,
-                 log: log,
-                 selections: [
-                   !log.ESTADO_MULTILOAD || log.ESTADO_MULTILOAD === 'PEND',
-                   !log.ESTADO_SINCARGA || log.ESTADO_SINCARGA === 'PEND',
-                   !log.ESTADO_CARGA || log.ESTADO_CARGA === 'PEND',
-                   !log.ESTADO_CARGA_5_MIN || log.ESTADO_CARGA_5_MIN === 'PEND'
-                 ]
-               });
-               return; // Detenemos aquí, el usuario debe confirmar el modal
+              // Mostrar modal para seleccionar qué repetir
+              setRepeatModal({
+                show: true,
+                log: log,
+                selections: [
+                  log.ESTADO_MULTILOAD !== 'OK' && log.ESTADO_MULTILOAD !== 'NO APLICA',
+                  log.ESTADO_SINCARGA !== 'OK' && log.ESTADO_SINCARGA !== 'NO APLICA',
+                  log.ESTADO_CARGA !== 'OK' && log.ESTADO_CARGA !== 'NO APLICA',
+                  log.ESTADO_CARGA_5_MIN !== 'OK' && log.ESTADO_CARGA_5_MIN !== 'NO APLICA'
+                ]
+              });
+              return; // Detenemos aquí, el usuario debe confirmar el modal
             }
           }
         } catch (e) {
@@ -571,7 +589,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         });
       }
     };
-    
+
     initErpSequence();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [erpData, stepStatus, repeatModal.show]);
@@ -584,7 +602,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       next[2] = repeatModal.selections[1] ? STEP_STATUS.PENDING : STEP_STATUS.SKIP;
       next[3] = repeatModal.selections[2] ? STEP_STATUS.PENDING : STEP_STATUS.SKIP;
       next[4] = repeatModal.selections[3] ? STEP_STATUS.PENDING : STEP_STATUS.SKIP;
-      
+
       // Buscar el siguiente paso que deba estar activo
       for (let i = 1; i < next.length; i++) {
         if (next[i] === STEP_STATUS.PENDING) {
@@ -895,9 +913,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     const pState = plcStateRef.current;
     const simTimes = simTimersRef.current;
     if (idx === 2) { // Fin Etapa 3 (Sin Carga)
-      stageDataRef.current[3] = { 
-        elev: isSimulation ? simTimes.elev : pState?.OW_Tiempo_Elevacion, 
-        desc: isSimulation ? simTimes.desc : pState?.OW_Tiempo_Descenso 
+      stageDataRef.current[3] = {
+        elev: isSimulation ? simTimes.elev : pState?.OW_Tiempo_Elevacion,
+        desc: isSimulation ? simTimes.desc : pState?.OW_Tiempo_Descenso
       };
     } else if (idx === 3) { // Fin Etapa 4 (Con Carga)
       stageDataRef.current[4] = {
@@ -1260,15 +1278,15 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           } else {
             // Si fluctúa mucho, reseteamos estabilización
             if (Math.abs(currentHeight - stage5InitialHeightRef.current) > 30) {
-               stage5StableStartRef.current = Date.now();
-               stage5InitialHeightRef.current = currentHeight;
+              stage5StableStartRef.current = Date.now();
+              stage5InitialHeightRef.current = currentHeight;
             }
             if (Date.now() - stage5StableStartRef.current >= 3000) {
-               nextState = 'running';
-               stage5TimerStartRef.current = Date.now();
-               stage5InitialHeightRef.current = currentHeight;
-               // Guardar la cota inicial final para el reporte
-               stageDataRef.current[5] = { ...stageDataRef.current[5], altura_inicial: currentHeight };
+              nextState = 'running';
+              stage5TimerStartRef.current = Date.now();
+              stage5InitialHeightRef.current = currentHeight;
+              // Guardar la cota inicial final para el reporte
+              stageDataRef.current[5] = { ...stageDataRef.current[5], altura_inicial: currentHeight };
             }
           }
         } else if (prevState === 'running') {
@@ -1278,20 +1296,20 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
           // Comprobar variación > tolerancia
           if (Math.abs(currentHeight - stage5InitialHeightRef.current) > test5mConfig.tolerancia) {
-             nextState = 'nok';
-             setTestAlarm(`Caída de cota excedida. Variación: ${Math.abs(currentHeight - stage5InitialHeightRef.current).toFixed(1)} mm (> ${test5mConfig.tolerancia} mm)`);
-             stageDataRef.current[5] = { 
-               ...stageDataRef.current[5], 
-               altura_final: currentHeight, 
-               diff: Math.abs(currentHeight - stage5InitialHeightRef.current) 
-             };
+            nextState = 'nok';
+            setTestAlarm(`Caída de cota excedida. Variación: ${Math.abs(currentHeight - stage5InitialHeightRef.current).toFixed(1)} mm (> ${test5mConfig.tolerancia} mm)`);
+            stageDataRef.current[5] = {
+              ...stageDataRef.current[5],
+              altura_final: currentHeight,
+              diff: Math.abs(currentHeight - stage5InitialHeightRef.current)
+            };
           } else if (remaining === 0) {
-             nextState = 'ok';
-             stageDataRef.current[5] = { 
-               ...stageDataRef.current[5], 
-               altura_final: currentHeight, 
-               diff: Math.abs(currentHeight - stage5InitialHeightRef.current) 
-             };
+            nextState = 'ok';
+            stageDataRef.current[5] = {
+              ...stageDataRef.current[5],
+              altura_final: currentHeight,
+              diff: Math.abs(currentHeight - stage5InitialHeightRef.current)
+            };
           }
         }
 
@@ -1314,7 +1332,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     setTimer5min(null);
     setTestAlarm(null);
   };
-  
+
   const handleContinuar5m = () => {
     // Avanzar forzadamente a pesar del fallo
     markOk(4);
@@ -1856,9 +1874,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                     <div className="flex items-center gap-2">
                       <span className="text-[9px] font-mono font-bold tracking-wider" style={{
                         color: test5mState === 'idle' ? '#ef4444' :
-                               test5mState === 'stabilizing' ? '#3b82f6' :
-                               test5mState === 'running' ? '#22c55e' :
-                               test5mState === 'ok' ? '#22c55e' : '#ef4444'
+                          test5mState === 'stabilizing' ? '#3b82f6' :
+                            test5mState === 'running' ? '#22c55e' :
+                              test5mState === 'ok' ? '#22c55e' : '#ef4444'
                       }}>
                         {test5mState === 'idle' && 'ESPERANDO: ALTURA >1.5M Y CARGA OK'}
                         {test5mState === 'stabilizing' && 'ESTABILIZANDO (3s)...'}
@@ -1866,16 +1884,16 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                         {test5mState === 'ok' && 'PRUEBA OK'}
                         {test5mState === 'nok' && 'PRUEBA NOK'}
                       </span>
-                      <CameraLED 
-                        state={test5mState === 'idle' ? 'standby' : 
-                               test5mState === 'stabilizing' ? 'standby' : 
-                               test5mState === 'running' ? 'active' : 
-                               test5mState === 'ok' ? 'ok' : 'nok'} 
-                        blinkTick={blinkTick} 
+                      <CameraLED
+                        state={test5mState === 'idle' ? 'standby' :
+                          test5mState === 'stabilizing' ? 'standby' :
+                            test5mState === 'running' ? 'active' :
+                              test5mState === 'ok' ? 'ok' : 'nok'}
+                        blinkTick={blinkTick}
                       />
                     </div>
                   </div>
-                  
+
                   {test5mState === 'idle' && (
                     <p className="text-[9px] text-logisnext-slate leading-relaxed">
                       Verifique que la carga actual coincida con la requerida y eleve el mástil por encima de 1500 mm. La prueba comenzará automáticamente una vez estabilizado.
@@ -1884,12 +1902,11 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
                   {(test5mState === 'running' || test5mState === 'ok' || test5mState === 'nok') && (
                     <>
-                      <div className={`text-center font-mono text-4xl font-black my-2 tracking-widest ${
-                        test5mState === 'nok' ? 'text-red-500' :
-                        timer5min <= 30 && test5mState === 'running' ? 'text-red-400 animate-pulse' : 
-                        timer5min <= 60 && test5mState === 'running' ? 'text-yellow-400' : 
-                        'text-logisnext-magenta'
-                      }`}>
+                      <div className={`text-center font-mono text-4xl font-black my-2 tracking-widest ${test5mState === 'nok' ? 'text-red-500' :
+                          timer5min <= 30 && test5mState === 'running' ? 'text-red-400 animate-pulse' :
+                            timer5min <= 60 && test5mState === 'running' ? 'text-yellow-400' :
+                              'text-logisnext-magenta'
+                        }`}>
                         {timer5minDisplay || '00:00'}
                       </div>
                       <div className="flex justify-between items-center bg-[#1d2930]/50 p-2 rounded border border-[#2e404a] text-[9px] mb-2">
@@ -1983,7 +2000,14 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       {/* ── Modal de Repetición ────────────────────────────────────────── */}
       {repeatModal.show && (
         <div className="fixed inset-0 bg-[#0d1a20]/90 backdrop-blur-md z-[100] flex flex-col items-center justify-center p-6 text-center animate-in fade-in">
-          <div className="w-[600px] max-w-[95vw] bg-[#1d2930] rounded-xl border border-[#2e404a] shadow-[0_0_60px_rgba(0,0,0,0.6)] p-8">
+          <div className="w-[600px] max-w-[95vw] bg-[#1d2930] rounded-xl border border-[#2e404a] shadow-[0_0_60px_rgba(0,0,0,0.6)] p-8 relative">
+            <button 
+              onClick={() => resetSequence()}
+              className="absolute top-4 right-4 text-logisnext-slate hover:text-red-400 p-2 rounded hover:bg-[#2e404a]/50 transition-colors"
+              title="Cancelar prueba"
+            >
+              <X size={24} />
+            </button>
             <div className="flex justify-center mb-4">
               <div className="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center text-yellow-400">
                 <AlertTriangle size={32} />
@@ -1993,10 +2017,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
               Secuencia Repetida
             </h3>
             <p className="text-sm text-logisnext-slate mb-6 leading-relaxed px-4">
-              El bastidor <span className="text-logisnext-magenta font-mono text-base">{erpData?.bastidor}</span> ya fue probado.<br/><br/>
+              El bastidor <span className="text-logisnext-magenta font-mono text-base">{erpData?.bastidor}</span> ya fue probado.<br /><br />
               Selecciona qué etapas repetir (las no superadas se marcan por defecto).
             </p>
-            
+
             <div className="space-y-3 mb-8 text-left bg-[#0a0f12] p-5 rounded-lg border border-[#2e404a] mx-4">
               {[
                 { label: 'Paso 2: Multiload', idx: 0, old: repeatModal.log?.ESTADO_MULTILOAD },
@@ -2005,9 +2029,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                 { label: 'Paso 5: Prueba 5M', idx: 3, old: repeatModal.log?.ESTADO_CARGA_5_MIN },
               ].map(item => (
                 <label key={item.idx} className={`flex items-center gap-3 text-sm uppercase font-bold tracking-wider cursor-pointer p-3 rounded transition-colors ${repeatModal.selections[item.idx] ? 'bg-logisnext-magenta/10 text-white border border-logisnext-magenta/30 shadow-inner' : 'text-logisnext-slate border border-transparent hover:bg-[#1d2930]'}`}>
-                  <input 
-                    type="checkbox" 
-                    checked={repeatModal.selections[item.idx]} 
+                  <input
+                    type="checkbox"
+                    checked={repeatModal.selections[item.idx]}
                     onChange={() => {
                       const newSels = [...repeatModal.selections];
                       newSels[item.idx] = !newSels[item.idx];
@@ -2023,7 +2047,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
               ))}
             </div>
 
-            <ActionBtn onClick={handleRepeatConfirm} variant="primary" className="py-4 text-base w-64 mx-auto font-black shadow-[0_0_20px_rgba(221,40,118,0.4)] hover:shadow-[0_0_30px_rgba(221,40,118,0.6)]">
+            <ActionBtn 
+              onClick={handleRepeatConfirm} 
+              variant="primary" 
+              disabled={!repeatModal.selections.some(Boolean)}
+              className="py-4 text-base w-64 mx-auto font-black shadow-[0_0_20px_rgba(221,40,118,0.4)] hover:shadow-[0_0_30px_rgba(221,40,118,0.6)] disabled:shadow-none"
+            >
               Continuar <CheckCircle2 size={18} className="ml-2" />
             </ActionBtn>
           </div>

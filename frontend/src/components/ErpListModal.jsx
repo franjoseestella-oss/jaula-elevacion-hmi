@@ -18,15 +18,15 @@ const fmtDate = (s) => {
   return s;
 };
 
-// Convierte decimas de segundo a "s" con 1 decimal
-const cs2s = (v) => (v !== null && v !== undefined ? `${(v / 10).toFixed(1).replace('.', ',')} s` : '—');
+// Convierte el valor del ERP (centésimas) a "s" con 3 decimales
+const cs2s = (v) => (v !== null && v !== undefined ? `${(v / 100).toFixed(3).replace('.', ',')} s` : '—');
 
 // ── Badge de fuente ───────────────────────────────────────────────────────────
 const SourceBadge = ({ fuente }) => {
   const colors = {
     JAULA_ERP: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
-    DAFEED:    'bg-blue-500/20 text-blue-400 border-blue-500/40',
-    ninguna:   'bg-red-500/20 text-red-400 border-red-500/40',
+    DAFEED: 'bg-blue-500/20 text-blue-400 border-blue-500/40',
+    ninguna: 'bg-red-500/20 text-red-400 border-red-500/40',
   };
   return (
     <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${colors[fuente] || colors.ninguna}`}>
@@ -80,11 +80,11 @@ const DetallePanel = ({ item, onClose, onVincular }) => {
         <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-0">
 
           <Section title="Identificación" icon={Server}>
-            <Field label="Bastidor"   value={item.bastidor?.trim()} highlight />
-            <Field label="Secuencia"  value={item.secuencia?.trim()} />
-            <Field label="Modelo"     value={item.modelo?.trim()} />
+            <Field label="Bastidor" value={item.bastidor?.trim()} highlight />
+            <Field label="Secuencia" value={item.secuencia?.trim()} />
+            <Field label="Modelo" value={item.modelo?.trim()} />
             <Field label="Mástil ref" value={item.mastil?.trim()} />
-            <Field label="Fec. montaje"   value={fmtDate(item.fecha_montaje)} />
+            <Field label="Fec. montaje" value={fmtDate(item.fecha_montaje)} />
             <Field label="Fec. importación" value={item.fecha_importacion} />
           </Section>
 
@@ -99,18 +99,18 @@ const DetallePanel = ({ item, onClose, onVincular }) => {
           </Section>
 
           <Section title="Tiempos con carga" icon={Clock}>
-            <Field label="Elevación mín"   value={cs2s(item.tpo_elevac_min)} />
-            <Field label="Elevación máx"   value={cs2s(item.tpo_elevac_max)} />
-            <Field label="Descenso mín"    value={cs2s(item.tpo_descenso_min)} />
-            <Field label="Descenso máx"    value={cs2s(item.tpo_descenso_max)} />
+            <Field label="Elevación mín" value={cs2s(item.tpo_elevac_min)} />
+            <Field label="Elevación máx" value={cs2s(item.tpo_elevac_max)} />
+            <Field label="Descenso mín" value={cs2s(item.tpo_descenso_min)} />
+            <Field label="Descenso máx" value={cs2s(item.tpo_descenso_max)} />
 
           </Section>
 
           <Section title="Tiempos sin carga" icon={RotateCcw}>
-            <Field label="Elevación mín"   value={cs2s(item.tpo_elev_min_scarga)} />
-            <Field label="Elevación máx"   value={cs2s(item.tpo_elev_max_scarga)} />
-            <Field label="Descenso mín"    value={cs2s(item.tpo_desc_min_scarga)} />
-            <Field label="Descenso máx"    value={cs2s(item.tpo_desc_max_scarga)} />
+            <Field label="Elevación mín" value={cs2s(item.tpo_elev_min_scarga)} />
+            <Field label="Elevación máx" value={cs2s(item.tpo_elev_max_scarga)} />
+            <Field label="Descenso mín" value={cs2s(item.tpo_desc_min_scarga)} />
+            <Field label="Descenso máx" value={cs2s(item.tpo_desc_max_scarga)} />
           </Section>
         </div>
 
@@ -133,23 +133,23 @@ const DetallePanel = ({ item, onClose, onVincular }) => {
 
 // ── Modal principal ───────────────────────────────────────────────────────────
 const ErpListModal = ({ open, onClose, onSelect }) => {
-  const [items, setItems]             = useState([]);
-  const [total, setTotal]             = useState(0);
-  const [fuente, setFuente]           = useState('');
-  const [loading, setLoading]         = useState(false);
+  const [items, setItems] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [fuente, setFuente] = useState('');
+  const [loading, setLoading] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
-  const [syncMsg, setSyncMsg]         = useState('');
-  const [syncOk, setSyncOk]           = useState(null);
-  const [filter, setFilter]           = useState('');
-  const [detalle, setDetalle]         = useState(null);
-  const [sortField, setSortField]     = useState('secuencia');
-  const [sortDir, setSortDir]         = useState('desc');
+  const [syncMsg, setSyncMsg] = useState('');
+  const [syncOk, setSyncOk] = useState(null);
+  const [filter, setFilter] = useState('');
+  const [detalle, setDetalle] = useState(null);
+  const [sortField, setSortField] = useState('secuencia');
+  const [sortDir, setSortDir] = useState('desc');
 
   // ── Cargar listado ────────────────────────────────────────────────────────
   const fetchList = useCallback(async () => {
     setLoading(true);
     try {
-      const res  = await fetch(`${API_BASE}/erp/carretillas?limit=500`);
+      const res = await fetch(`${API_BASE}/erp/carretillas?limit=500`);
       const data = await res.json();
       setItems(data.items || []);
       setTotal(data.total || 0);
@@ -169,7 +169,7 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
   const handleSync = async () => {
     setSyncLoading(true); setSyncMsg(''); setSyncOk(null);
     try {
-      const res  = await fetch(`${API_BASE}/erp/sync`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/erp/sync`, { method: 'POST' });
       const data = await res.json();
       setSyncOk(res.ok);
       setSyncMsg(data.message || data.detail || 'Error.');
@@ -303,10 +303,10 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
             {/* Cabecera */}
             <div className="sticky top-0 z-10 grid gap-0 px-4 py-2 bg-[#0a0f12] border-b border-[#2e404a]"
               style={{ gridTemplateColumns: '1.6fr 0.7fr 1.2fr 0.9fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 40px' }}>
-              <ColHeader label="Bastidor"   field="bastidor" />
-              <ColHeader label="Sec."       field="secuencia" />
-              <ColHeader label="Modelo"     field="descripcion" />
-              <ColHeader label="Mástil"     field="referencia" />
+              <ColHeader label="Bastidor" field="bastidor" />
+              <ColHeader label="Sec." field="secuencia" />
+              <ColHeader label="Modelo" field="descripcion" />
+              <ColHeader label="Mástil" field="referencia" />
               <span className="text-[9px] text-logisnext-slate font-black uppercase tracking-[0.15em]">Alt.máx mm</span>
               <span className="text-[9px] text-logisnext-slate font-black uppercase tracking-[0.15em]">C1 kg</span>
               <span className="text-[9px] text-logisnext-slate font-black uppercase tracking-[0.15em]">C2 kg</span>
@@ -314,7 +314,7 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
               <span className="text-[9px] text-logisnext-slate font-black uppercase tracking-[0.15em]">↑max c</span>
               <span className="text-[9px] text-logisnext-slate font-black uppercase tracking-[0.15em]">↓min c</span>
               <span className="text-[9px] text-logisnext-slate font-black uppercase tracking-[0.15em]">↓max c</span>
-              <ColHeader label="F.montaje"  field="fecha_montaje" />
+              <ColHeader label="F.montaje" field="fecha_montaje" />
               <span />
             </div>
 
@@ -336,13 +336,12 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
                 <div
                   key={idx}
                   onClick={() => setDetalle(item)}
-                  className={`grid gap-0 px-4 py-2.5 border-b cursor-pointer transition-all group ${
-                    item.estado_prueba === 'FINALIZADO_OK'
+                  className={`grid gap-0 px-4 py-2.5 border-b cursor-pointer transition-all group ${item.estado_prueba === 'FINALIZADO_OK'
                       ? 'bg-green-600/30 border-green-500/80 hover:bg-green-500/50 shadow-[inset_4px_0_0_rgba(34,197,94,1)]'
                       : item.estado_prueba === 'ERROR'
-                      ? 'bg-red-600/30 border-red-500/80 hover:bg-red-500/50 shadow-[inset_4px_0_0_rgba(239,68,68,1)]'
-                      : 'border-[#1a262d]/60 hover:bg-logisnext-magenta/5 hover:border-logisnext-magenta/20'
-                  }`}
+                        ? 'bg-red-600/30 border-red-500/80 hover:bg-red-500/50 shadow-[inset_4px_0_0_rgba(239,68,68,1)]'
+                        : 'border-[#1a262d]/60 hover:bg-logisnext-magenta/5 hover:border-logisnext-magenta/20'
+                    }`}
                   style={{ gridTemplateColumns: '1.6fr 0.7fr 1.2fr 0.9fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 40px' }}
                 >
                   {/* Bastidor */}
@@ -375,19 +374,19 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
                   </span>
                   {/* Tpo elevac min c/carga */}
                   <span className="font-mono text-xs text-emerald-400/80">
-                    {item.tpo_elevac_min != null ? (item.tpo_elevac_min / 10).toFixed(1).replace('.', ',') : '—'}
+                    {cs2s(item.tpo_elevac_min)}
                   </span>
                   {/* Tpo elevac max c/carga */}
                   <span className="font-mono text-xs text-emerald-400/60">
-                    {item.tpo_elevac_max != null ? (item.tpo_elevac_max / 10).toFixed(1).replace('.', ',') : '—'}
+                    {cs2s(item.tpo_elevac_max)}
                   </span>
                   {/* Tpo descenso min c/carga */}
                   <span className="font-mono text-xs text-violet-400/80">
-                    {item.tpo_descenso_min != null ? (item.tpo_descenso_min / 10).toFixed(1).replace('.', ',') : '—'}
+                    {cs2s(item.tpo_descenso_min)}
                   </span>
                   {/* Tpo descenso max c/carga */}
                   <span className="font-mono text-xs text-violet-400/60">
-                    {item.tpo_descenso_max != null ? (item.tpo_descenso_max / 10).toFixed(1).replace('.', ',') : '—'}
+                    {cs2s(item.tpo_descenso_max)}
                   </span>
                   {/* Fecha montaje */}
                   <span className="font-mono text-[10px] text-logisnext-slate/70">

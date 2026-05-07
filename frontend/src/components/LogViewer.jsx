@@ -51,7 +51,7 @@ const LogViewer = ({ isOpen, onClose }) => {
     const t1 = parseLocalDate(start);
     const t2 = parseLocalDate(end);
     if (t1 && t2) {
-      const diff = Math.floor((t2 - t1) / 1000);
+      const diff = Math.round((t2 - t1) / 1000);
       if (diff < 0) return '-';
       return `${Math.floor(diff / 60)}m ${diff % 60}s`;
     }
