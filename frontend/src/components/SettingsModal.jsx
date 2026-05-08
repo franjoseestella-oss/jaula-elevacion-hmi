@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, Settings, Network, Usb, Save, TestTube, Cpu, Activity, Lightbulb } from 'lucide-react';
+import { X, Settings, Network, Usb, Save, TestTube, Cpu, Activity, Lightbulb, Box, Upload } from 'lucide-react';
+import ObjViewer from './ObjViewer';
 
 const SettingsModal = ({ open, onClose, telemetry }) => {
   const [activeTab, setActiveTab] = useState('datalogic');
@@ -11,6 +12,10 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
   const [testResult, setTestResult] = useState(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isSimulation, setIsSimulation] = useState(true);
+
+  // Archivos 3D
+  const [objFile, setObjFile] = useState(null);
+  const [mtlFile, setMtlFile] = useState(null);
 
   // Estados de tolerancia (se guardan en localStorage para persistencia)
   const [toleranciaPositiva, setToleranciaPositiva] = useState(() => parseInt(localStorage.getItem('toleranciaPositiva')) || 50);
@@ -73,7 +78,7 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
       style={{ background: 'rgba(5,10,14,0.85)', backdropFilter: 'blur(5px)' }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="relative w-[700px] flex flex-col bg-gradient-to-b from-[#151f25] to-[#0d1a20] border border-[#2e404a] rounded-2xl shadow-[0_0_60px_rgba(221,40,118,0.15)] overflow-hidden">
+      <div className="relative w-[900px] flex flex-col bg-gradient-to-b from-[#151f25] to-[#0d1a20] border border-[#2e404a] rounded-2xl shadow-[0_0_60px_rgba(221,40,118,0.15)] overflow-hidden">
         
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#2e404a] bg-[#1d2930]/60 shrink-0">
@@ -95,7 +100,7 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
           </button>
         </div>
 
-        <div className="flex flex-row h-[400px]">
+        <div className="flex flex-row h-[600px]">
           {/* Sidebar Tabs */}
           <div className="w-48 border-r border-[#2e404a] bg-[#0a0f12]/50 p-4 flex flex-col gap-2">
             <button
@@ -130,6 +135,17 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
             >
               <TestTube size={14} />
               Prueba 5 Min
+            </button>
+            <button
+              onClick={() => setActiveTab('visor3d')}
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                activeTab === 'visor3d'
+                  ? 'bg-logisnext-magenta/20 text-logisnext-magenta border border-logisnext-magenta/30'
+                  : 'text-logisnext-slate hover:bg-[#1d2930] hover:text-white border border-transparent'
+              }`}
+            >
+              <Box size={14} />
+              Visor 3D
             </button>
           </div>
 
@@ -315,6 +331,39 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
                       />
                     </div>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'visor3d' && (
+              <div className="space-y-4 h-full flex flex-col">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-logisnext-magenta/50 pb-1 inline-block">
+                    Visor 3D (OBJ/MTL)
+                  </h3>
+                </div>
+
+                <div className="flex gap-4 shrink-0">
+                  <label className="flex-1 flex flex-col items-center justify-center p-3 bg-[#1d2930]/40 border border-dashed border-[#2e404a] hover:border-logisnext-magenta/50 rounded-xl cursor-pointer transition-colors">
+                    <Upload size={16} className="text-logisnext-lightslate mb-1" />
+                    <span className="text-[10px] text-white font-bold uppercase tracking-widest">Subir .OBJ</span>
+                    <span className="text-[9px] text-logisnext-slate mt-0.5 truncate max-w-[150px]">
+                      {objFile ? objFile.name : 'Ningún archivo seleccionado'}
+                    </span>
+                    <input type="file" accept=".obj" className="hidden" onChange={(e) => setObjFile(e.target.files[0])} />
+                  </label>
+                  <label className="flex-1 flex flex-col items-center justify-center p-3 bg-[#1d2930]/40 border border-dashed border-[#2e404a] hover:border-logisnext-magenta/50 rounded-xl cursor-pointer transition-colors">
+                    <Upload size={16} className="text-logisnext-lightslate mb-1" />
+                    <span className="text-[10px] text-white font-bold uppercase tracking-widest">Subir .MTL</span>
+                    <span className="text-[9px] text-logisnext-slate mt-0.5 truncate max-w-[150px]">
+                      {mtlFile ? mtlFile.name : 'Opcional (Materiales)'}
+                    </span>
+                    <input type="file" accept=".mtl" className="hidden" onChange={(e) => setMtlFile(e.target.files[0])} />
+                  </label>
+                </div>
+
+                <div className="flex-1 relative min-h-[450px]">
+                  <ObjViewer objFile={objFile} mtlFile={mtlFile} />
                 </div>
               </div>
             )}
