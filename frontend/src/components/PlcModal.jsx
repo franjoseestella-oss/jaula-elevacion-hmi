@@ -47,10 +47,18 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
     return saved ? JSON.parse(saved) : {};
   });
 
-  const updateMapping = (plcKey, field, value) => {
+  const updateMappingFromAppVar = (appVar, newPlcKey, direction) => {
     const newMapping = { ...varMapping };
-    if (!newMapping[plcKey]) newMapping[plcKey] = { appVar: '', direction: 'IN' };
-    newMapping[plcKey][field] = value;
+    // Eliminar cualquier mapeo previo para esta variable de proyecto
+    Object.keys(newMapping).forEach(key => {
+      if (newMapping[key].appVar === appVar) {
+        delete newMapping[key];
+      }
+    });
+    // Agregar el nuevo mapeo si se seleccionó una variable del PLC
+    if (newPlcKey) {
+      newMapping[newPlcKey] = { appVar, direction: direction || (appVar.startsWith('O') ? 'OUT' : 'IN') };
+    }
     setVarMapping(newMapping);
     localStorage.setItem('plcVarMapping', JSON.stringify(newMapping));
   };
@@ -722,66 +730,63 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
             <table className="w-full text-left text-[10px] text-gray-300">
               <thead className="bg-[#1d2930] sticky top-0 border-b border-[#2e404a] z-10 shadow-md">
                 <tr>
-                  <th className="p-2 px-4 font-bold uppercase tracking-wider w-[30%]">Variable PLC</th>
                   <th className="p-2 px-4 font-bold uppercase tracking-wider w-[30%]">Variable Proyecto</th>
+                  <th className="p-2 px-4 font-bold uppercase tracking-wider w-[30%]">Variable PLC</th>
                   <th className="p-2 px-4 font-bold uppercase tracking-wider w-[15%]">Dirección</th>
                   <th className="p-2 px-4 font-bold uppercase tracking-wider text-right w-[25%]">Valor Real</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#2e404a]/50">
-                {telemetry?.plc && Object.keys(telemetry.plc).length > 0 ? (
-                  Object.entries(telemetry.plc).sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => {
-                    const mapping = varMapping[key] || { appVar: '', direction: 'IN' };
-                    
-                    return (
-                      <tr key={key} className="hover:bg-[#1d2930]/50 transition-colors group">
-                        <td className="p-2 px-4 font-mono text-blue-400/90 group-hover:text-blue-300">{key}</td>
-                        
-                        <td className="p-2 px-4">
-                          <select 
-                            value={mapping.appVar} 
-                            onChange={(e) => updateMapping(key, 'appVar', e.target.value)}
-                            className="w-full bg-[#1d2930] border border-[#2e404a] text-white rounded p-1 text-[10px] outline-none focus:border-blue-500"
-                          >
-                            {PROJECT_VARS.map(v => (
-                              <option key={v} value={v}>{v || '-- Ninguna --'}</option>
-                            ))}
-                          </select>
-                        </td>
-                        
-                        <td className="p-2 px-4">
-                          <select 
-                            value={mapping.direction} 
-                            onChange={(e) => updateMapping(key, 'direction', e.target.value)}
-                            className="w-full bg-[#1d2930] border border-[#2e404a] text-white rounded p-1 text-[10px] outline-none focus:border-blue-500"
-                          >
-                            <option value="IN">IN (Lectura)</option>
-                            <option value="OUT">OUT (Escritura)</option>
-                          </select>
-                        </td>
-                        
-                        <td className="p-2 px-4 text-right font-mono font-bold">
-                          {typeof value === 'boolean' 
-                            ? (
-                              <div className="flex items-center justify-end gap-2">
-                                <span className={value ? 'text-green-400' : 'text-gray-500'}>{value ? 'TRUE' : 'FALSE'}</span>
-                                <div className={`w-2 h-2 rounded-full ${value ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' : 'bg-gray-700'}`}></div>
-                              </div>
-                            )
-                            : <span className="text-yellow-400 bg-yellow-400/10 px-1.5 py-0.5 rounded">{value !== null && value !== undefined ? value.toString() : '---'}</span>
-                          }
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan="4" className="p-8 text-center text-gray-500 flex flex-col items-center justify-center gap-2">
-                      <Database size={24} className="opacity-30" />
-                      <span className="uppercase tracking-widest text-[10px] font-bold">Esperando datos del PLC...</span>
-                    </td>
-                  </tr>
-                )}
+                {PROJECT_VARS.filter(v => v !== "").map(appVar => {
+                  // Buscar si esta variable de proyecto está mapeada a alguna llave del PLC
+                  const mappingEntry = Object.entries(varMapping).find(([k, v]) => v.appVar === appVar);
+                  const plcKey = mappingEntry ? mappingEntry[0] : '';
+                  const direction = mappingEntry ? mappingEntry[1].direction : (appVar.startsWith('O') ? 'OUT' : 'IN');
+                  const plcKeys = telemetry?.plc ? Object.keys(telemetry.plc) : [];
+                  const value = plcKey && telemetry?.plc ? telemetry.plc[plcKey] : null;
+
+                  return (
+                    <tr key={appVar} className="hover:bg-[#1d2930]/50 transition-colors group">
+                      <td className="p-2 px-4 font-mono text-blue-400/90 group-hover:text-blue-300 font-bold">{appVar}</td>
+                      
+                      <td className="p-2 px-4">
+                        <select 
+                          value={plcKey} 
+                          onChange={(e) => updateMappingFromAppVar(appVar, e.target.value, direction)}
+                          className="w-full bg-[#1d2930] border border-[#2e404a] text-white rounded p-1 text-[10px] outline-none focus:border-blue-500"
+                        >
+                          <option value="">-- Ninguna --</option>
+                          {plcKeys.sort((a, b) => a.localeCompare(b)).map(k => (
+                            <option key={k} value={k}>{k}</option>
+                          ))}
+                        </select>
+                      </td>
+                      
+                      <td className="p-2 px-4">
+                        <select 
+                          value={direction} 
+                          onChange={(e) => updateMappingFromAppVar(appVar, plcKey, e.target.value)}
+                          className="w-full bg-[#1d2930] border border-[#2e404a] text-white rounded p-1 text-[10px] outline-none focus:border-blue-500"
+                        >
+                          <option value="IN">IN (Lectura)</option>
+                          <option value="OUT">OUT (Escritura)</option>
+                        </select>
+                      </td>
+                      
+                      <td className="p-2 px-4 text-right font-mono font-bold">
+                        {typeof value === 'boolean' 
+                          ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <span className={value ? 'text-green-400' : 'text-gray-500'}>{value ? 'TRUE' : 'FALSE'}</span>
+                              <div className={`w-2 h-2 rounded-full ${value ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' : 'bg-gray-700'}`}></div>
+                            </div>
+                          )
+                          : <span className="text-yellow-400 bg-yellow-400/10 px-1.5 py-0.5 rounded">{value !== null && value !== undefined ? value.toString() : '---'}</span>
+                        }
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
