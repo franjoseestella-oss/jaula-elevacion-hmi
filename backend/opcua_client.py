@@ -41,29 +41,28 @@ class OpcUaConfig:
 # Variables expuestas por el PLC (las mismas que en plc_sim_state de main.py)
 # ──────────────────────────────────────────────────────────────────────────────
 PLC_READ_VARS = [
-    # Entradas analógicas
-    "R_Altura_Carretilla",
-    "W_Numero_Pallets",
-    # Entradas digitales (pulsadores / sensores)
-    "b_Iniciar_Secuencia",
-    "b_Poner_Pegatina",
-    "b_Abortar_Secuencia",
-    "b_LUZ_Pulsador_1",
-    "b_LUZ_Pulsador_2",
-    "b_HEAR_BIT",
-    # Salidas (feedback del PLC)
-    "b_LUZ_VERDE",
-    "b_LUZ_AZUL",
-    "b_LUZ_ROJA"
+    "OR_Altura_Carretilla",
+    "OW_Numero_Pallets",
+    "Ob_Iniciar_Secuencia",
+    "Ob_Poner_Pegatina",
+    "Ob_Abortar_Secuencia",
+    "Ob_Bit_VIDA_PLC_APP",
+    # Mantenemos las de escritura aquí también para poder leer su estado
+    "Ib_LUZ_VERDE",
+    "Ib_LUZ_AZUL",
+    "Ib_LUZ_ROJA",
+    "Ib_LUZ_Pulsador_1",
+    "Ib_LUZ_Pulsador_2",
+    "Ib_Bit_VIDA_APP_PLC"
 ]
 
 PLC_WRITE_VARS = [
-    "b_LUZ_VERDE",
-    "b_LUZ_AZUL",
-    "b_LUZ_ROJA",
-    "b_LUZ_Pulsador_1",
-    "b_LUZ_Pulsador_2",
-    "b_HEAR_BIT"
+    "Ib_LUZ_VERDE",
+    "Ib_LUZ_AZUL",
+    "Ib_LUZ_ROJA",
+    "Ib_LUZ_Pulsador_1",
+    "Ib_LUZ_Pulsador_2",
+    "Ib_Bit_VIDA_APP_PLC"
 ]
 
 
@@ -79,8 +78,6 @@ class OpcUaClientManager:
     def __init__(self):
         self.config    = OpcUaConfig()
         self.state     = {v: False for v in PLC_READ_VARS}
-        self.state["OW_Altura_Elevacion"] = 0.0
-        self.state["OW_Pallet"]           = 0.0
 
         self.connected      = False
         self.active         = False          # True = modo PLC real
@@ -167,7 +164,10 @@ class OpcUaClientManager:
         client.secure_channel_timeout = 10_000
 
         logger.info("[OPC UA] Conectando a %s ...", self.config.url)
-        await client.connect()
+        try:
+            await asyncio.wait_for(client.connect(), timeout=4.0)
+        except asyncio.TimeoutError:
+            raise Exception("Timeout conectando al PLC (Revisa IP o red)")
         self.connected = True
         self.error_msg = ""
         logger.info("[OPC UA] ✓ Conectado a %s", self.config.url)
@@ -182,7 +182,8 @@ class OpcUaClientManager:
                     bname = await node.read_browse_name()
                     node_class = await node.read_node_class()
                     if node_class == ua.NodeClass.Variable:
-                        nodes[bname.Name] = node
+                        if bname.Name not in {"Icon", "OW_Altura_Elevacion", "OW_Pallet"}:
+                            nodes[bname.Name] = node
                     elif node_class == ua.NodeClass.Object:
                         for child in await node.get_children():
                             await discover_vars(child)
@@ -216,6 +217,11 @@ class OpcUaClientManager:
             }
             logger.info("[OPC UA] Monitorizando %d variables.", len(nodes))
 
+            import time
+            last_heartbeat = time.time()
+            last_app_heartbeat = time.time()
+            app_heartbeat_state = False
+
             while self.active:
                 # ── Leer todas las variables ────────────────────────────────
                 for var, node in nodes.items():
@@ -226,9 +232,29 @@ class OpcUaClientManager:
                         else:
                             self.state[var] = str(val)
                     except Exception:
-                        pass  # mantiene el último valor conocido
+                        pass
+                
+                # ── Comprobar BIT VIDA (Heartbeat) PLC -> APP ───────────────
+                if "Ob_Bit_VIDA_PLC_APP" in nodes:
+                    if self.state.get("Ob_Bit_VIDA_PLC_APP") is True:
+                        last_heartbeat = time.time()
+                    elif time.time() - last_heartbeat > 3.0:
+                        raise Exception("Conexión perdida (BIT VIDA PLC no recibido en 3s)")
 
-                # ── Procesar cola de escrituras ─────────────────────────────
+                # ── Generar BIT VIDA APP -> PLC (Toggle 1s) ─────────────────
+                if time.time() - last_app_heartbeat >= 1.0:
+                    app_heartbeat_state = not app_heartbeat_state
+                    last_app_heartbeat = time.time()
+                    if "Ib_Bit_VIDA_APP_PLC" in write_nodes:
+                        try:
+                            from asyncua import ua
+                            node_app = write_nodes["Ib_Bit_VIDA_APP_PLC"]
+                            await node_app.write_value(ua.DataValue(ua.Variant(app_heartbeat_state, ua.VariantType.Boolean)))
+                            self.state["Ib_Bit_VIDA_APP_PLC"] = app_heartbeat_state
+                        except Exception as e:
+                            logger.warning("[OPC UA] Error escribiendo Ib_Bit_VIDA_APP_PLC: %s", e)
+
+                # ── Procesar cola de escrituras manuales ────────────────────
                 while not self._write_queue.empty():
                     payload = await self._write_queue.get()
                     await self._do_write(client, write_nodes, payload)

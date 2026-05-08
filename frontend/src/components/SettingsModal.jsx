@@ -26,18 +26,19 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
   const [test5mTolerancia, setTest5mTolerancia] = useState(() => parseInt(localStorage.getItem('test5mTolerancia')) || 15);
 
   // Estado local para las salidas del PLC
-  const [luces, setLuces] = useState({ b_LUZ_VERDE: false, b_LUZ_AZUL: false, b_LUZ_ROJA: false });
+  const [luces, setLuces] = useState({ Ib_LUZ_VERDE: false, Ib_LUZ_AZUL: false, Ib_LUZ_ROJA: false });
 
   // Sincronizar el estado local con la telemetría real del backend
   React.useEffect(() => {
-    if (telemetry?.plc) {
+    const activePlc = telemetry?.mappedPlc || telemetry?.plc;
+    if (activePlc) {
       setLuces({
-        b_LUZ_VERDE: !!telemetry.plc.b_LUZ_VERDE,
-        b_LUZ_AZUL: !!telemetry.plc.b_LUZ_AZUL,
-        b_LUZ_ROJA: !!telemetry.plc.b_LUZ_ROJA,
+        Ib_LUZ_VERDE: !!activePlc.Ib_LUZ_VERDE,
+        Ib_LUZ_AZUL: !!activePlc.Ib_LUZ_AZUL,
+        Ib_LUZ_ROJA: !!activePlc.Ib_LUZ_ROJA,
       });
     }
-  }, [telemetry?.plc]);
+  }, [telemetry?.mappedPlc, telemetry?.plc]);
 
   if (!open) return null;
 
