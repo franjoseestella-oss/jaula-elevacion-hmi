@@ -633,18 +633,18 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
   // 1. Abortar secuencia
   useEffect(() => {
-    if (plcState?.Ob_Abortar_Secuancia === true) {
+    if (plcState?.b_Abortar_Secuencia === true) {
       if (stepStatus.some(s => s !== STEP_STATUS.PENDING)) {
         console.warn("ABORTAR SECUENCIA (Pulsador PLC)");
         handleAbort();
       }
     }
-  }, [plcState?.Ob_Abortar_Secuancia]);
+  }, [plcState?.b_Abortar_Secuencia]);
 
   // 2. Iniciar Secuencia — detección robusta de flanco de subida
   const prevInciarRef = useRef(false);
   useEffect(() => {
-    const curr = plcState?.Ob_Inciar_Secuencia === true;
+    const curr = plcState?.b_Iniciar_Secuencia === true;
     const risingEdge = curr && !prevInciarRef.current;
     prevInciarRef.current = curr;
 
@@ -691,7 +691,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
       } else if (stepStatus[3] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
         // Validación de carga
-        const currentPallets = plcState?.OW_Pallet || 0;
+        const currentPallets = plcState?.W_Numero_Pallets || 0;
         const targetLoad = erpData?.capac_interm_1 || 0;
         const currentLoad = currentPallets * 250;
 
@@ -722,24 +722,24 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plcState?.Ob_Inciar_Secuencia]);
+  }, [plcState?.b_Iniciar_Secuencia]);
 
   // 3. Pegatina Colocada -> avanzar en Paso 2
   useEffect(() => {
-    if (plcState?.Ob_Pegatina_Colocada === true && stepStatus[1] === STEP_STATUS.ACTIVE && erpData && stepStarted[1]) {
+    if (plcState?.b_Poner_Pegatina === true && stepStatus[1] === STEP_STATUS.ACTIVE && erpData && stepStarted[1]) {
       const altura = erpData.altura_max_interm;
-      const act = plcState?.OW_Altura_Elevacion || 0;
+      const act = plcState?.R_Altura_Carretilla || 0;
       const posOk = act >= (altura - tolerancias.negativa) && act <= (altura + tolerancias.positiva);
 
       if (posOk) {
         markOk(1);
       }
     }
-  }, [plcState?.Ob_Pegatina_Colocada, stepStatus[1], erpData, tolerancias]);
+  }, [plcState?.b_Poner_Pegatina, stepStatus[1], erpData, tolerancias]);
 
   // 3b. Pegatina Colocada con resultado NOK → CONTINUAR (avanzar paso sin repetir)
   useEffect(() => {
-    if (plcState?.Ob_Pegatina_Colocada !== true) return;
+    if (plcState?.b_Poner_Pegatina !== true) return;
     if (cameraTestState !== 'nok') return;
     const activeTestStep = stepStatus[2] === STEP_STATUS.ACTIVE ? 2
       : stepStatus[3] === STEP_STATUS.ACTIVE ? 3 : null;
@@ -747,13 +747,13 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     // Avanzar al siguiente paso (marcar NOK y continuar)
     markOk(activeTestStep);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plcState?.Ob_Pegatina_Colocada]);
+  }, [plcState?.b_Poner_Pegatina]);
 
   // ── Overlay Datos Multiload (Paso 2) ───────────────────────────────────────
   useEffect(() => {
     if (currentStep === 1 && erpData && stepStarted[1]) {
       const alturaMax = erpData.altura_max_interm;
-      const actual = plcState?.OW_Altura_Elevacion || 0;
+      const actual = plcState?.R_Altura_Carretilla || 0;
       const min = alturaMax - tolerancias.negativa;
       const max = alturaMax + tolerancias.positiva;
       const isOk = actual >= min && actual <= max;
@@ -770,7 +770,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     } else {
       if (setStep2Overlay) setStep2Overlay(null);
     }
-  }, [currentStep, erpData, plcState?.OW_Altura_Elevacion, tolerancias, setStep2Overlay]);
+  }, [currentStep, erpData, plcState?.R_Altura_Carretilla, tolerancias, setStep2Overlay]);
 
   // ── Luces LED de Torre ─────────────────────────────────
   useEffect(() => {
@@ -790,7 +790,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           // Etapa iniciada
           if (currentStep === 1) { // Paso 2: Multiload
             const altura = erpData?.altura_max_interm || 0;
-            const act = plcState?.OW_Altura_Elevacion || 0;
+            const act = plcState?.R_Altura_Carretilla || 0;
             const posOk = act >= (altura - tolerancias.negativa) && act <= (altura + tolerancias.positiva);
 
             if (posOk) {
@@ -842,16 +842,16 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            Ob_LUZ_AZUL: luzAzul,
-            Ob_LUZ_VERDE: luzVerde,
-            Ob_LUZ_ROJA: luzRoja
+            b_LUZ_AZUL: luzAzul,
+            b_LUZ_VERDE: luzVerde,
+            b_LUZ_ROJA: luzRoja
           })
         });
       } catch (e) { console.error("Error setting LEDs:", e); }
     };
 
     updateLed();
-  }, [currentStep, stepStarted, erpData, plcState?.OW_Altura_Elevacion, tolerancias, blinkTick, cameraTestState, isSimulation]);
+  }, [currentStep, stepStarted, erpData, plcState?.R_Altura_Carretilla, tolerancias, blinkTick, cameraTestState, isSimulation]);
 
   // Auto-avanzar después de 3s en OK
   useEffect(() => {
@@ -921,11 +921,11 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       stageDataRef.current[4] = {
         elev: isSimulation ? simTimes.elev : pState?.OW_Tiempo_Elevacion,
         desc: isSimulation ? simTimes.desc : pState?.OW_Tiempo_Descenso,
-        cargaGet: pState?.OW_Pallet ? pState.OW_Pallet * 250 : null
+        cargaGet: pState?.W_Numero_Pallets ? pState.W_Numero_Pallets * 250 : null
       };
     } else if (idx === 4) { // Fin Etapa 5 (5 min)
-      stageDataRef.current[5].altura_final = pState?.OW_Altura_Elevacion;
-      stageDataRef.current[5].diff = Math.abs((stageDataRef.current[5].altura_inicial || 0) - (pState?.OW_Altura_Elevacion || 0));
+      stageDataRef.current[5].altura_final = pState?.R_Altura_Carretilla;
+      stageDataRef.current[5].diff = Math.abs((stageDataRef.current[5].altura_inicial || 0) - (pState?.R_Altura_Carretilla || 0));
     }
 
     // Registrar duración del paso
@@ -1018,7 +1018,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         if (isSimulation && cameraTestState === 'standby') setCameraTestState('esperando_1500');
         else if (!isSimulation || cameraTestState === 'ok') markOk(2);
       } else if (statuses[3] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') {
-        const currentPallets = pState?.OW_Pallet || 0;
+        const currentPallets = pState?.W_Numero_Pallets || 0;
         const targetLoad = erpDataRef.current?.capac_interm_1 || 0;
         const currentLoad = currentPallets * 250;
 
@@ -1046,7 +1046,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
     if (statuses[1] === STEP_STATUS.ACTIVE && erp && started[1]) {
       const altura = erp.altura_max_interm;
-      const act = pState?.OW_Altura_Elevacion || 0;
+      const act = pState?.R_Altura_Carretilla || 0;
       const posOk = act >= (altura - tols.negativa) && act <= (altura + tols.positiva);
       console.log('[DIRECTO] Pegatina. posOk:', posOk, 'act:', act, 'rango:', altura - tols.negativa, '-', altura + tols.positiva);
       if (posOk) {
@@ -1143,7 +1143,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         fetch(`${API_BASE}/plc/write`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ OW_Altura_Elevacion: 0 })
+          body: JSON.stringify({ R_Altura_Carretilla: 0 })
         }).catch(console.error);
 
         // Recoger la carga (pallet de madera) si no la tiene ya
@@ -1188,7 +1188,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     if (setTestHUDOverlay) {
       if ((currentStep === 2 || currentStep === 3) && stepStatus[currentStep] === STEP_STATUS.ACTIVE && erpData) {
         let ledState = 'standby';
-        const elevMeters = isSimulation ? (window.__carriageY || 0) : (plcState?.OW_Altura_Elevacion || 0) / 1000;
+        const elevMeters = isSimulation ? (window.__carriageY || 0) : (plcState?.R_Altura_Carretilla || 0) / 1000;
 
         if (cameraTestState === 'standby') {
           ledState = 'standby'; // rojo parpadeante
@@ -1257,9 +1257,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
     let reqId;
     const loop = () => {
-      const currentHeight = isSimulation ? (window.__carriageY || 0) * 1000 : (plcStateRef.current?.OW_Altura_Elevacion || 0);
+      const currentHeight = isSimulation ? (window.__carriageY || 0) * 1000 : (plcStateRef.current?.R_Altura_Carretilla || 0);
 
-      const currentPallets = plcStateRef.current?.OW_Pallet || 0;
+      const currentPallets = plcStateRef.current?.W_Numero_Pallets || 0;
       const targetLoad = erpDataRef.current?.capac_interm_1 || 0;
       const currentLoad = currentPallets * 250;
 
@@ -1582,7 +1582,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         <StepCard num={2} icon={Ruler} title="Posición multiload" status={stepStatus[1]} canSkip onToggleSkip={() => toggleSkip(1)}>
           {stepStatus[1] === STEP_STATUS.ACTIVE && erpData && (() => {
             const alturaMax = erpData.altura_max_interm;
-            const alturaAct = plcState?.OW_Altura_Elevacion || 0;
+            const alturaAct = plcState?.R_Altura_Carretilla || 0;
             const isPosOk = alturaAct >= (alturaMax - tolerancias.negativa) && alturaAct <= (alturaMax + tolerancias.positiva);
 
             return (
@@ -1658,12 +1658,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             // Derivación del estado del LED
             let ledState = 'standby';
             if (cameraTestState === 'standby') {
-              const actualElev = isSimulation ? (window.__carriageY || 0) : (plcState?.OW_Altura_Elevacion || 0);
+              const actualElev = isSimulation ? (window.__carriageY || 0) : (plcState?.R_Altura_Carretilla || 0);
               const isAtBottom = isSimulation ? (actualElev <= 0.1) : (actualElev <= 50);
               ledState = isAtBottom ? 'standby-ok' : 'standby';
             }
             else if (cameraTestState === 'ascenso') {
-              const actualElev = isSimulation ? (window.__carriageY || 0) : (plcState?.OW_Altura_Elevacion || 0);
+              const actualElev = isSimulation ? (window.__carriageY || 0) : (plcState?.R_Altura_Carretilla || 0);
               const isTiming = isSimulation ? (actualElev >= 1.5) : (actualElev >= 1500);
               ledState = isTiming ? 'active' : 'standby';
             }
@@ -1758,12 +1758,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             // Derivación del estado del LED
             let ledState = 'standby';
             if (cameraTestState === 'standby' || cameraTestState === 'esperando_1500') {
-              const actualElev = isSimulation ? (window.__carriageY || 0) : (plcState?.OW_Altura_Elevacion || 0);
+              const actualElev = isSimulation ? (window.__carriageY || 0) : (plcState?.R_Altura_Carretilla || 0);
               const isAtBottom = isSimulation ? (actualElev <= 0.1) : (actualElev <= 50);
               ledState = isAtBottom ? 'standby-ok' : 'standby';
             }
             else if (cameraTestState === 'ascenso') {
-              const actualElev = isSimulation ? (window.__carriageY || 0) : (plcState?.OW_Altura_Elevacion || 0);
+              const actualElev = isSimulation ? (window.__carriageY || 0) : (plcState?.R_Altura_Carretilla || 0);
               const isTiming = isSimulation ? (actualElev >= 1.5) : (actualElev >= 1500);
               ledState = isTiming ? 'active' : 'standby';
             }
@@ -1777,10 +1777,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
               <>
                 <div className="flex flex-col gap-1 border border-[#2e404a] p-2 rounded-lg bg-[#0a0f12]">
                   <DataLine label="Carga Requerida ERP" value={erpData.capac_interm_1 != null ? `${erpData.capac_interm_1} kg` : '—'} highlight />
-                  <DataLine label="Carga Actual (PLC)" value={plcState?.OW_Pallet ? `${plcState.OW_Pallet * 250} kg` : '0 kg'} highlight={false} />
-                  {plcState?.OW_Pallet > 0 && (
+                  <DataLine label="Carga Actual (PLC)" value={plcState?.W_Numero_Pallets ? `${plcState.W_Numero_Pallets * 250} kg` : '0 kg'} highlight={false} />
+                  {plcState?.W_Numero_Pallets > 0 && (
                     <span className="text-[8px] text-logisnext-slate ml-auto -mt-1 mb-1 block">
-                      ({plcState.OW_Pallet} pallet{plcState.OW_Pallet !== 1 ? 's' : ''} × 250kg)
+                      ({plcState.W_Numero_Pallets} pallet{plcState.W_Numero_Pallets !== 1 ? 's' : ''} × 250kg)
                     </span>
                   )}
                 </div>

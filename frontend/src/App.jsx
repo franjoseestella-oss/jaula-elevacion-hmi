@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { AlertTriangle, Play, CheckCircle2, PowerOff, Camera } from 'lucide-react';
+import { AlertTriangle, Play, CheckCircle2, PowerOff, Camera, X } from 'lucide-react';
 import Header from './components/Header';
 import LeftPanel from './components/LeftPanel';
 import DigitalTwin from './components/DigitalTwin';
@@ -23,12 +23,23 @@ function App() {
   const [telemetry, setTelemetry]       = useState({ distance: 0, timer: 0.0, state: 'IDLE' });
   const [networkStatus, setNetworkStatus] = useState({ opc: false, basler: false, db: false, erp: true });
   const [operario, setOperario]         = useState(null);
-  const [isSimulation, setIsSimulation] = useState(true);
+  const [isSimulation, setIsSimulation] = useState(() => {
+    const saved = localStorage.getItem('isSimulation');
+    return saved !== null ? JSON.parse(saved) : false;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('isSimulation', JSON.stringify(isSimulation));
+  }, [isSimulation]);
   const [palletState, setPalletState]   = useState('idle'); // idle | animating | picked_up
   const [simCarriageHeight, setSimCarriageHeight] = useState(0);
   const [step2Overlay, setStep2Overlay] = useState(null);
   const [testHUDOverlay, setTestHUDOverlay] = useState(null);
   const [currentStep, setCurrentStep] = useState(0);
+
+  const [alarms, setAlarms] = useState([]);
+  const [showAlarms, setShowAlarms] = useState(false);
+  const [hasUnreadAlarms, setHasUnreadAlarms] = useState(false);
   
   // Ref para llamar funciones del Sequencer directamente (sin pasar por WebSocket)
   const sequencerRef = useRef(null);
@@ -65,6 +76,47 @@ function App() {
     };
   }, [erpData]);
 
+  // ── Auto-connect to PLC on startup if a saved config exists ──
+  useEffect(() => {
+    const savedConfigStr = localStorage.getItem('plcConfig');
+    if (savedConfigStr) {
+      try {
+        const savedConfig = JSON.parse(savedConfigStr);
+        // Only send connect request if we are in PLC mode
+        const savedSim = localStorage.getItem('isSimulation');
+        const isSim = savedSim !== null ? JSON.parse(savedSim) : false;
+        
+        fetch('http://localhost:8001/config/plc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...savedConfig,
+            isSimulation: isSim
+          })
+        }).catch(e => console.error("Error auto-connecting to PLC:", e));
+      } catch(e) {}
+    }
+  }, []);
+
+  // Track alarms
+  useEffect(() => {
+    let newAlarmDesc = null;
+    if (telemetry?.opcua_error && telemetry?.opcua_error !== "None") {
+       newAlarmDesc = 'Error conexión OPC UA: ' + telemetry.opcua_error;
+    }
+    if (telemetry?.plc?.b_Abortar_Secuencia) {
+       newAlarmDesc = 'Secuencia abortada por PLC';
+    }
+    
+    if (newAlarmDesc) {
+      setAlarms(prev => {
+         if (prev.length > 0 && prev[0].description === newAlarmDesc && (Date.now() - prev[0].id) < 5000) return prev;
+         setHasUnreadAlarms(true);
+         return [{ id: Date.now(), timestamp: new Date().toLocaleString(), description: newAlarmDesc }, ...prev].slice(0, 50);
+      });
+    }
+  }, [telemetry?.opcua_error, telemetry?.plc?.b_Abortar_Secuencia]);
+
 
   // Cargar datos completos de un bastidor seleccionado (desde el modal o ErpSearch)
   const handleBastidorSelect = useCallback(async (bastidor) => {
@@ -82,13 +134,13 @@ function App() {
   // Enviar comando al PLC para activar un bit de simulacion, esperar 800ms y desactivarlo
   const pulsePlc = async (varName) => {
     // Llamada directa al Sequencer (sin latencia de WebSocket)
-    if (varName === 'Ob_Inciar_Secuencia' && sequencerRef.current?.onIniciarSecuencia) {
+    if (varName === 'b_Iniciar_Secuencia' && sequencerRef.current?.onIniciarSecuencia) {
       sequencerRef.current.onIniciarSecuencia();
     }
-    if (varName === 'Ob_Pegatina_Colocada' && sequencerRef.current?.onPegatina) {
+    if (varName === 'b_Poner_Pegatina' && sequencerRef.current?.onPegatina) {
       sequencerRef.current.onPegatina();
     }
-    if (varName === 'Ob_Abortar_Secuancia' && sequencerRef.current?.onAbortar) {
+    if (varName === 'b_Abortar_Secuencia' && sequencerRef.current?.onAbortar) {
       sequencerRef.current.onAbortar();
     }
     // También enviamos al backend por si hay PLC real
@@ -155,6 +207,8 @@ function App() {
         operario={operario}
         canChangeOperator={!erpData}
         onOperatorClick={() => setOperario(null)}
+        hasAlarms={alarms.length > 0}
+        onAlarmsClick={() => { setShowAlarms(true); setHasUnreadAlarms(false); }}
       />
 
       <div className="flex-1 flex flex-row overflow-hidden">
@@ -190,6 +244,39 @@ function App() {
             </div>
           )}
 
+          {/* ALARMS ICON */}
+          {hasUnreadAlarms && (
+            <button 
+              onClick={() => { setShowAlarms(true); setHasUnreadAlarms(false); }}
+              className="absolute top-20 right-6 z-50 bg-red-600/90 border border-red-500 text-white p-3 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.8)] animate-pulse"
+            >
+              <AlertTriangle size={24} />
+            </button>
+          )}
+
+          {/* ALARMS MODAL (FLOATING PANEL) */}
+          {showAlarms && (
+            <div className="absolute top-32 right-6 z-50 w-[600px] bg-[#0a0f12]/95 border border-red-500/50 rounded-2xl shadow-[0_0_40px_rgba(220,38,38,0.3)] backdrop-blur-md overflow-hidden flex flex-col max-h-[80vh] animate-in slide-in-from-right-8 duration-300">
+              <div className="bg-red-600/20 border-b border-red-500/30 p-5 flex justify-between items-center shrink-0">
+                 <div className="flex items-center gap-3">
+                    <AlertTriangle size={24} className="text-red-500" />
+                    <span className="text-base font-black text-red-500 uppercase tracking-widest drop-shadow-md">Log de Alarmas</span>
+                 </div>
+                 <button onClick={() => setShowAlarms(false)} className="text-gray-400 hover:text-white bg-[#1d2930] p-2 rounded-lg hover:bg-red-600 transition-colors"><X size={20}/></button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 custom-scrollbar">
+                {alarms.length === 0 ? (
+                   <span className="text-sm text-gray-500 italic text-center py-10">No hay alarmas registradas.</span>
+                ) : [...alarms].reverse().map(a => (
+                   <div key={a.id} className="bg-[#1d2930]/80 p-4 rounded-xl border border-red-500/30 flex flex-col gap-2 shadow-sm hover:border-red-500/60 transition-colors">
+                     <span className="text-xs text-gray-400 font-mono bg-black/40 self-start px-2 py-1 rounded">{a.timestamp}</span>
+                     <span className="text-sm font-bold text-white tracking-wide">{a.description}</span>
+                   </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* BANNER GIGANTE DE SEGURIDAD */}
           {erpData && (currentStep === 3 || currentStep === 4) && (!telemetry.plc?.Ob_Dtec_Valla_1_trabajo_LH || !telemetry.plc?.Ob_Dtec_Valla_2_trabajo_RH) && (
             <div className="absolute top-10 left-1/2 -translate-x-1/2 z-50 bg-red-600/90 border-4 border-red-500 text-white px-8 py-4 rounded-xl shadow-[0_0_50px_rgba(220,38,38,0.8)] flex items-center gap-6 backdrop-blur-md">
@@ -204,7 +291,7 @@ function App() {
           {/* BANNER GIGANTE DE CARGA (Para Test con Carga) */}
           {erpData && (currentStep === 3 || currentStep === 4) && (
             <div className={`absolute top-10 right-10 z-50 px-6 py-4 rounded-2xl border-2 backdrop-blur-md shadow-2xl flex flex-col gap-3 ${
-              (telemetry.plc?.OW_Pallet || 0) * 250 === erpData.capac_interm_1
+              (telemetry.plc?.W_Numero_Pallets || 0) * 250 === erpData.capac_interm_1
                 ? 'bg-green-600/80 border-green-400' 
                 : 'bg-[#0a0f12]/90 border-logisnext-magenta'
             }`}>
@@ -216,8 +303,8 @@ function App() {
               <div className="flex justify-between items-end gap-8">
                 <span className="text-sm font-bold text-gray-400 tracking-wider">CARGA ACTUAL (PLC)</span>
                 <div className="flex flex-col items-end">
-                  <span className="text-2xl font-black text-white">{(telemetry.plc?.OW_Pallet || 0) * 250} kg</span>
-                  <span className="text-[10px] text-gray-400">({telemetry.plc?.OW_Pallet || 0} pallets × 250kg)</span>
+                  <span className="text-2xl font-black text-white">{(telemetry.plc?.W_Numero_Pallets || 0) * 250} kg</span>
+                  <span className="text-[10px] text-gray-400">({telemetry.plc?.W_Numero_Pallets || 0} pallets × 250kg)</span>
                 </div>
               </div>
             </div>
@@ -509,7 +596,7 @@ function App() {
                   {/* Botones */}
                   <div className="flex gap-4 w-full">
                     <button
-                      onClick={() => pulsePlc('Ob_Inciar_Secuencia')}
+                      onClick={() => pulsePlc('b_Iniciar_Secuencia')}
                       className="flex-1 flex flex-col items-center gap-1 py-4 rounded-2xl bg-gradient-to-b from-green-500 to-green-700 border-2 border-green-400/50 text-white font-black text-lg uppercase tracking-wider shadow-[0_0_20px_rgba(34,197,94,0.4)] hover:shadow-[0_0_30px_rgba(34,197,94,0.7)] hover:scale-[1.03] active:scale-95 transition-all"
                     >
                       <span className="text-2xl">▶</span>
@@ -519,7 +606,7 @@ function App() {
                     {/* NO CONTINUAR solo disponible si el fallo es de tolerancia, no de movimiento incompleto ni de carga */}
                     {!isIncomplete && !isLoadError && (
                       <button
-                        onClick={() => pulsePlc('Ob_Pegatina_Colocada')}
+                        onClick={() => pulsePlc('b_Poner_Pegatina')}
                         className="flex-1 flex flex-col items-center gap-1 py-4 rounded-2xl bg-gradient-to-b from-gray-600 to-gray-800 border-2 border-gray-500/50 text-white font-black text-lg uppercase tracking-wider shadow-[0_0_10px_rgba(0,0,0,0.4)] hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:scale-[1.03] active:scale-95 transition-all"
                       >
                         <span className="text-2xl">✓</span>
@@ -542,8 +629,8 @@ function App() {
             palletState={palletState} 
             erpData={erpData}
             onPalletAnimComplete={() => setPalletState('picked_up')} 
-            showStickers={telemetry.plc?.Ob_Pegatina_Colocada || currentStep > 1}
-            zoomToStickers={currentStep === 1 && step2Overlay?.isOk && !telemetry.plc?.Ob_Pegatina_Colocada}
+            showStickers={telemetry.plc?.b_Poner_Pegatina || currentStep > 1}
+            zoomToStickers={currentStep === 1 && step2Overlay?.isOk && !telemetry.plc?.b_Poner_Pegatina}
           />
 
 
@@ -579,7 +666,7 @@ function App() {
                     await fetch('http://localhost:8001/plc/write', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ OW_Altura_Elevacion: laserValue })
+                      body: JSON.stringify({ R_Altura_Carretilla: laserValue })
                     });
                   } catch (err) { console.error("Error escribiendo altura PLC", err); }
                 }}
@@ -595,7 +682,7 @@ function App() {
             <div className="absolute left-6 bottom-6 flex gap-3 bg-[#0a0f12]/90 backdrop-blur-md p-4 rounded-xl border border-gray-800 shadow-2xl z-40">
               <div className="flex flex-col items-center">
                 <button
-                  onClick={() => pulsePlc('Ob_Inciar_Secuencia')}
+                  onClick={() => pulsePlc('b_Iniciar_Secuencia')}
                   className="w-14 h-14 rounded-full bg-gradient-to-b from-green-500 to-green-700 active:from-green-700 active:to-green-900 border-4 border-[#1d2930] shadow-[0_4px_10px_rgba(34,197,94,0.3)] flex items-center justify-center transition-all active:scale-95 active:shadow-inner"
                 >
                   <Play size={20} className="text-white ml-1" />
@@ -605,7 +692,7 @@ function App() {
               
               <div className="flex flex-col items-center">
                 <button
-                  onClick={() => pulsePlc('Ob_Pegatina_Colocada')}
+                  onClick={() => pulsePlc('b_Poner_Pegatina')}
                   className="w-14 h-14 rounded-full bg-gradient-to-b from-blue-500 to-blue-700 active:from-blue-700 active:to-blue-900 border-4 border-[#1d2930] shadow-[0_4px_10px_rgba(59,130,246,0.3)] flex items-center justify-center transition-all active:scale-95 active:shadow-inner"
                 >
                   <CheckCircle2 size={24} className="text-white" />
@@ -615,7 +702,7 @@ function App() {
 
               <div className="flex flex-col items-center">
                 <button
-                  onClick={() => pulsePlc('Ob_Abortar_Secuancia')}
+                  onClick={() => pulsePlc('b_Abortar_Secuencia')}
                   className="w-14 h-14 rounded-full bg-gradient-to-b from-red-500 to-red-700 active:from-red-700 active:to-red-900 border-4 border-[#1d2930] shadow-[0_4px_10px_rgba(239,68,68,0.3)] flex items-center justify-center transition-all active:scale-95 active:shadow-inner"
                 >
                   <PowerOff size={20} className="text-white" />
@@ -627,12 +714,12 @@ function App() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      const current = telemetry?.plc?.OW_Pallet || 0;
+                      const current = telemetry?.plc?.W_Numero_Pallets || 0;
                       if (current > 0) {
                         fetch('http://localhost:8001/plc/write', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ OW_Pallet: current - 1 })
+                          body: JSON.stringify({ W_Numero_Pallets: current - 1 })
                         }).catch(console.error);
                       }
                     }}
@@ -643,14 +730,14 @@ function App() {
                   <input
                     type="number"
                     min="0"
-                    value={telemetry?.plc?.OW_Pallet || 0}
+                    value={telemetry?.plc?.W_Numero_Pallets || 0}
                     onChange={(e) => {
                       const val = parseInt(e.target.value, 10);
                       if (!isNaN(val) && val >= 0) {
                         fetch('http://localhost:8001/plc/write', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ OW_Pallet: val })
+                          body: JSON.stringify({ W_Numero_Pallets: val })
                         }).catch(console.error);
                       }
                     }}
@@ -658,11 +745,11 @@ function App() {
                   />
                   <button
                     onClick={() => {
-                      const current = telemetry?.plc?.OW_Pallet || 0;
+                      const current = telemetry?.plc?.W_Numero_Pallets || 0;
                       fetch('http://localhost:8001/plc/write', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ OW_Pallet: current + 1 })
+                        body: JSON.stringify({ W_Numero_Pallets: current + 1 })
                       }).catch(console.error);
                     }}
                     className="w-8 h-8 rounded-full bg-[#1d2930] text-white hover:bg-gray-600 transition-colors"
@@ -671,7 +758,7 @@ function App() {
                   </button>
                 </div>
                 <span className="mt-1 text-[9px] font-black uppercase text-gray-400 tracking-wider">Pallets Sim.</span>
-                <span className="text-[10px] font-bold text-yellow-400">{(telemetry?.plc?.OW_Pallet || 0) * 250} kg</span>
+                <span className="text-[10px] font-bold text-yellow-400">{(telemetry?.plc?.W_Numero_Pallets || 0) * 250} kg</span>
               </div>
             </div>
           )}

@@ -282,11 +282,11 @@ const CageAssembly = ({ plcState, currentStep, erpData }) => {
           let intensity = 0;
           let lightActive = false;
           
-          if (plcState?.Ob_LUZ_ROJA) {
+          if (plcState?.b_LUZ_ROJA) {
             ledColor = "#ff0000"; emissive = "#ff0000"; intensity = 5; lightActive = true;
-          } else if (plcState?.Ob_LUZ_VERDE) {
+          } else if (plcState?.b_LUZ_VERDE) {
             ledColor = "#00ff00"; emissive = "#00ff00"; intensity = 5; lightActive = true;
-          } else if (plcState?.Ob_LUZ_AZUL) {
+          } else if (plcState?.b_LUZ_AZUL) {
             ledColor = "#0088ff"; emissive = "#0088ff"; intensity = 5; lightActive = true;
           }
 

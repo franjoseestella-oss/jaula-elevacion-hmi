@@ -1,29 +1,90 @@
 import React, { useState } from 'react';
-import { X, Cpu, TestTube, Network, Activity, Lightbulb, Zap, Play, CheckCircle2, PowerOff, RefreshCw } from 'lucide-react';
+import { X, Cpu, TestTube, Network, Activity, Lightbulb, Zap, Play, CheckCircle2, PowerOff, RefreshCw, Settings, Database, Link as LinkIcon, Save, AlertTriangle } from 'lucide-react';
 
 const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pulsePlc }) => {
   const [outputs, setOutputs] = useState({ 
-    Ob_LUZ_VERDE: false, Ob_LUZ_AZUL: false, Ob_LUZ_ROJA: false,
+    b_LUZ_VERDE: false, b_LUZ_AZUL: false, b_LUZ_ROJA: false,
     Ob_Subir_Vallas: false, Ob_Bajar_Vallas: false 
   });
   const [analogs, setAnalogs] = useState({
-    OW_Altura_Elevacion: 0,
-    OW_Pallet: 0
+    R_Altura_Carretilla: 0,
+    W_Numero_Pallets: 0
   });
+
+  const [forceMode, setForceMode] = useState(false);
+
+  const [plcConfig, setPlcConfig] = useState(() => {
+    const saved = localStorage.getItem('plcConfig');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return {
+      ip: '192.168.1.1',
+      port: '4840',
+      dbName: 'DB_App',
+      namespace: '4'
+    };
+  });
+
+  const [isScanningIPs, setIsScanningIPs] = useState(false);
+  const [isScanningDBs, setIsScanningDBs] = useState(false);
+  const [scanModal, setScanModal] = useState({ isOpen: false, type: '', data: [] });
+
+  const scanIPs = async () => {
+    setIsScanningIPs(true);
+    try {
+      const res = await fetch('http://localhost:8001/plc/scan_ips', { cache: 'no-store' });
+      if (!res.ok) throw new Error('Backend error');
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : { ips: [] };
+      setScanModal({ isOpen: true, type: 'IP', data: data.ips || [] });
+    } catch (e) {
+      console.error(e);
+      setScanModal({ isOpen: true, type: 'IP', data: [], error: e.message });
+    }
+    setIsScanningIPs(false);
+  };
+
+  const scanDBs = async () => {
+    setIsScanningDBs(true);
+    try {
+      const res = await fetch('http://localhost:8001/plc/browse_nodes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip: plcConfig.ip, port: plcConfig.port })
+      });
+      if (!res.ok) throw new Error('Backend error');
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : { nodes: [] };
+      
+      if (data.error) {
+        setScanModal({ isOpen: true, type: 'DB', data: [], error: data.error });
+      } else {
+        setScanModal({ isOpen: true, type: 'DB', data: data.nodes || [] });
+      }
+    } catch (e) {
+      console.error(e);
+      setScanModal({ isOpen: true, type: 'DB', data: [], error: e.message });
+    }
+    setIsScanningDBs(false);
+  };
+
+  const lastWriteTime = React.useRef(0);
 
   // Sync state from backend si no estamos en modo simulación
   React.useEffect(() => {
-    if (telemetry?.plc && !isSimulation) {
+    // Evitar parpadeos: no sincronizar la UI con la telemetría si acabamos de escribir (esperar 1 segundo)
+    if (telemetry?.plc && !isSimulation && Date.now() - lastWriteTime.current > 1000) {
       setOutputs({
-        Ob_LUZ_VERDE: !!telemetry.plc.Ob_LUZ_VERDE,
-        Ob_LUZ_AZUL: !!telemetry.plc.Ob_LUZ_AZUL,
-        Ob_LUZ_ROJA: !!telemetry.plc.Ob_LUZ_ROJA,
+        b_LUZ_VERDE: !!telemetry.plc.b_LUZ_VERDE,
+        b_LUZ_AZUL: !!telemetry.plc.b_LUZ_AZUL,
+        b_LUZ_ROJA: !!telemetry.plc.b_LUZ_ROJA,
         Ob_Subir_Vallas: !!telemetry.plc.Ob_Subir_Vallas,
         Ob_Bajar_Vallas: !!telemetry.plc.Ob_Bajar_Vallas,
       });
       setAnalogs({
-        OW_Altura_Elevacion: telemetry.plc.OW_Altura_Elevacion || 0,
-        OW_Pallet: telemetry.plc.OW_Pallet || 0
+        R_Altura_Carretilla: telemetry.plc.R_Altura_Carretilla || 0,
+        W_Numero_Pallets: telemetry.plc.W_Numero_Pallets || 0
       });
     }
   }, [telemetry?.plc, isSimulation]);
@@ -38,7 +99,47 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
     } catch (e) { console.error("Error escribiendo en PLC", e); }
   };
 
+  const saveConfig = async (simMode) => {
+    try {
+      localStorage.setItem('plcConfig', JSON.stringify(plcConfig));
+      await fetch('http://localhost:8001/config/plc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...plcConfig,
+          isSimulation: simMode
+        })
+      });
+      console.log("Configuración PLC guardada y enviada al backend");
+    } catch (e) { console.error("Error guardando config PLC", e); }
+  };
+
+  const handleToggleMode = () => {
+    const nextSim = !isSimulation;
+    setIsSimulation(nextSim);
+    saveConfig(nextSim);
+  };
+
+  const handleToggleForceMode = async () => {
+    const nextForce = !forceMode;
+    setForceMode(nextForce);
+    try {
+      await fetch('http://localhost:8001/plc/force_mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: nextForce })
+      });
+    } catch (e) { console.error("Error setting force mode", e); }
+  };
+
   if (!open) return null;
+
+  const renderPlcVarTag = (varName) => (
+    <div className="flex items-center gap-1 mt-1 opacity-70">
+      <Database size={10} className="text-gray-400" />
+      <span className="text-[9px] font-mono text-gray-400">ns={plcConfig.namespace};s="{plcConfig.dbName}"."{varName}"</span>
+    </div>
+  );
 
   return (
     <div
@@ -46,7 +147,52 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
       style={{ background: 'rgba(5,10,14,0.85)', backdropFilter: 'blur(5px)' }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="relative w-[800px] flex flex-col bg-gradient-to-b from-[#151f25] to-[#0d1a20] border border-[#2e404a] rounded-2xl shadow-[0_0_60px_rgba(34,197,94,0.15)] overflow-hidden">
+      {scanModal.isOpen && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+          <div className="bg-[#11191e] border border-[#2e404a] rounded-xl w-full max-w-md shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-4 border-b border-[#2e404a] flex justify-between items-center bg-[#151f25]">
+              <h3 className="text-white font-bold uppercase tracking-widest flex items-center gap-2 text-sm">
+                {scanModal.type === 'IP' ? <Network size={16} className="text-blue-400" /> : <Database size={16} className="text-blue-400" />}
+                {scanModal.type === 'IP' ? 'Dispositivos Encontrados' : 'Data Blocks Disponibles'}
+              </h3>
+              <button onClick={() => setScanModal({ isOpen: false, type: '', data: [] })} className="text-gray-400 hover:text-white p-1">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-4 flex flex-col gap-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+              {scanModal.error ? (
+                <div className="text-red-400 text-sm text-center py-6 flex flex-col items-center justify-center gap-2">
+                   <AlertTriangle size={24} className="opacity-80"/>
+                   <span className="font-bold uppercase tracking-widest text-[10px]">Error de Conexión</span>
+                   <span className="text-[10px] opacity-80 break-words w-full text-center">{scanModal.error}</span>
+                </div>
+              ) : scanModal.data.length === 0 ? (
+                <div className="text-gray-500 italic text-sm text-center py-6 flex flex-col items-center justify-center gap-2">
+                   <AlertTriangle size={24} className="opacity-50"/>
+                   <span>No se encontraron resultados.</span>
+                </div>
+              ) : (
+                scanModal.data.map((item, idx) => (
+                  <div 
+                    key={idx}
+                    onClick={() => {
+                      if (scanModal.type === 'IP') setPlcConfig({...plcConfig, ip: item});
+                      else setPlcConfig({...plcConfig, dbName: item});
+                      setScanModal({ isOpen: false, type: '', data: [] });
+                    }}
+                    className="bg-[#1d2930] hover:bg-blue-600/20 hover:border-blue-500/50 border border-[#2e404a] p-3 rounded-lg cursor-pointer transition-colors flex items-center gap-3 group"
+                  >
+                    {scanModal.type === 'IP' ? <Network size={14} className="text-gray-400 group-hover:text-blue-400 transition-colors" /> : <Database size={14} className="text-gray-400 group-hover:text-blue-400 transition-colors" />}
+                    <span className="text-sm font-bold text-white group-hover:text-blue-200 transition-colors">{item}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="relative w-[1300px] max-h-[90vh] flex flex-col bg-gradient-to-b from-[#151f25] to-[#0d1a20] border border-[#2e404a] rounded-2xl shadow-[0_0_60px_rgba(34,197,94,0.15)] overflow-hidden">
         
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#2e404a] bg-[#1d2930]/60 shrink-0">
@@ -56,10 +202,10 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
             </div>
             <div>
               <h2 className="text-white font-black text-sm uppercase tracking-widest">
-                Diagnóstico PLC
+                Diagnóstico & Configuración PLC
               </h2>
               <span className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
-                Monitorización y Control de E/S
+                Monitorización, Control y OPC UA
               </span>
             </div>
           </div>
@@ -67,7 +213,7 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
           <div className="flex items-center gap-4">
             {/* Modo Simulación Toggle */}
             <button
-              onClick={() => setIsSimulation(!isSimulation)}
+              onClick={handleToggleMode}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg border text-xs font-black uppercase tracking-wider transition-all shadow-md ${
                 isSimulation 
                   ? 'bg-yellow-500/20 text-yellow-500 border-yellow-500/50 hover:bg-yellow-500/30' 
@@ -87,63 +233,192 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
         </div>
 
         {/* Content */}
-        <div className="p-6 flex gap-6">
+        <div className="p-6 grid grid-cols-12 gap-6 overflow-y-auto">
           
-          {/* Columna Izquierda: ENTRADAS */}
-          <div className="flex-1 flex flex-col gap-4">
+          {/* Columna Izquierda: CONFIGURACIÓN */}
+          <div className="col-span-3 flex flex-col gap-4">
+            <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-[#2e404a] pb-2 flex items-center gap-2">
+              <Settings size={16} className="text-gray-400" /> 
+              Configuración OPC UA
+            </h3>
+            
+            <div className="flex flex-col gap-4 bg-[#0a0f12]/60 border border-[#2e404a] rounded-xl p-5">
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">IP del Servidor (PLC)</label>
+                  <button onClick={scanIPs} disabled={isScanningIPs} className="text-[9px] text-blue-400 hover:text-blue-300 font-bold uppercase tracking-widest flex items-center gap-1">
+                    <RefreshCw size={10} className={isScanningIPs ? "animate-spin" : ""} /> {isScanningIPs ? "Buscando..." : "Escanear Red"}
+                  </button>
+                </div>
+                <div className="relative">
+                  <Network className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
+                  <input 
+                    type="text" 
+                    value={plcConfig.ip}
+                    onChange={(e) => setPlcConfig({...plcConfig, ip: e.target.value})}
+                    className="w-full bg-[#1d2930] border border-[#2e404a] rounded-lg py-2 pl-9 pr-3 text-xs text-white focus:border-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Puerto OPC UA</label>
+                <input 
+                  type="text" 
+                  value={plcConfig.port}
+                  onChange={(e) => setPlcConfig({...plcConfig, port: e.target.value})}
+                  className="w-full bg-[#1d2930] border border-[#2e404a] rounded-lg py-2 px-3 text-xs text-white focus:border-blue-500 outline-none"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Nombre Data Block (DB)</label>
+                  <button onClick={scanDBs} disabled={isScanningDBs} className="text-[9px] text-blue-400 hover:text-blue-300 font-bold uppercase tracking-widest flex items-center gap-1">
+                    <RefreshCw size={10} className={isScanningDBs ? "animate-spin" : ""} /> {isScanningDBs ? "Consultando..." : "Buscar en PLC"}
+                  </button>
+                </div>
+                <div className="relative">
+                  <Database className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
+                  <input 
+                    type="text" 
+                    value={plcConfig.dbName}
+                    onChange={(e) => setPlcConfig({...plcConfig, dbName: e.target.value})}
+                    className="w-full bg-[#1d2930] border border-[#2e404a] rounded-lg py-2 pl-9 pr-3 text-xs text-white focus:border-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Namespace (ns)</label>
+                <input 
+                  type="text" 
+                  value={plcConfig.namespace}
+                  onChange={(e) => setPlcConfig({...plcConfig, namespace: e.target.value})}
+                  className="w-full bg-[#1d2930] border border-[#2e404a] rounded-lg py-2 px-3 text-xs text-white focus:border-blue-500 outline-none"
+                />
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-[#2e404a] flex flex-col gap-2">
+                <button 
+                  onClick={() => saveConfig(isSimulation)}
+                  className="w-full py-2 bg-[#1d2930] hover:bg-[#2e404a] text-white rounded-lg text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-colors border border-[#2e404a]"
+                >
+                  <Save size={14} /> Guardar Configuración
+                </button>
+
+                {isSimulation ? (
+                  <button 
+                    onClick={() => {
+                      setIsSimulation(false);
+                      saveConfig(false);
+                    }}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-[0_0_15px_rgba(37,99,235,0.4)] mt-2"
+                  >
+                    <LinkIcon size={16} /> Conectar al PLC
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => {
+                      setIsSimulation(true);
+                      saveConfig(true);
+                    }}
+                    className="w-full py-3 bg-red-600/80 hover:bg-red-500 text-white rounded-lg text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors mt-2"
+                  >
+                    <PowerOff size={16} /> Desconectar (Modo Simulación)
+                  </button>
+                )}
+              </div>
+
+              <div className="mt-2 p-3 bg-gray-500/10 border border-gray-500/20 rounded-lg text-[10px] text-gray-400 leading-relaxed">
+                Esta configuración indica a la aplicación Python dónde encontrar el Servidor OPC UA y en qué DB de Siemens se exponen las variables de la máquina.
+              </div>
+
+              {!isSimulation && (
+                <div className={`mt-2 p-3 border rounded-lg text-[10px] font-bold uppercase tracking-widest text-center transition-all flex flex-col gap-1 items-center ${
+                  telemetry?.opcua_connected 
+                    ? 'bg-green-500/10 border-green-500/30 text-green-400' 
+                    : 'bg-red-500/10 border-red-500/30 text-red-400'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    {telemetry?.opcua_connected ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+                    {telemetry?.opcua_connected ? 'OPC UA Conectado' : 'OPC UA Desconectado'}
+                  </div>
+                  {telemetry?.opcua_error && (
+                    <>
+                      <div className="text-[8px] font-mono normal-case opacity-70 mt-1">
+                        {telemetry.opcua_error}
+                      </div>
+                      {telemetry.opcua_error.toLowerCase().includes('securit') && (
+                        <div className="text-[9px] text-yellow-500/90 mt-1">
+                          ⚠️ Recuerda aprobar el certificado en TIA Portal (Security &gt; Certificate manager) para permitir la conexión.
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Columna Centro: ENTRADAS */}
+          <div className="col-span-5 flex flex-col gap-4">
             <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-[#2e404a] pb-2 flex items-center gap-2">
               <Activity size={16} className="text-blue-400" /> 
               Entradas (PLC &rarr; APP)
             </h3>
             
-            <div className="flex flex-col gap-3 bg-[#0a0f12]/60 border border-[#2e404a] rounded-xl p-5 h-full">
+            <div className="flex flex-col gap-3 bg-[#0a0f12]/60 border border-[#2e404a] rounded-xl p-5 h-full overflow-y-auto">
               
-              {/* Botonera de pulsadores simulada (Usando el mecanismo de pulsePlc) */}
+              {/* Botonera de pulsadores simulada */}
               <div className="mb-4 bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-4">
                 <h4 className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest mb-4 border-b border-[#2e404a] pb-2">
-                  Pulsadores de Control
+                  Pulsadores de Control (Físicos en Máquina)
                 </h4>
-                <div className="flex justify-between items-center px-2">
+                <div className="flex justify-between items-start px-2">
                   
                   <div className="flex flex-col items-center">
                     <button
                       disabled={!isSimulation}
-                      onClick={() => pulsePlc('Ob_Inciar_Secuencia')}
+                      onClick={() => pulsePlc('b_Iniciar_Secuencia')}
                       className={`w-12 h-12 rounded-full border-4 flex items-center justify-center transition-all ${!isSimulation ? 'bg-[#1d2930] border-[#2e404a] opacity-50 cursor-not-allowed' : 'bg-gradient-to-b from-green-500 to-green-700 active:from-green-700 active:to-green-900 border-[#1d2930] shadow-[0_4px_10px_rgba(34,197,94,0.3)] active:scale-95 active:shadow-inner'}`}
                     >
                       <Play size={18} className={`${!isSimulation ? 'text-gray-500' : 'text-white ml-1'}`} />
                     </button>
                     <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Iniciar<br/>Secuencia</span>
+                    {renderPlcVarTag('b_Iniciar_Secuencia')}
                   </div>
 
                   <div className="flex flex-col items-center">
                     <button
                       disabled={!isSimulation}
-                      onClick={() => pulsePlc('Ob_Pegatina_Colocada')}
+                      onClick={() => pulsePlc('b_Poner_Pegatina')}
                       className={`w-12 h-12 rounded-full border-4 flex items-center justify-center transition-all ${!isSimulation ? 'bg-[#1d2930] border-[#2e404a] opacity-50 cursor-not-allowed' : 'bg-gradient-to-b from-blue-500 to-blue-700 active:from-blue-700 active:to-blue-900 border-[#1d2930] shadow-[0_4px_10px_rgba(59,130,246,0.3)] active:scale-95 active:shadow-inner'}`}
                     >
                       <CheckCircle2 size={20} className={`${!isSimulation ? 'text-gray-500' : 'text-white'}`} />
                     </button>
                     <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Pegatina<br/>Colocada</span>
+                    {renderPlcVarTag('b_Poner_Pegatina')}
                   </div>
 
                   <div className="flex flex-col items-center">
                     <button
                       disabled={!isSimulation}
-                      onClick={() => pulsePlc('Ob_Abortar_Secuancia')}
+                      onClick={() => pulsePlc('b_Abortar_Secuencia')}
                       className={`w-12 h-12 rounded-full border-4 flex items-center justify-center transition-all ${!isSimulation ? 'bg-[#1d2930] border-[#2e404a] opacity-50 cursor-not-allowed' : 'bg-gradient-to-b from-red-500 to-red-700 active:from-red-700 active:to-red-900 border-[#1d2930] shadow-[0_4px_10px_rgba(239,68,68,0.3)] active:scale-95 active:shadow-inner'}`}
                     >
                       <PowerOff size={18} className={`${!isSimulation ? 'text-gray-500' : 'text-white'}`} />
                     </button>
                     <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Abortar<br/>Secuencia</span>
+                    {renderPlcVarTag('b_Abortar_Secuencia')}
                   </div>
 
                 </div>
               </div>
 
               {[
-                { id: 'OW_Altura_Elevacion', label: 'Láser Altura Elevación', isAnalog: true, unit: 'mm' },
-                { id: 'OW_Pallet', label: 'Número de Pallets (Carga)', isAnalog: true, unit: ' uds' },
+                { id: 'R_Altura_Carretilla', label: 'Láser Altura Elevación', isAnalog: true, unit: 'mm' },
+                { id: 'W_Numero_Pallets', label: 'Número de Pallets (Carga)', isAnalog: true, unit: ' uds' },
                 { id: 'Ob_Dtec_Valla_1_trabajo_LH', label: 'Valla 1 Trabajo LH', isAnalog: false },
                 { id: 'Ob_Dtec_Valla_2_trabajo_RH', label: 'Valla 2 Trabajo RH', isAnalog: false }
               ].map((sensor) => {
@@ -151,8 +426,11 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
                 const active = !!value; // Para los digitales
 
                 return (
-                  <div key={sensor.id} className="flex items-center justify-between bg-[#1d2930]/40 border border-[#2e404a] p-4 rounded-xl">
-                    <span className="text-xs text-white font-bold uppercase tracking-widest">{sensor.label}</span>
+                  <div key={sensor.id} className="flex items-center justify-between bg-[#1d2930]/40 border border-[#2e404a] p-3 rounded-xl hover:bg-[#1d2930]/60 transition-colors">
+                    <div className="flex flex-col">
+                      <span className="text-xs text-white font-bold uppercase tracking-widest">{sensor.label}</span>
+                      {renderPlcVarTag(sensor.id)}
+                    </div>
                     
                     {sensor.isAnalog ? (
                       <div className="flex flex-col items-end gap-2">
@@ -160,12 +438,12 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
                           {(() => {
                             let val = isSimulation ? Number(analogs[sensor.id] || 0) : (value !== undefined ? Number(value) : null);
                             if (val === null) return '---';
-                            if (sensor.id === 'OW_Altura_Elevacion') {
+                            if (sensor.id === 'R_Altura_Carretilla') {
                               return (val / 1000).toFixed(2);
                             }
                             return val.toFixed(0);
-                          })()} <span className="text-[10px] text-blue-400/70">{sensor.id === 'OW_Altura_Elevacion' ? 'm' : sensor.unit.trim()}</span>
-                          {sensor.id === 'OW_Pallet' && (
+                          })()} <span className="text-[10px] text-blue-400/70">{sensor.id === 'R_Altura_Carretilla' ? 'm' : sensor.unit.trim()}</span>
+                          {sensor.id === 'W_Numero_Pallets' && (
                             <span className="ml-2 text-xs text-yellow-400 font-bold">
                               ({(isSimulation ? Number(analogs[sensor.id] || 0) : (value !== undefined ? Number(value) : 0)) * 250} kg)
                             </span>
@@ -197,60 +475,151 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
                   </div>
                 );
               })}
+
+              {/* VISOR DE VARIABLES DEL DATA BLOCK (Raw) */}
+              <div className="mt-2 border-t border-[#2e404a] pt-4 flex flex-col h-full min-h-[250px]">
+                <h4 className="text-[11px] text-gray-400 font-bold uppercase tracking-widest mb-3 flex items-center justify-between">
+                  <span>Listado Completo del Data Block</span>
+                  <span className="bg-[#2e404a]/50 px-2 py-0.5 rounded text-white text-[9px]">
+                    {telemetry?.plc ? Object.keys(telemetry.plc).length : 0} VARS
+                  </span>
+                </h4>
+                
+                <div className="bg-[#0a0f12] rounded-xl border border-[#2e404a] flex-1 overflow-y-auto">
+                  <table className="w-full text-left text-[10px] text-gray-300">
+                    <thead className="bg-[#1d2930] sticky top-0 border-b border-[#2e404a] z-10 shadow-md">
+                      <tr>
+                        <th className="p-2 px-4 font-bold uppercase tracking-wider w-2/3">Variable (Tag)</th>
+                        <th className="p-2 px-4 font-bold uppercase tracking-wider text-right w-1/3">Valor Real</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#2e404a]/50">
+                      {telemetry?.plc && Object.keys(telemetry.plc).length > 0 ? (
+                        Object.entries(telemetry.plc).sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => (
+                          <tr key={key} className="hover:bg-[#1d2930]/50 transition-colors group">
+                            <td className="p-2 px-4 font-mono text-blue-400/90 group-hover:text-blue-300">{key}</td>
+                            <td className="p-2 px-4 text-right font-mono font-bold">
+                              {typeof value === 'boolean' 
+                                ? (
+                                  <div className="flex items-center justify-end gap-2">
+                                    <span className={value ? 'text-green-400' : 'text-gray-500'}>{value ? 'TRUE' : 'FALSE'}</span>
+                                    <div className={`w-2 h-2 rounded-full ${value ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' : 'bg-gray-700'}`}></div>
+                                  </div>
+                                )
+                                : <span className="text-yellow-400 bg-yellow-400/10 px-1.5 py-0.5 rounded">{value !== null && value !== undefined ? value.toString() : '---'}</span>
+                              }
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="2" className="p-8 text-center text-gray-500 flex flex-col items-center justify-center gap-2">
+                            <Database size={24} className="opacity-30" />
+                            <span className="uppercase tracking-widest text-[10px] font-bold">Esperando datos del PLC...</span>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
             </div>
           </div>
 
           {/* Columna Derecha: SALIDAS */}
-          <div className="flex-1 flex flex-col gap-4">
+          <div className="col-span-4 flex flex-col gap-4">
             <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-[#2e404a] pb-2 flex items-center gap-2">
               <Zap size={16} className="text-yellow-400" /> 
               Salidas (APP &rarr; PLC)
             </h3>
             
-            <div className="flex flex-col gap-4 bg-[#0a0f12]/60 border border-[#2e404a] rounded-xl p-5 h-full">
+            <div className="flex flex-col gap-4 bg-[#0a0f12]/60 border border-[#2e404a] rounded-xl p-5 h-full overflow-y-auto">
               {!isSimulation && (
                 <div className="mb-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg text-xs text-blue-300 font-bold uppercase tracking-widest text-center">
-                  Salidas controladas por el PLC real
+                  Controlado por PLC real
                 </div>
               )}
               {isSimulation && (
                 <div className="mb-2 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-xs text-yellow-300 font-bold uppercase tracking-widest text-center">
-                  Modo test: forzado de relés habilitado
+                  Modo test: forzado manual habilitado
+                </div>
+              )}
+              
+              {!isSimulation && (
+                <div className="mb-4 flex flex-col gap-2">
+                  <button
+                    onClick={handleToggleForceMode}
+                    className={`w-full py-3 rounded-xl border-2 font-black uppercase tracking-widest transition-all flex items-center justify-center gap-3 ${
+                      forceMode 
+                        ? 'bg-red-500/20 border-red-500 text-red-500 shadow-[0_0_20px_rgba(239,68,68,0.2)]' 
+                        : 'bg-logisnext-slate/10 border-logisnext-slate/30 text-logisnext-lightslate hover:bg-logisnext-slate/20'
+                    }`}
+                  >
+                    <Zap size={18} className={forceMode ? 'animate-pulse' : ''} />
+                    {forceMode ? 'Deshabilitar Forzado' : 'Habilitar Forzado Manual'}
+                  </button>
+                  {forceMode && (
+                    <div className="text-[9px] text-red-400 font-bold uppercase tracking-tighter text-center animate-pulse">
+                      ¡Atención! Control manual directo sobre PLC habilitado
+                    </div>
+                  )}
                 </div>
               )}
 
               <div className="grid gap-4 overflow-y-auto pr-2 pb-2">
                 
-                {/* Botones de Vallas (Solo simulación) */}
+                {/* Botones de Vallas */}
                 <div className="flex gap-3 mb-2">
-                  <button
-                    disabled={!isSimulation}
-                    onClick={() => {
-                      if (!isSimulation) return;
-                      const newOutputs = { ...outputs, Ob_Subir_Vallas: true, Ob_Bajar_Vallas: false };
-                      setOutputs(newOutputs);
-                      sendWrite({ Ob_Subir_Vallas: true, Ob_Bajar_Vallas: false });
-                    }}
-                    className={`flex-1 flex flex-col items-center justify-center p-3 border rounded-xl transition-all duration-300 ${
-                      !isSimulation ? 'opacity-40 cursor-not-allowed border-[#2e404a] bg-[#1d2930]' : outputs.Ob_Subir_Vallas ? 'bg-indigo-500/20 border-indigo-500 text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.3)]' : 'border-[#2e404a] bg-[#1d2930] hover:border-indigo-500/50 text-logisnext-lightslate hover:text-indigo-400'
-                    }`}
-                  >
-                    <span className="text-xs font-black uppercase tracking-widest">Subir Vallas</span>
-                  </button>
-                  <button
-                    disabled={!isSimulation}
-                    onClick={() => {
-                      if (!isSimulation) return;
-                      const newOutputs = { ...outputs, Ob_Subir_Vallas: false, Ob_Bajar_Vallas: true };
-                      setOutputs(newOutputs);
-                      sendWrite({ Ob_Subir_Vallas: false, Ob_Bajar_Vallas: true });
-                    }}
-                    className={`flex-1 flex flex-col items-center justify-center p-3 border rounded-xl transition-all duration-300 ${
-                      !isSimulation ? 'opacity-40 cursor-not-allowed border-[#2e404a] bg-[#1d2930]' : outputs.Ob_Bajar_Vallas ? 'bg-orange-500/20 border-orange-500 text-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.3)]' : 'border-[#2e404a] bg-[#1d2930] hover:border-orange-500/50 text-logisnext-lightslate hover:text-orange-400'
-                    }`}
-                  >
-                    <span className="text-xs font-black uppercase tracking-widest">Bajar Vallas</span>
-                  </button>
+                  <div className="flex flex-col flex-1 gap-2">
+                    <button
+                      disabled={!isSimulation && !forceMode}
+                      onClick={() => {
+                        const newValue = !outputs.Ob_Subir_Vallas;
+                        const newOutputs = { ...outputs, Ob_Subir_Vallas: newValue, Ob_Bajar_Vallas: false };
+                        setOutputs(newOutputs);
+                        lastWriteTime.current = Date.now();
+                        sendWrite({ Ob_Subir_Vallas: newValue, Ob_Bajar_Vallas: false, is_force: true });
+                      }}
+                      className={`flex-1 flex flex-col items-center justify-center p-3 border rounded-xl transition-all duration-300 ${
+                        (!isSimulation && !forceMode) 
+                          ? 'opacity-30 cursor-not-allowed border-[#2e404a] bg-[#0a0f12]' 
+                          : outputs.Ob_Subir_Vallas 
+                            ? 'bg-indigo-500/20 border-indigo-500 text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.3)]' 
+                            : 'border-[#2e404a] bg-[#1d2930] hover:border-indigo-500/50 text-logisnext-lightslate hover:text-indigo-400'
+                      }`}
+                    >
+                      <span className="text-xs font-black uppercase tracking-widest">Subir Vallas</span>
+                    </button>
+                    <div className="self-center">
+                      {renderPlcVarTag('Ob_Subir_Vallas')}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col flex-1 gap-2">
+                    <button
+                      disabled={!isSimulation && !forceMode}
+                      onClick={() => {
+                        const newValue = !outputs.Ob_Bajar_Vallas;
+                        const newOutputs = { ...outputs, Ob_Subir_Vallas: false, Ob_Bajar_Vallas: newValue };
+                        setOutputs(newOutputs);
+                        lastWriteTime.current = Date.now();
+                        sendWrite({ Ob_Subir_Vallas: false, Ob_Bajar_Vallas: newValue, is_force: true });
+                      }}
+                      className={`flex-1 flex flex-col items-center justify-center p-3 border rounded-xl transition-all duration-300 ${
+                        (!isSimulation && !forceMode) 
+                          ? 'opacity-30 cursor-not-allowed border-[#2e404a] bg-[#0a0f12]' 
+                          : outputs.Ob_Bajar_Vallas 
+                            ? 'bg-orange-500/20 border-orange-500 text-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.3)]' 
+                            : 'border-[#2e404a] bg-[#1d2930] hover:border-orange-500/50 text-logisnext-lightslate hover:text-orange-400'
+                      }`}
+                    >
+                      <span className="text-xs font-black uppercase tracking-widest">Bajar Vallas</span>
+                    </button>
+                    <div className="self-center">
+                      {renderPlcVarTag('Ob_Bajar_Vallas')}
+                    </div>
+                  </div>
                 </div>
 
                 {['VERDE', 'AZUL', 'ROJA'].map((color) => {
@@ -263,38 +632,44 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
                   };
                   
                   return (
-                    <button
-                      key={color}
-                      disabled={!isSimulation}
-                      onClick={() => {
-                        if (!isSimulation) return;
-                        const newOutputs = { ...outputs, Ob_LUZ_VERDE: false, Ob_LUZ_AZUL: false, Ob_LUZ_ROJA: false };
-                        if (!isActive) newOutputs[prop] = true;
-                        
-                        setOutputs(newOutputs);
-                        sendWrite({ Ob_LUZ_VERDE: false, Ob_LUZ_AZUL: false, Ob_LUZ_ROJA: false, [prop]: newOutputs[prop] });
-                      }}
-                      className={`relative flex items-center justify-between p-4 border rounded-xl transition-all duration-300 ${
-                        !isSimulation 
-                          ? 'opacity-40 cursor-not-allowed border-[#2e404a] bg-[#1d2930]' 
-                          : isActive 
-                            ? `${colorMap[color]} text-white transform scale-[1.02]` 
-                            : 'border-[#2e404a] bg-[#1d2930] hover:border-[#5d7a8a] text-logisnext-lightslate'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3 z-10">
-                        <Lightbulb size={20} className={isActive ? 'text-white animate-pulse' : ''} />
-                        <span className="text-sm font-black uppercase tracking-widest">BALIZA {color}</span>
-                      </div>
-                      <div className="flex items-center gap-2 z-10">
-                        <span className="text-[10px] font-bold uppercase">{isActive ? 'Activado' : 'Apagado'}</span>
-                        <div className={`w-8 h-4 rounded-full border border-white/20 transition-all flex p-0.5 ${isActive ? 'bg-white/30 justify-end' : 'bg-black/40 justify-start'}`}>
-                          <div className="w-2.5 h-2.5 bg-white rounded-full"></div>
+                    <div key={color} className="flex flex-col">
+                      <button
+                        disabled={!isSimulation && !forceMode}
+                        onClick={() => {
+                          const newOutputs = { ...outputs, b_LUZ_VERDE: false, b_LUZ_AZUL: false, b_LUZ_ROJA: false };
+                          if (!isActive) newOutputs[prop] = true;
+                          
+                          setOutputs(newOutputs);
+                          lastWriteTime.current = Date.now();
+                          sendWrite({ b_LUZ_VERDE: false, b_LUZ_AZUL: false, b_LUZ_ROJA: false, [prop]: newOutputs[prop], is_force: true });
+                        }}
+                        className={`relative flex items-center justify-between p-4 border rounded-xl transition-all duration-300 ${
+                          (!isSimulation && !forceMode) 
+                            ? 'opacity-30 cursor-not-allowed border-[#2e404a] bg-[#0a0f12]' 
+                            : isActive 
+                              ? `${colorMap[color]} text-white transform scale-[1.02]` 
+                              : 'border-[#2e404a] bg-[#1d2930] hover:border-[#5d7a8a] text-logisnext-lightslate'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 z-10">
+                          <Lightbulb size={20} className={isActive ? 'text-white animate-pulse' : ''} />
+                          <div className="flex flex-col items-start">
+                            <span className="text-sm font-black uppercase tracking-widest">BALIZA {color}</span>
+                          </div>
                         </div>
+                        <div className="flex items-center gap-2 z-10">
+                          <span className="text-[10px] font-bold uppercase">{isActive ? 'Activado' : 'Apagado'}</span>
+                          <div className={`w-8 h-4 rounded-full border border-white/20 transition-all flex p-0.5 ${isActive ? 'bg-white/30 justify-end' : 'bg-black/40 justify-start'}`}>
+                            <div className="w-2.5 h-2.5 bg-white rounded-full"></div>
+                          </div>
+                        </div>
+                        {/* Background glow if active */}
+                        {isActive && <div className="absolute inset-0 bg-white/10 rounded-xl" />}
+                      </button>
+                      <div className="ml-2 mt-1">
+                        {renderPlcVarTag(prop)}
                       </div>
-                      {/* Background glow if active */}
-                      {isActive && <div className="absolute inset-0 bg-white/10 rounded-xl" />}
-                    </button>
+                    </div>
                   );
                 })}
               </div>

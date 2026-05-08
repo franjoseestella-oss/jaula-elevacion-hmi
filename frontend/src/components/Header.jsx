@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Database, Camera, Server, Settings, Zap, History } from 'lucide-react';
+import { Activity, Database, Camera, Server, Settings, Zap, History, AlertTriangle } from 'lucide-react';
 
 const StatusLED = ({ active, label, icon: Icon, onClick }) => (
   <div
@@ -13,7 +13,7 @@ const StatusLED = ({ active, label, icon: Icon, onClick }) => (
   </div>
 );
 
-const Header = ({ status, onErpClick, onSettingsClick, onLogsClick, onPlcClick, operario, onOperatorClick, canChangeOperator }) => {
+const Header = ({ status, onErpClick, onSettingsClick, onLogsClick, onPlcClick, operario, onOperatorClick, canChangeOperator, hasAlarms, onAlarmsClick }) => {
   return (
     <header className="h-20 bg-gradient-to-b from-[#151f25] to-[#11191e] border-b border-[#2e404a] flex items-center justify-between px-8 shrink-0 z-20 relative">
       {/* Accent Top Border */}
@@ -45,6 +45,7 @@ const Header = ({ status, onErpClick, onSettingsClick, onLogsClick, onPlcClick, 
           <StatusLED active={status.db} label="SQL DB" icon={Database} />
           <StatusLED active={status.erp} label="ERP" icon={Server} onClick={onErpClick} />
           <StatusLED active={true} label="LOG" icon={History} onClick={onLogsClick} />
+          <StatusLED active={hasAlarms} label="ALARMAS" icon={AlertTriangle} onClick={onAlarmsClick} />
         </div>
 
         {/* User Profile */}

@@ -16,6 +16,7 @@ from database.database import engine, get_db
 from database.models import init_db, ErpCarretilla
 from database.crud import create_log, get_logs
 from erp_sync import parse_and_sync_dat
+from opcua_client import opcua_manager
 
 # ─────────────────────────────────────────────────────────────
 # Resolución de rutas (compatible con PyInstaller --onefile)
@@ -430,20 +431,20 @@ def test_datalogic_connection(config: DatalogicConfig):
 # Estado global simulado
 plc_sim_state = {
     # Salidas (Comandos HMI -> PLC)
-    "Ob_LUZ_VERDE": False,
-    "Ob_LUZ_AZUL": False,
-    "Ob_LUZ_ROJA": False,
+    "b_LUZ_VERDE": False,
+    "b_LUZ_AZUL": False,
+    "b_LUZ_ROJA": False,
     "Ob_Subir_Vallas": False,
     "Ob_Bajar_Vallas": False,
 
     # Entradas Analógicas (Simuladas)
-    "OW_Altura_Elevacion": 0.0,
-    "OW_Pallet": 0.0,
+    "R_Altura_Carretilla": 0.0,
+    "W_Numero_Pallets": 0.0,
 
     # Entradas Digitales (Simuladas)
-    "Ob_Inciar_Secuencia": False,
-    "Ob_Pegatina_Colocada": False,
-    "Ob_Abortar_Secuancia": False,
+    "b_Iniciar_Secuencia": False,
+    "b_Poner_Pegatina": False,
+    "b_Abortar_Secuencia": False,
     
     "Ob_Dtec_Valla_1_trabajo_LH": False,
     "Ob_Dtec_Valla_1_trabajo_RH": False,
@@ -452,17 +453,133 @@ plc_sim_state = {
     "Ob_Dtec_Valla_2_trabajo_RH": False,
 }
 
+global_force_mode = False
+
 class PlcWriteParams(BaseModel):
-    Ob_LUZ_VERDE: bool | None = None
-    Ob_LUZ_AZUL: bool | None = None
-    Ob_LUZ_ROJA: bool | None = None
+    b_LUZ_VERDE: bool | None = None
+    b_LUZ_AZUL: bool | None = None
+    b_LUZ_ROJA: bool | None = None
     Ob_Subir_Vallas: bool | None = None
     Ob_Bajar_Vallas: bool | None = None
-    OW_Altura_Elevacion: float | None = None
-    OW_Pallet: float | None = None
-    Ob_Inciar_Secuencia: bool | None = None
-    Ob_Pegatina_Colocada: bool | None = None
-    Ob_Abortar_Secuancia: bool | None = None
+    R_Altura_Carretilla: float | None = None
+    W_Numero_Pallets: float | None = None
+    b_Iniciar_Secuencia: bool | None = None
+    b_Poner_Pegatina: bool | None = None
+    b_Abortar_Secuencia: bool | None = None
+    is_force: bool = False
+
+class PlcConfigModel(BaseModel):
+    ip: str
+    port: str
+    dbName: str
+    namespace: str
+    isSimulation: bool
+
+@app.post("/config/plc")
+def update_plc_config(config: PlcConfigModel):
+    """
+    Actualiza la configuración OPC UA.
+    Si isSimulation es falso, arranca la conexión real al PLC.
+    """
+    opcua_manager.update_config(
+        ip=config.ip, 
+        port=config.port, 
+        db_name=config.dbName, 
+        namespace=config.namespace
+    )
+    if config.isSimulation:
+        opcua_manager.disable()
+    else:
+        opcua_manager.enable()
+        
+    return {"status": "ok", "message": "Configuración guardada"}
+
+@app.get("/plc/scan_ips")
+async def scan_ips():
+    # Escanear red local para puerto 4840
+    def get_local_ip():
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(('10.255.255.255', 1))
+            return s.getsockname()[0]
+        except:
+            return '192.168.0.1'
+        finally:
+            s.close()
+
+    local_ip = get_local_ip()
+    subnet = ".".join(local_ip.split(".")[:-1])
+    ips_to_check = [f"{subnet}.{i}" for i in range(1, 255)]
+    
+    # Always include common industrial subnets
+    if "192.168.0" not in subnet:
+        ips_to_check.extend([f"192.168.0.{i}" for i in range(1, 255)])
+    if "192.168.1" not in subnet:
+        ips_to_check.extend([f"192.168.1.{i}" for i in range(1, 255)])
+
+    sem = asyncio.Semaphore(50)
+
+    async def check_port(ip, port, timeout=0.5):
+        async with sem:
+            try:
+                reader, writer = await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=timeout)
+                writer.close()
+                await writer.wait_closed()
+                return True
+            except:
+                return False
+
+    # Chunk the execution to avoid Windows select() limit
+    results = await asyncio.gather(*(check_port(ip, 4840) for ip in ips_to_check))
+    active_ips = [ip for ip, is_active in zip(ips_to_check, results) if is_active]
+    
+    return {"ips": active_ips}
+
+class BrowseNodesParams(BaseModel):
+    ip: str
+    port: str
+
+@app.post("/plc/browse_nodes")
+async def browse_nodes(params: BrowseNodesParams):
+    url = f"opc.tcp://{params.ip}:{params.port}"
+    try:
+        from asyncua import Client
+    except ImportError:
+        return {"error": "asyncua no instalado"}
+
+    client = Client(url=url)
+    client.session_timeout = 2000
+    client.secure_channel_timeout = 2000
+    try:
+        await asyncio.wait_for(client.connect(), timeout=3.0)
+        objects = client.nodes.objects
+        children = await objects.get_children()
+        
+        db_names = []
+        for child in children:
+            try:
+                bname = await child.read_browse_name()
+                name = bname.Name
+                if name != "Server": 
+                    db_names.append(name)
+            except:
+                pass
+                
+        await client.disconnect()
+        return {"nodes": db_names}
+    except Exception as e:
+        return {"error": str(e)}
+
+class ForceModeParams(BaseModel):
+    enabled: bool
+
+@app.post("/plc/force_mode")
+def set_force_mode(params: ForceModeParams):
+    """Activa o desactiva el modo de forzado manual."""
+    global global_force_mode
+    global_force_mode = params.enabled
+    print(f"[OPC UA SIM] Modo forzado manual: {'HABILITADO' if global_force_mode else 'DESHABILITADO'}")
+    return {"status": "ok", "force_mode": global_force_mode}
 
 @app.post("/plc/write")
 def write_to_plc(params: PlcWriteParams):
@@ -471,7 +588,17 @@ def write_to_plc(params: PlcWriteParams):
     En el futuro, esto utilizará la librería asyncua para escribir en el S7-1200.
     """
     global plc_sim_state
-    escrito = params.dict(exclude_none=True)
+    global global_force_mode
+    
+    # Si el forzado manual está activado, ignorar comandos automáticos de la app
+    if global_force_mode and not params.is_force:
+        return {"status": "ignored", "message": "Comando ignorado, el forzado manual está activo."}
+        
+    escrito = params.dict(exclude_none=True, exclude={'is_force'})
+    
+    # Si el cliente OPC UA está activo, escribimos en el PLC real
+    if opcua_manager.active:
+        opcua_manager.write(escrito)
     
     for key, value in escrito.items():
         if key in plc_sim_state:
@@ -479,15 +606,15 @@ def write_to_plc(params: PlcWriteParams):
             
             # Exclusión mutua para luces
             if value is True:
-                if key == "Ob_LUZ_ROJA":
-                    plc_sim_state["Ob_LUZ_VERDE"] = False
-                    plc_sim_state["Ob_LUZ_AZUL"] = False
-                elif key == "Ob_LUZ_VERDE":
-                    plc_sim_state["Ob_LUZ_ROJA"] = False
-                    plc_sim_state["Ob_LUZ_AZUL"] = False
-                elif key == "Ob_LUZ_AZUL":
-                    plc_sim_state["Ob_LUZ_ROJA"] = False
-                    plc_sim_state["Ob_LUZ_VERDE"] = False
+                if key == "b_LUZ_ROJA":
+                    plc_sim_state["b_LUZ_VERDE"] = False
+                    plc_sim_state["b_LUZ_AZUL"] = False
+                elif key == "b_LUZ_VERDE":
+                    plc_sim_state["b_LUZ_ROJA"] = False
+                    plc_sim_state["b_LUZ_AZUL"] = False
+                elif key == "b_LUZ_AZUL":
+                    plc_sim_state["b_LUZ_ROJA"] = False
+                    plc_sim_state["b_LUZ_VERDE"] = False
             
             # Lógica de simulación de vallas
             if key == "Ob_Subir_Vallas" and value is True:
@@ -524,14 +651,19 @@ async def websocket_endpoint(websocket: WebSocket):
             global plc_sim_state
             
             elapsed = time.time() - start_time
-            state_str = "SIMULACION"
+            
+            # Si estamos en modo PLC real, usamos el estado del manager
+            current_plc_state = opcua_manager.state if opcua_manager.active else plc_sim_state
+            state_str = "PLC REAL" if opcua_manager.active else "SIMULACION"
 
             await websocket.send_json({
                 "type": "telemetry",
-                "distance": round(plc_sim_state.get("OW_Altura_Elevacion", 0.0), 1),
+                "distance": round(current_plc_state.get("R_Altura_Carretilla", 0.0), 1),
                 "timer": round(elapsed, 2),
                 "state": state_str,
-                "plc": plc_sim_state
+                "plc": current_plc_state,
+                "opcua_connected": opcua_manager.connected,
+                "opcua_error": opcua_manager.error_msg
             })
 
             await asyncio.sleep(0.1)  # 10 Hz
