@@ -160,7 +160,7 @@ function App() {
           return {
             id: `SYS_MODO_MANUAL-${now.getTime()}`,
             plcVar: 'SYS_MODO_MANUAL',
-            description: '[ADVERTENCIA] Máquina en estado manual, no cumples condiciones generales',
+            description: '[ADVERTENCIA] Máquina en estado manual, no cumples condiciones iniciales',
             type: 'Advertencia',
             timestamp: now.toLocaleTimeString(),
             startTime: now.getTime(),
@@ -224,7 +224,7 @@ function App() {
     if (telemetry?.opcua_connected && !telemetry.mappedPlc?.Ob_Estado_Automatico && !telemetry.plc?.Ob_Estado_Automatico) {
       list.push({ 
         id: 'SYS_MODO_MANUAL', 
-        description: '[ADVERTENCIA] Máquina en estado manual, no cumples condiciones generales', 
+        description: '[ADVERTENCIA] Máquina en estado manual, no cumples condiciones iniciales', 
         type: 'Advertencia' 
       });
     }
@@ -236,6 +236,13 @@ function App() {
   const handleResetAlarms = useCallback(() => {
     pulsePlc('Ob_Reset_Alarmas', 0.5);
     setHasUnreadAlarms(false);
+
+    // Si la alarma es persistente (no se limpia tras el reset), 
+    // tras 1.5 segundos forzamos que se vuelva a detectar como "nueva" 
+    // para que vuelva a "sacar el alarmero".
+    setTimeout(() => {
+      activePlcAlarmsRef.current = [];
+    }, 1500);
   }, []);
 
   const handleExportAlarms = useCallback(() => {
@@ -914,10 +921,15 @@ function App() {
           })()}
 
 
-          <TelemetryHUD telemetry={telemetry} cycleTimer={cycleTimer} isSimulation={isSimulation} />
+          <TelemetryHUD 
+            telemetry={telemetry} 
+            cycleTimer={cycleTimer} 
+            isSimulation={isSimulation}
+            distance={appPlc?.OR_Altura_Carretilla !== undefined ? appPlc.OR_Altura_Carretilla : telemetry.distance}
+          />
           <DigitalTwin 
             currentStep={currentStep}
-            distance={telemetry.distance} 
+            distance={appPlc?.OR_Altura_Carretilla !== undefined ? appPlc.OR_Altura_Carretilla : telemetry.distance} 
             plcState={appPlc} 
             palletState={palletState} 
             erpData={erpData}

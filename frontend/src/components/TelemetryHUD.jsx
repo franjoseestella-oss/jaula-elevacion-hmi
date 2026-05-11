@@ -1,7 +1,7 @@
 import React from 'react';
 import { Target, Clock } from 'lucide-react';
 
-const TelemetryHUD = ({ telemetry, cycleTimer = 0, isSimulation }) => {
+const TelemetryHUD = ({ telemetry, cycleTimer = 0, isSimulation, distance = 0 }) => {
   const isRunning = cycleTimer > 0;
 
   // Formatear como MM:SS.d si >= 60s, si no como SS.dd s
@@ -29,7 +29,7 @@ const TelemetryHUD = ({ telemetry, cycleTimer = 0, isSimulation }) => {
 
         <div className="flex items-baseline gap-2">
           <span className="text-5xl font-mono font-black text-white tracking-tighter drop-shadow-md">
-            {telemetry.distance.toFixed(0).padStart(4, '0')}
+            {distance.toFixed(0).padStart(4, '0')}
           </span>
           <span className="text-logisnext-magenta font-bold text-lg">mm</span>
         </div>
