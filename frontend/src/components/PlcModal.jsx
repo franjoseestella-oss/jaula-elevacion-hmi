@@ -172,9 +172,18 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
     }
     
     if (isSimulation) {
+       // Modo simulación: enviar directamente
        Object.assign(newPayload, payload);
        shouldSend = true;
+    } else if (forceMode) {
+       // Force Mode: enviar directamente sin requerir mapeo
+       Object.entries(payload).forEach(([key, value]) => {
+          if (key === 'is_force') return;
+          newPayload[key] = value;
+          shouldSend = true;
+       });
     } else {
+       // Modo PLC real: traducir nombres de variables según el mapeo configurado
        Object.entries(payload).forEach(([key, value]) => {
           if (key === 'is_force') return;
           const found = Object.entries(varMapping).find(([k, v]) => v.appVar === key);
@@ -185,7 +194,7 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
        });
     }
     
-    if (!shouldSend && !isSimulation) {
+    if (!shouldSend) {
        console.log("Ignorando sendWrite: Variables no mapeadas al PLC.");
        return;
     }
@@ -198,6 +207,7 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
       });
     } catch (e) { console.error("Error escribiendo en PLC", e); }
   };
+
 
   const saveConfig = async (simMode) => {
     try {
