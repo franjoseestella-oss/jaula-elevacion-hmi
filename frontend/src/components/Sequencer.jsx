@@ -833,6 +833,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
       } else if (currentStep === 0) {
         luzAzul = true;
+      } else if (isSequenceFinished || currentStep === -1) {
+        luzRoja = blinkTick;
       }
     }
 

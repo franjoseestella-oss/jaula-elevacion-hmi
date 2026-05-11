@@ -527,14 +527,26 @@ function App() {
             </div>
           )}
 
-          {/* BANNER GIGANTE DE SEGURIDAD */}
+          {/* BANNER GIGANTE DE SEGURIDAD: FALTAN VALLAS */}
           {erpData && (currentStep === 3 || currentStep === 4) && (!appPlc?.Ob_Dtec_Valla_1_trabajo_LH || !appPlc?.Ob_Dtec_Valla_2_trabajo_RH) && (
-            <div className="absolute top-10 left-1/2 -translate-x-1/2 z-50 bg-red-600/90 border-4 border-red-500 text-white px-8 py-4 rounded-xl shadow-[0_0_50px_rgba(220,38,38,0.8)] flex items-center gap-6 backdrop-blur-md">
+            <div className="absolute top-28 left-1/2 -translate-x-1/2 z-50 bg-red-600/90 border-4 border-red-500 text-white px-8 py-4 rounded-xl shadow-[0_0_50px_rgba(220,38,38,0.8)] flex items-center gap-6 backdrop-blur-md">
               <AlertTriangle size={56} className="text-white drop-shadow-lg" />
               <div className="flex flex-col">
                 <span className="text-4xl font-black tracking-[0.2em] drop-shadow-md">VALLAS NO EN POSICIÓN</span>
                 <span className="text-sm font-bold tracking-widest text-red-100 drop-shadow">PELIGRO: LA JAULA NO ES SEGURA</span>
               </div>
+            </div>
+          )}
+
+          {/* BANNER FIJO: VALLAS ABAJO (EN TRABAJO) */}
+          {(appPlc?.Ob_Dtec_Valla_1_trabajo_LH || appPlc?.Ob_Dtec_Valla_2_trabajo_RH) && (
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 z-[60] bg-yellow-400 text-black px-16 py-3 rounded-b-3xl border-4 border-t-0 border-black shadow-[0_15px_40px_rgba(234,179,8,0.6)] flex items-center gap-8" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(0,0,0,0.2) 20px, rgba(0,0,0,0.2) 40px)' }}>
+              <AlertTriangle size={42} className="text-black drop-shadow-sm animate-pulse" />
+              <div className="flex flex-col text-center">
+                <span className="text-3xl font-black tracking-[0.1em] uppercase drop-shadow-sm bg-yellow-400/80 px-2 rounded">¡¡ ATENCIÓN VALLAS ABAJO !!</span>
+                <span className="text-base font-black tracking-widest text-black/90 drop-shadow-sm bg-yellow-400/80 px-2 mt-1 rounded">SUBIRLAS AL FINALIZAR LA PRUEBA</span>
+              </div>
+              <AlertTriangle size={42} className="text-black drop-shadow-sm animate-pulse" />
             </div>
           )}
 
