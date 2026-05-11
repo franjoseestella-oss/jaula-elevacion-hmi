@@ -275,7 +275,7 @@ class OpcUaClientManager:
                 # ── Procesar cola de escrituras manuales ────────────────────
                 while not self._write_queue.empty():
                     payload = await self._write_queue.get()
-                    await self._do_write(client, write_nodes, payload)
+                    await self._do_write(client, nodes, payload)
 
                 self.latency_ms = round((time.time() - cycle_start) * 1000, 1)
 
@@ -286,12 +286,19 @@ class OpcUaClientManager:
             self.connected = False
             logger.info("[OPC UA] Desconectado de %s", self.config.url)
 
-    async def _do_write(self, client, write_nodes: dict, payload: dict):
+    async def _do_write(self, client, nodes_dict: dict, payload: dict):
         """Escribe los valores del payload en los nodos correspondientes."""
         from asyncua import ua
         for var, value in payload.items():
-            if var not in write_nodes:
+            if var == 'is_force':
                 continue
+            
+            node = nodes_dict.get(var)
+            if not node:
+                try:
+                    node = client.get_node(self.config.node_id(var))
+                except Exception:
+                    continue
             try:
                 if isinstance(value, bool):
                     dv = ua.DataValue(ua.Variant(value, ua.VariantType.Boolean))
