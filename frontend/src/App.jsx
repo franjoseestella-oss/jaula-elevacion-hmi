@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { AlertTriangle, Play, CheckCircle2, PowerOff, Camera, X } from 'lucide-react';
+import { AlertTriangle, Play, CheckCircle2, PowerOff, Camera, X, Download, Trash2 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import Header from './components/Header';
 import LeftPanel from './components/LeftPanel';
 import DigitalTwin from './components/DigitalTwin';
@@ -36,9 +37,11 @@ function App() {
   const [step2Overlay, setStep2Overlay] = useState(null);
   const [testHUDOverlay, setTestHUDOverlay] = useState(null);
   const [currentStep, setCurrentStep] = useState(0);
+  const [pulseActive, setPulseActive] = useState(null); // { varName: string, timeLeft: number }
 
   const [alarms, setAlarms] = useState([]);
-  const [showAlarms, setShowAlarms] = useState(false);
+  const [showAlarmsHistory, setShowAlarmsHistory] = useState(false);
+  const [showActiveAlarms, setShowActiveAlarms] = useState(false);
   const [hasUnreadAlarms, setHasUnreadAlarms] = useState(false);
   
   const [alarmConfig, setAlarmConfig] = useState(() => {
@@ -128,67 +131,96 @@ function App() {
       setAlarms(prev => {
          if (prev.length > 0 && prev[0].description === newAlarmDesc && (Date.now() - prev[0].id) < 5000) return prev;
          setHasUnreadAlarms(true);
-         return [{ id: Date.now(), timestamp: new Date().toLocaleString(), description: newAlarmDesc, type: 'Alarma' }, ...prev].slice(0, 50);
+         return [{ id: Date.now(), timestamp: new Date().toLocaleString(), description: newAlarmDesc, type: 'Alarma' }, ...prev].slice(0, 5000);
       });
     }
   }, [telemetry?.opcua_error, telemetry?.plc?.Ob_Abortar_Secuencia]);
 
-  const activePlcAlarmsRef = useRef(new Set());
+  const activePlcAlarmsRef = useRef([]);
   
   // Procesar flancos de subida de las alarmas configuradas (IN ALARMAS)
   useEffect(() => {
     if (!telemetry?.plc || !alarmConfig?.in) return;
     
-    const currentActive = new Set();
-    alarmConfig.in.forEach(a => {
-      if (telemetry.plc[a.plcVar]) {
-         currentActive.add(a.plcVar);
-         if (!activePlcAlarmsRef.current.has(a.plcVar)) {
-            // Flanco de subida: registrar en el log
-            const typeStr = (a.type || 'Alarma').toUpperCase();
-            let desc = `[${typeStr}] ${a.plcVar}`;
-            if (a.desc) desc += `: ${a.desc}`;
-            if (a.remedy) desc += ` (Remedio: ${a.remedy})`;
-            
-            setAlarms(prev => {
-               setHasUnreadAlarms(true);
-               return [{ id: Date.now(), timestamp: new Date().toLocaleString(), description: desc, type: a.type || 'Alarma' }, ...prev].slice(0, 50);
-            });
-         }
-      }
-    });
+    const currentActive = alarmConfig.in.filter(a => telemetry.plc[a.plcVar]).map(a => a.plcVar);
+    const newAlarms = currentActive.filter(id => !activePlcAlarmsRef.current.includes(id));
+    
+    if (newAlarms.length > 0) {
+      setHasUnreadAlarms(true);
+      const now = new Date();
+      
+      const newAlarmObjects = newAlarms.map(id => {
+        const config = alarmConfig.in.find(a => a.plcVar === id);
+        let desc = `[${id}]`;
+        if (config.desc) desc += ` ${config.desc}`;
+        if (config.remedy) desc += ` (Remedio: ${config.remedy})`;
+        
+        return {
+          id: `${id}-${now.getTime()}`,
+          plcVar: id,
+          description: desc,
+          type: config.type || 'Alarma',
+          timestamp: now.toLocaleTimeString(),
+          startTime: now.getTime(),
+          endTime: null,
+          duration: 'Activa'
+        };
+      });
+
+      setAlarms(prev => {
+        const updated = [...newAlarmObjects, ...prev];
+        return updated.slice(0, 5000); // Limit historical alarms to 5000
+      });
+    }
+
+    // Identify RESOLVED alarms (in previous ref but not in current)
+    const resolvedAlarms = activePlcAlarmsRef.current.filter(id => !currentActive.includes(id));
+    if (resolvedAlarms.length > 0) {
+      const nowTime = Date.now();
+      setAlarms(prev => prev.map(alarm => {
+        if (resolvedAlarms.includes(alarm.plcVar) && !alarm.endTime) {
+          const durationMs = nowTime - alarm.startTime;
+          const secs = Math.floor(durationMs / 1000);
+          const mins = Math.floor(secs / 60);
+          const durationStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
+          return { ...alarm, endTime: nowTime, duration: durationStr };
+        }
+        return alarm;
+      }));
+    }
+    
     activePlcAlarmsRef.current = currentActive;
   }, [telemetry?.plc, alarmConfig?.in]);
 
-  // Reset de alarmas: limpia el historial pero vuelve a añadir las que siguen activas en el PLC
-  const handleResetAlarms = useCallback(() => {
-    if (!telemetry?.plc || !alarmConfig?.in) {
-      setAlarms([]);
-      return;
-    }
-    
-    const currentActiveAlarms = [];
-    alarmConfig.in.forEach((a, index) => {
-      if (telemetry.plc[a.plcVar]) {
-        const typeStr = (a.type || 'Alarma').toUpperCase();
-        let desc = `[${typeStr}] ${a.plcVar}`;
-        if (a.desc) desc += `: ${a.desc}`;
-        if (a.remedy) desc += ` (Remedio: ${a.remedy})`;
-        
-        currentActiveAlarms.push({
-          id: Date.now() + index, 
-          timestamp: new Date().toLocaleString(), 
-          description: desc,
-          type: a.type || 'Alarma'
-        });
-      }
+  const activeAlarmsList = React.useMemo(() => {
+    if (!telemetry?.plc || !alarmConfig?.in) return [];
+    return alarmConfig.in.filter(a => telemetry.plc[a.plcVar]).map(a => {
+      const typeStr = (a.type || 'Alarma').toUpperCase();
+      let desc = `[${typeStr}] ${a.plcVar}`;
+      if (a.desc) desc += `: ${a.desc}`;
+      if (a.remedy) desc += ` (Remedio: ${a.remedy})`;
+      return { id: a.plcVar, description: desc, type: a.type || 'Alarma' };
     });
-    
-    setAlarms(currentActiveAlarms);
-    if (currentActiveAlarms.length > 0) {
-      setHasUnreadAlarms(true);
-    }
   }, [telemetry?.plc, alarmConfig?.in]);
+
+  // Reset de alarmas: solo pulso al PLC, se conserva el histórico
+  const handleResetAlarms = useCallback(() => {
+    pulsePlc('Ob_Reset_Alarmas', 0.5);
+    setHasUnreadAlarms(false);
+  }, []);
+
+  const handleExportAlarms = useCallback(() => {
+    if (alarms.length === 0) return;
+    const worksheet = XLSX.utils.json_to_sheet(alarms.map(a => ({
+      Fecha_Hora: a.timestamp,
+      Tipo: a.type,
+      Descripcion: a.description,
+      Duracion: a.duration
+    })));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Histórico de Alarmas");
+    XLSX.writeFile(workbook, `Historial_Alarmas_${new Date().toISOString().replace(/[:.]/g, '-')}.xlsx`);
+  }, [alarms]);
 
   // Cargar datos completos de un bastidor seleccionado (desde el modal o ErpSearch)
   const handleBastidorSelect = useCallback(async (bastidor) => {
@@ -203,8 +235,10 @@ function App() {
     }
   }, []);
 
-  // Enviar comando al PLC para activar un bit de simulacion, esperar 800ms y desactivarlo
-  const pulsePlc = async (varName) => {
+  // Enviar comando al PLC para activar un bit, esperar N segundos y desactivarlo
+  const pulsePlc = async (varName, durationSecs = 3) => {
+    if (pulseActive && pulseActive.varName === varName) return; // Prevent overlapping pulses
+
     // Llamada directa al Sequencer (sin latencia de WebSocket)
     if (varName === 'Ob_Iniciar_Secuencia' && sequencerRef.current?.onIniciarSecuencia) {
       sequencerRef.current.onIniciarSecuencia();
@@ -240,17 +274,41 @@ function App() {
       await fetch('http://localhost:8001/plc/write', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [targetVar]: true, is_force: true })
+        body: JSON.stringify({ [targetVar]: true, is_force: isSimulation })
       });
-      setTimeout(async () => {
-        await fetch('http://localhost:8001/plc/write', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ [targetVar]: false, is_force: true })
-        });
-      }, 800);
-    } catch (err) {
-      console.error(`Error pulsando ${targetVar}:`, err);
+      
+      // If duration is less than 1, we don't show the visual countdown, just timeout
+      if (durationSecs < 1) {
+        setTimeout(async () => {
+          await fetch('http://localhost:8001/plc/write', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [targetVar]: false, is_force: isSimulation })
+          }).catch(e => console.error(e));
+        }, durationSecs * 1000);
+        return;
+      }
+
+      setPulseActive({ varName, timeLeft: durationSecs });
+      
+      let secondsLeft = durationSecs;
+      const interval = setInterval(() => {
+        secondsLeft -= 1;
+        if (secondsLeft <= 0) {
+           clearInterval(interval);
+           setPulseActive(null);
+           fetch('http://localhost:8001/plc/write', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ [targetVar]: false, is_force: isSimulation })
+           }).catch(e => console.error(e));
+        } else {
+           setPulseActive({ varName, timeLeft: secondsLeft });
+        }
+      }, 1000);
+    } catch (error) {
+      console.error('Error in pulsePlc:', error);
+      setPulseActive(null);
     }
   };
 
@@ -318,7 +376,7 @@ function App() {
         canChangeOperator={!erpData}
         onOperatorClick={() => setOperario(null)}
         hasAlarms={alarms.length > 0}
-        onAlarmsClick={() => { setShowAlarms(true); setHasUnreadAlarms(false); }}
+        onAlarmsClick={() => { setShowAlarmsHistory(true); setHasUnreadAlarms(false); }}
       />
 
       <div className="flex-1 flex flex-row overflow-hidden">
@@ -357,44 +415,108 @@ function App() {
           {/* ALARMS ICON */}
           {hasUnreadAlarms && (
             <button 
-              onClick={() => { setShowAlarms(true); setHasUnreadAlarms(false); }}
+              onClick={() => { setShowActiveAlarms(true); setHasUnreadAlarms(false); }}
               className="absolute top-48 right-12 z-50 bg-red-600/90 border-4 border-red-500 text-white p-8 rounded-full shadow-[0_0_50px_rgba(220,38,38,0.8)] hover:scale-110 active:scale-95 transition-all animate-pulse"
             >
               <AlertTriangle size={108} />
             </button>
           )}
 
-          {/* ALARMS MODAL (FLOATING PANEL) */}
-          {showAlarms && (
+          {/* ALARMAS ACTIVAS MODAL (FLOATING PANEL) */}
+          {showActiveAlarms && (
             <div className="absolute top-32 right-6 z-50 w-[600px] bg-[#0a0f12]/95 border border-red-500/50 rounded-2xl shadow-[0_0_40px_rgba(220,38,38,0.3)] backdrop-blur-md overflow-hidden flex flex-col max-h-[80vh] animate-in slide-in-from-right-8 duration-300">
               <div className="bg-red-600/20 border-b border-red-500/30 p-5 flex justify-between items-center shrink-0">
                  <div className="flex items-center gap-3">
                     <AlertTriangle size={24} className="text-red-500" />
-                    <span className="text-base font-black text-red-500 uppercase tracking-widest drop-shadow-md">Log de Alarmas</span>
+                    <span className="text-base font-black text-red-500 uppercase tracking-widest drop-shadow-md">Alarmas Activas</span>
                  </div>
                  <div className="flex items-center gap-3">
-                   <button onClick={handleResetAlarms} className="text-white text-xs font-bold uppercase tracking-wider bg-red-600/80 border border-red-500 hover:bg-red-500 px-3 py-1.5 rounded-lg shadow-sm transition-colors">
+                   <button onClick={() => { handleResetAlarms(); setShowActiveAlarms(false); }} className="text-white text-xs font-bold uppercase tracking-wider bg-red-600/80 border border-red-500 hover:bg-red-500 px-3 py-1.5 rounded-lg shadow-sm transition-colors">
                      Reset Alarmas
                    </button>
-                   <button onClick={() => setShowAlarms(false)} className="text-gray-400 hover:text-white bg-[#1d2930] p-2 rounded-lg hover:bg-red-600 transition-colors"><X size={20}/></button>
+                   <button onClick={() => setShowActiveAlarms(false)} className="text-gray-400 hover:text-white bg-[#1d2930] p-2 rounded-lg hover:bg-red-600 transition-colors"><X size={20}/></button>
                  </div>
               </div>
               <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 custom-scrollbar">
-                {alarms.length === 0 ? (
-                   <span className="text-sm text-gray-500 italic text-center py-10">No hay alarmas registradas.</span>
-                ) : [...alarms].reverse().map(a => {
+                {activeAlarmsList.length === 0 ? (
+                   <span className="text-sm text-gray-500 italic text-center py-10">No hay alarmas activas en este momento.</span>
+                ) : activeAlarmsList.map(a => {
                    const isWarning = a.type?.toUpperCase() === 'ADVERTENCIA';
                    return (
                      <div key={a.id} className={`bg-[#1d2930]/80 p-4 rounded-xl border flex flex-col gap-2 shadow-sm transition-colors ${
                        isWarning ? 'border-yellow-500/50 hover:border-yellow-500/80' : 'border-red-500/50 hover:border-red-500/80'
                      }`}>
-                       <span className="text-xs text-gray-400 font-mono bg-black/40 self-start px-2 py-1 rounded">{a.timestamp}</span>
                        <span className={`text-sm font-bold tracking-wide ${isWarning ? 'text-yellow-400' : 'text-red-400'}`}>
                          {a.description}
                        </span>
                      </div>
                    );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* HISTÓRICO ALARMS MODAL (FULL SCREEN) */}
+          {showAlarmsHistory && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-8">
+              <div className="w-full max-w-6xl bg-[#0a0f12] border border-red-500/50 rounded-2xl shadow-[0_0_60px_rgba(220,38,38,0.3)] overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-300">
+                <div className="bg-red-600/20 border-b border-red-500/30 p-6 flex justify-between items-center shrink-0">
+                   <div className="flex items-center gap-4">
+                      <AlertTriangle size={32} className="text-red-500" />
+                      <span className="text-2xl font-black text-red-500 uppercase tracking-widest drop-shadow-md">Log_Alarms</span>
+                   </div>
+                   <div className="flex items-center gap-4">
+                     <button onClick={() => setAlarms([])} className="text-white text-sm font-bold uppercase tracking-wider bg-orange-600/80 border border-orange-500 hover:bg-orange-500 px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-2">
+                       <Trash2 size={18} /> Borrar Histórico
+                     </button>
+                     <button onClick={handleExportAlarms} className="text-white text-sm font-bold uppercase tracking-wider bg-green-600/80 border border-green-500 hover:bg-green-500 px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-2">
+                       <Download size={18} /> Exportar .xlsx
+                     </button>
+                     <button onClick={() => setShowAlarmsHistory(false)} className="text-gray-400 hover:text-white bg-[#1d2930] p-2.5 rounded-lg hover:bg-red-600 transition-colors">
+                       <X size={24} />
+                     </button>
+                   </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+                  {alarms.length === 0 ? (
+                     <div className="text-lg text-gray-500 italic text-center py-20">No hay alarmas registradas en el histórico.</div>
+                  ) : (
+                    <table className="w-full text-left border-collapse text-sm">
+                      <thead className="bg-[#1d2930] sticky top-0 z-10">
+                        <tr>
+                          <th className="p-4 border-b border-gray-700 text-gray-300 font-bold uppercase w-1/6">Fecha y Hora</th>
+                          <th className="p-4 border-b border-gray-700 text-gray-300 font-bold uppercase w-1/6">Alarma / Advertencia</th>
+                          <th className="p-4 border-b border-gray-700 text-gray-300 font-bold uppercase w-3/6">Descripción</th>
+                          <th className="p-4 border-b border-gray-700 text-gray-300 font-bold uppercase w-1/6">Duración</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {alarms.map(a => {
+                          const isWarning = a.type?.toUpperCase() === 'ADVERTENCIA';
+                          const isActive = a.duration === 'Activa';
+                          return (
+                            <tr key={a.id} className={`border-b border-gray-800/50 transition-colors ${
+                              isWarning ? 'hover:bg-yellow-500/10' : 'hover:bg-red-500/10'
+                            }`}>
+                              <td className="p-4 text-gray-400 font-mono">{a.timestamp}</td>
+                              <td className={`p-4 font-bold ${isWarning ? 'text-yellow-500' : 'text-red-500'}`}>
+                                {isWarning ? 'ADVERTENCIA' : 'ALARMA'}
+                              </td>
+                              <td className="p-4 text-gray-200">{a.description}</td>
+                              <td className="p-4">
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                                  isActive ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-gray-800 text-gray-400'
+                                }`}>
+                                  {a.duration}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -799,53 +921,71 @@ function App() {
             </div>
           )}
 
-          {/* Botonera de pulsadores (Siempre visible) y control de simulación */}
-          <div className="absolute left-6 bottom-6 flex gap-3 bg-[#0a0f12]/90 backdrop-blur-md p-4 rounded-xl border border-gray-800 shadow-2xl z-40">
-            <div className="flex flex-col items-center">
-              <button
-                onClick={() => {
-                  if (hasActiveCriticalAlarm) {
-                    alert("No se puede iniciar la secuencia: Hay alarmas críticas activas.");
-                    return;
-                  }
-                  pulsePlc('Ob_Iniciar_Secuencia');
-                }}
-                disabled={hasActiveCriticalAlarm}
-                className={`w-14 h-14 rounded-full flex items-center justify-center transition-all border-4 shadow-[0_4px_10px_rgba(34,197,94,0.3)]
-                  ${hasActiveCriticalAlarm 
-                    ? 'bg-gray-600 border-gray-500 opacity-50 cursor-not-allowed' 
-                    : 'bg-gradient-to-b from-green-500 to-green-700 active:from-green-700 active:to-green-900 border-[#1d2930] active:scale-95 active:shadow-inner'}`}
-              >
-                <Play size={20} className="text-white ml-1" />
-              </button>
-              <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider">Iniciar<br/>Secuencia</span>
-            </div>
-            
-            <div className="flex flex-col items-center">
-              <button
-                onClick={() => pulsePlc('Ob_Poner_Pegatina')}
-                className="w-14 h-14 rounded-full bg-gradient-to-b from-blue-500 to-blue-700 active:from-blue-700 active:to-blue-900 border-4 border-[#1d2930] shadow-[0_4px_10px_rgba(59,130,246,0.3)] flex items-center justify-center transition-all active:scale-95 active:shadow-inner"
-              >
-                <CheckCircle2 size={24} className="text-white" />
-              </button>
-              <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Pegatina<br/>Colocada</span>
-            </div>
+          {/* Botonera de pulsadores simulada y control de simulación (SOLO SIMULACIÓN) */}
+          {isSimulation && (
+            <div className="absolute left-6 bottom-6 flex gap-3 bg-[#0a0f12]/90 backdrop-blur-md p-4 rounded-xl border border-gray-800 shadow-2xl z-40">
+              <div className="flex flex-col items-center">
+                <button
+                  onClick={() => {
+                    if (hasActiveCriticalAlarm) {
+                      alert("No se puede iniciar la secuencia: Hay alarmas críticas activas.");
+                      return;
+                    }
+                    pulsePlc('Ob_Iniciar_Secuencia');
+                  }}
+                  disabled={hasActiveCriticalAlarm || (pulseActive && pulseActive.varName === 'Ob_Iniciar_Secuencia')}
+                  className={`w-14 h-14 rounded-full flex items-center justify-center transition-all border-4 shadow-[0_4px_10px_rgba(34,197,94,0.3)]
+                    ${hasActiveCriticalAlarm || (pulseActive && pulseActive.varName === 'Ob_Iniciar_Secuencia')
+                      ? 'bg-gray-600 border-gray-500 opacity-50 cursor-not-allowed' 
+                      : 'bg-gradient-to-b from-green-500 to-green-700 active:from-green-700 active:to-green-900 border-[#1d2930] active:scale-95 active:shadow-inner'}`}
+                >
+                  {pulseActive?.varName === 'Ob_Iniciar_Secuencia' ? (
+                     <span className="text-white font-black text-2xl animate-pulse">{pulseActive.timeLeft}</span>
+                  ) : (
+                     <Play size={20} className="text-white ml-1" />
+                  )}
+                </button>
+                <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Iniciar<br/>Secuencia</span>
+              </div>
+              
+              <div className="flex flex-col items-center">
+                <button
+                  onClick={() => pulsePlc('Ob_Poner_Pegatina')}
+                  disabled={pulseActive && pulseActive.varName === 'Ob_Poner_Pegatina'}
+                  className={`w-14 h-14 rounded-full border-4 border-[#1d2930] shadow-[0_4px_10px_rgba(59,130,246,0.3)] flex items-center justify-center transition-all active:scale-95 active:shadow-inner
+                    ${(pulseActive && pulseActive.varName === 'Ob_Poner_Pegatina')
+                      ? 'bg-gray-600 opacity-50 cursor-not-allowed'
+                      : 'bg-gradient-to-b from-blue-500 to-blue-700 active:from-blue-700 active:to-blue-900'}`}
+                >
+                  {pulseActive?.varName === 'Ob_Poner_Pegatina' ? (
+                     <span className="text-white font-black text-2xl animate-pulse">{pulseActive.timeLeft}</span>
+                  ) : (
+                     <CheckCircle2 size={24} className="text-white" />
+                  )}
+                </button>
+                <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Pegatina<br/>Colocada</span>
+              </div>
 
-            <div className="flex flex-col items-center border-r border-gray-700 pr-3 mr-1">
-              <button
-                onClick={() => pulsePlc('Ob_Abortar_Secuencia')}
-                className="w-14 h-14 rounded-full bg-gradient-to-b from-red-500 to-red-700 active:from-red-700 active:to-red-900 border-4 border-[#1d2930] shadow-[0_4px_10px_rgba(239,68,68,0.3)] flex items-center justify-center transition-all active:scale-95 active:shadow-inner"
-              >
-                <PowerOff size={20} className="text-white" />
-              </button>
-              <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider">Abortar<br/>Secuencia</span>
-            </div>
+              <div className="flex flex-col items-center border-r border-gray-700 pr-3 mr-1">
+                <button
+                  onClick={() => pulsePlc('Ob_Abortar_Secuencia')}
+                  disabled={pulseActive && pulseActive.varName === 'Ob_Abortar_Secuencia'}
+                  className={`w-14 h-14 rounded-full border-4 border-[#1d2930] shadow-[0_4px_10px_rgba(239,68,68,0.3)] flex items-center justify-center transition-all active:scale-95 active:shadow-inner
+                    ${(pulseActive && pulseActive.varName === 'Ob_Abortar_Secuencia')
+                      ? 'bg-gray-600 opacity-50 cursor-not-allowed'
+                      : 'bg-gradient-to-b from-red-500 to-red-700 active:from-red-700 active:to-red-900'}`}
+                >
+                  {pulseActive?.varName === 'Ob_Abortar_Secuencia' ? (
+                     <span className="text-white font-black text-2xl animate-pulse">{pulseActive.timeLeft}</span>
+                  ) : (
+                     <PowerOff size={20} className="text-white" />
+                  )}
+                </button>
+                <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Abortar<br/>Secuencia</span>
+              </div>
 
-            {/* Solo Simulación */}
-            {isSimulation && (
-              <>
-                {/* Control de Vallas Simuladas */}
-                <div className="flex flex-col gap-1 items-center justify-center border-r border-gray-700 pr-3 mr-1">
+              {/* Control de Vallas Simuladas */}
+              <div className="flex flex-col gap-1 items-center justify-center border-r border-gray-700 pr-3 mr-1">
                 <span className="text-[9px] font-black uppercase text-gray-500 tracking-wider mb-1">Jaula</span>
                 <div className="flex gap-2">
                   <button
@@ -948,11 +1088,9 @@ function App() {
                   </button>
                 </div>
                 <span className="mt-1 text-[9px] font-black uppercase text-gray-400 tracking-wider">Pallets Sim.</span>
-                <span className="text-[10px] font-bold text-yellow-400">{(appPlc.OW_Numero_Pallets || 0) * 250} kg</span>
               </div>
-              </>
-            )}
-          </div>
+            </div>
+          )}
         </div>
         
         <div className="w-96 border-l border-[#2e404a] bg-[#0a0f12] flex flex-col z-30 shadow-[-10px_0_30px_rgba(0,0,0,0.5)]">

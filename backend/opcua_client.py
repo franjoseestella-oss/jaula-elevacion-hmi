@@ -234,30 +234,38 @@ class OpcUaClientManager:
             }
             logger.info("[OPC UA] Monitorizando %d variables.", len(nodes))
 
-            import time
+            last_vida_value = None
             last_heartbeat = time.time()
             last_app_heartbeat = time.time()
             app_heartbeat_state = False
 
             while self.active:
                 cycle_start = time.time()
-                # ── Leer todas las variables ────────────────────────────────
-                for var, node in nodes.items():
+                
+                # ── Leer todas las variables (Optimizado en bloque) ─────────
+                if nodes:
+                    var_names = list(nodes.keys())
+                    node_list = list(nodes.values())
                     try:
-                        val = await node.read_value()
-                        if isinstance(val, (int, float, bool, str)):
-                            self.state[var] = val
-                        else:
-                            self.state[var] = str(val)
-                    except Exception:
-                        pass
+                        # get_values ejecuta 1 sola petición de red para todos los nodos (muy eficiente)
+                        values = await client.get_values(node_list)
+                        for i, val in enumerate(values):
+                            if isinstance(val, (int, float, bool, str)):
+                                self.state[var_names[i]] = val
+                            else:
+                                self.state[var_names[i]] = str(val)
+                    except Exception as e:
+                        logger.warning("[OPC UA] Error en lectura masiva: %s", e)
                 
                 # ── Comprobar BIT VIDA (Heartbeat) PLC -> APP ───────────────
                 if "Ob_Bit_VIDA_PLC_APP" in nodes:
-                    if self.state.get("Ob_Bit_VIDA_PLC_APP") is True:
+                    current_vida = self.state.get("Ob_Bit_VIDA_PLC_APP")
+                    # Actualizamos heartbeat si el bit cambia (toggle) o es la primera vez
+                    if current_vida != last_vida_value:
                         last_heartbeat = time.time()
-                    elif time.time() - last_heartbeat > 10.0:
-                        raise Exception("Conexión perdida (BIT VIDA PLC no recibido en 10s)")
+                        last_vida_value = current_vida
+                    elif time.time() - last_heartbeat > 15.0:
+                        raise Exception("Conexión perdida (BIT VIDA PLC estancado por 15s)")
 
                 # ── Generar BIT VIDA APP -> PLC (Toggle 1s) ─────────────────
                 if time.time() - last_app_heartbeat >= 1.0:
@@ -308,7 +316,7 @@ class OpcUaClientManager:
                     dv = ua.DataValue(ua.Variant(value, ua.VariantType.Int32))
                 else:
                     dv = ua.DataValue(ua.Variant(value))
-                await write_nodes[var].write_value(dv)
+                await node.write_value(dv)
                 logger.debug("[OPC UA] ← %s = %s", var, value)
             except Exception as e:
                 logger.warning("[OPC UA] Error escribiendo %s: %s", var, e)

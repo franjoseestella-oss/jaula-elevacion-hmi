@@ -45,7 +45,7 @@ const Header = ({ status, onErpClick, onSettingsClick, onLogsClick, onPlcClick, 
           <StatusLED active={status.db} label="SQL DB" icon={Database} />
           <StatusLED active={status.erp} label="ERP" icon={Server} onClick={onErpClick} />
           <StatusLED active={true} label="LOG" icon={History} onClick={onLogsClick} />
-          <StatusLED active={hasAlarms} label="ALARMAS" icon={AlertTriangle} onClick={onAlarmsClick} />
+          <StatusLED active={hasAlarms} label="LOG. ALARMAS" icon={AlertTriangle} onClick={onAlarmsClick} />
         </div>
 
         {/* User Profile */}
