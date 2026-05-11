@@ -1083,8 +1083,17 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     // Ya desbloqueada — avanzar
     if (step >= 1 && step <= 4 && started[step]) {
       if (statuses[2] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') {
-        if (cameraTestState === 'standby') setCameraTestState('esperando_1500');
-        else if (cameraTestState === 'ok') markOk(2);
+        if (cameraTestState === 'nok') {
+          setCameraTestState('esperando_1500');
+          setTestAlarm(null);
+          setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+          setWaitCountdown(null);
+          return;
+        }
+        if (cameraTestState === 'standby') {
+          setCameraTestState('esperando_1500');
+          setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+        } else if (cameraTestState === 'ok') markOk(2);
       } else if (statuses[3] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') {
         const currentPallets = pState?.OW_Numero_Pallets || 0;
         const targetLoad = erpDataRef.current?.capac_interm_1 || 0;
@@ -1092,14 +1101,30 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
         if (currentLoad !== targetLoad) {
           setTestAlarm(`Carga incorrecta: ${currentLoad}kg actual vs ${targetLoad}kg requerido (ERP). Compruebe los pallets.`);
+          setCameraTestState('nok');
           return;
         } else {
           setTestAlarm(null);
         }
 
-        if (cameraTestState === 'standby') setCameraTestState('esperando_1500');
-        else if (cameraTestState === 'ok') markOk(3);
+        if (cameraTestState === 'nok') {
+          setCameraTestState('esperando_1500');
+          setTestAlarm(null);
+          setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+          setWaitCountdown(null);
+          return;
+        }
+        if (cameraTestState === 'standby') {
+          setCameraTestState('esperando_1500');
+          setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+        } else if (cameraTestState === 'ok') markOk(3);
       } else if (statuses[4] === STEP_STATUS.ACTIVE) {
+        if (test5mState === 'nok') {
+          setTest5mState('standby');
+          setTestAlarm(null);
+          setTest5mCountdown(null);
+          return;
+        }
         if (test5mState === 'ok') markOk(4);
       }
     }
@@ -1111,6 +1136,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     const erp = erpDataRef.current;
     const tols = toleranciasRef.current;
     const pState = plcStateRef.current;
+
+    if (cameraTestState === 'nok') {
+      const activeTestStep = statuses[2] === STEP_STATUS.ACTIVE ? 2 : statuses[3] === STEP_STATUS.ACTIVE ? 3 : null;
+      if (activeTestStep !== null) markOk(activeTestStep);
+      return;
+    }
 
     if (statuses[1] === STEP_STATUS.ACTIVE && erp && started[1]) {
       const altura = erp.altura_max_interm;
@@ -1247,6 +1278,28 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       }
     }
   }, [currentStep, stepStatus, erpData, isSimulation, palletState, setPalletState]);
+
+  // ── Auto-Save y Luces Rojas al Finalizar ──
+  const hasAutoSaved = useRef(false);
+
+  useEffect(() => {
+    if (isSequenceFinished && !hasAutoSaved.current) {
+      hasAutoSaved.current = true;
+      saveLog('OK');
+      if (onSequenceEnd) onSequenceEnd();
+      
+      const vallaTrabajo = plcStateRef.current?.Ob_Dtec_Valla_1_trabajo_LH || plcStateRef.current?.Ob_Dtec_Valla_2_trabajo_RH;
+      if (vallaTrabajo) {
+        fetch('http://localhost:8001/plc/write', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ Ib_LUZ_ROJA: true, is_force: isSimulation })
+        }).catch(err => console.error('Error encendiendo luz roja al finalizar:', err));
+      }
+    } else if (!isSequenceFinished) {
+      hasAutoSaved.current = false;
+    }
+  }, [isSequenceFinished, isSimulation, onSequenceEnd]);
 
 
   // ── Sincronizar overlay de HUD ───────────────────────────────────────────
@@ -2076,19 +2129,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       {isSequenceFinished && (
         <div className="mx-4 mb-4 p-4 rounded-xl border border-green-500/50 bg-green-900/10 flex flex-col items-center animate-in fade-in slide-in-from-bottom-2">
           <CheckCircle2 size={32} className="text-green-400 mb-2" />
-          <p className="text-[11px] font-black text-green-400 uppercase tracking-widest mb-3 text-center">
+          <p className="text-[11px] font-black text-green-400 uppercase tracking-widest mb-1 text-center">
             Secuencia Completada
           </p>
-          <button
-            onClick={() => {
-              saveLog('OK');
-              if (onSequenceEnd) onSequenceEnd();
-              resetSequence();
-            }}
-            className="w-full py-2.5 bg-green-600 hover:bg-green-500 text-white rounded-lg font-black text-[11px] uppercase tracking-widest shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-colors active:scale-95"
-          >
-            Guardar y Cerrar
-          </button>
+          <p className="text-[10px] text-green-300/80 uppercase tracking-wider text-center">
+            Log guardado automáticamente.<br/>Vuelva al origen. Precaución: Vallas en trabajo (Baliza Roja).
+          </p>
         </div>
       )}
 
@@ -2171,6 +2217,15 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
               Continuar <CheckCircle2 size={18} className="ml-2" />
             </ActionBtn>
           </div>
+        </div>
+      )}
+      {/* ── MENSAJE FLOTANTE: INICIAR SECUENCIA ────────────────────────── */}
+      {(currentStep >= 1 && currentStep <= 4 && !stepStarted[currentStep]) && (
+        <div className="fixed bottom-6 right-6 p-3 rounded-xl border border-yellow-500/50 bg-yellow-900/40 backdrop-blur-md shadow-[0_0_20px_rgba(234,179,8,0.2)] flex items-center gap-3 animate-pulse z-[200]">
+          <div className="h-2 w-2 rounded-full bg-yellow-400" />
+          <p className="text-[11px] font-black text-yellow-400 uppercase tracking-widest">
+            Pulse INICIAR SECUENCIA para continuar
+          </p>
         </div>
       )}
     </aside>
