@@ -143,6 +143,12 @@ function App() {
     if (!telemetry?.plc || !alarmConfig?.in) return;
     
     const currentActive = alarmConfig.in.filter(a => telemetry.plc[a.plcVar]).map(a => a.plcVar);
+
+    // Inject manual mode alarm if not automatic
+    if (telemetry?.opcua_connected && !telemetry.mappedPlc?.Ob_Estado_Automatico && !telemetry.plc?.Ob_Estado_Automatico) {
+      currentActive.push('SYS_MODO_MANUAL');
+    }
+
     const newAlarms = currentActive.filter(id => !activePlcAlarmsRef.current.includes(id));
     
     if (newAlarms.length > 0) {
@@ -150,6 +156,19 @@ function App() {
       const now = new Date();
       
       const newAlarmObjects = newAlarms.map(id => {
+        if (id === 'SYS_MODO_MANUAL') {
+          return {
+            id: `SYS_MODO_MANUAL-${now.getTime()}`,
+            plcVar: 'SYS_MODO_MANUAL',
+            description: '[ADVERTENCIA] Máquina en estado manual, no cumples condiciones generales',
+            type: 'Advertencia',
+            timestamp: now.toLocaleTimeString(),
+            startTime: now.getTime(),
+            endTime: null,
+            duration: 'Activa'
+          };
+        }
+
         const config = alarmConfig.in.find(a => a.plcVar === id);
         let desc = `[${id}]`;
         if (config.desc) desc += ` ${config.desc}`;
@@ -194,14 +213,24 @@ function App() {
 
   const activeAlarmsList = React.useMemo(() => {
     if (!telemetry?.plc || !alarmConfig?.in) return [];
-    return alarmConfig.in.filter(a => telemetry.plc[a.plcVar]).map(a => {
+    const list = alarmConfig.in.filter(a => telemetry.plc[a.plcVar]).map(a => {
       const typeStr = (a.type || 'Alarma').toUpperCase();
       let desc = `[${typeStr}] ${a.plcVar}`;
       if (a.desc) desc += `: ${a.desc}`;
       if (a.remedy) desc += ` (Remedio: ${a.remedy})`;
       return { id: a.plcVar, description: desc, type: a.type || 'Alarma' };
     });
-  }, [telemetry?.plc, alarmConfig?.in]);
+
+    if (telemetry?.opcua_connected && !telemetry.mappedPlc?.Ob_Estado_Automatico && !telemetry.plc?.Ob_Estado_Automatico) {
+      list.push({ 
+        id: 'SYS_MODO_MANUAL', 
+        description: '[ADVERTENCIA] Máquina en estado manual, no cumples condiciones generales', 
+        type: 'Advertencia' 
+      });
+    }
+
+    return list;
+  }, [telemetry?.plc, telemetry?.mappedPlc, telemetry?.opcua_connected, alarmConfig?.in]);
 
   // Reset de alarmas: solo pulso al PLC, se conserva el histórico
   const handleResetAlarms = useCallback(() => {

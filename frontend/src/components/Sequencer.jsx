@@ -778,7 +778,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     let luzVerde = false;
     let luzRoja = false;
 
-    if (!erpData) {
+    if (!plcState?.Ob_Estado_Automatico) {
+      // Condiciones iniciales generales NO cumplidas -> Rojo parpadeante
+      luzRoja = blinkTick;
+    } else if (!erpData) {
       // Sin iniciar prueba -> Azul
       luzAzul = true;
     } else {
