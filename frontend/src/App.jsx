@@ -397,6 +397,8 @@ function App() {
   }, []);
 
   const appPlc = isSimulation ? (telemetry?.plc || {}) : (telemetry?.mappedPlc || {});
+  
+  const isMainScreen = !erpModalOpen && !settingsOpen && !plcModalOpen && !logsOpen && !showAlarmsHistory;
 
   return (
     <div className="h-screen w-screen flex flex-col bg-logisnext-darkslate text-white overflow-hidden font-primary">
@@ -557,7 +559,7 @@ function App() {
           )}
 
           {/* BANNER GIGANTE DE SEGURIDAD: FALTAN VALLAS */}
-          {erpData && (currentStep === 3 || currentStep === 4) && (!appPlc?.Ob_Dtec_Valla_1_trabajo_LH || !appPlc?.Ob_Dtec_Valla_2_trabajo_RH) && (
+          {isMainScreen && erpData && (currentStep === 3 || currentStep === 4) && (!appPlc?.Ob_Dtec_Valla_1_trabajo_LH || !appPlc?.Ob_Dtec_Valla_2_trabajo_RH) && (
             <div className="absolute top-28 left-1/2 -translate-x-1/2 z-50 bg-red-600/90 border-4 border-red-500 text-white px-8 py-4 rounded-xl shadow-[0_0_50px_rgba(220,38,38,0.8)] flex items-center gap-6 backdrop-blur-md">
               <AlertTriangle size={56} className="text-white drop-shadow-lg" />
               <div className="flex flex-col">
@@ -568,7 +570,7 @@ function App() {
           )}
 
           {/* BANNER FIJO: VALLAS ABAJO (EN TRABAJO) */}
-          {(appPlc?.Ob_Dtec_Valla_1_trabajo_LH || appPlc?.Ob_Dtec_Valla_2_trabajo_RH) && (
+          {isMainScreen && (appPlc?.Ob_Dtec_Valla_1_trabajo_LH || appPlc?.Ob_Dtec_Valla_2_trabajo_RH) && (
             <div className="absolute top-0 left-1/2 -translate-x-1/2 z-[60] bg-yellow-400 text-black px-16 py-3 rounded-b-3xl border-4 border-t-0 border-black shadow-[0_15px_40px_rgba(234,179,8,0.6)] flex items-center gap-8" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(0,0,0,0.2) 20px, rgba(0,0,0,0.2) 40px)' }}>
               <AlertTriangle size={42} className="text-black drop-shadow-sm animate-pulse" />
               <div className="flex flex-col text-center">
