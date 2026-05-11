@@ -8,36 +8,43 @@ const PROJECT_VARS = [
   "OW_Numero_Pallets",
   "Ob_Bit_VIDA_PLC_APP",
   "Ib_Bit_VIDA_APP_PLC",
-  "OR_Altura_Carretilla"
+  "OR_Altura_Carretilla",
+  "Ob_Dtec_Valla_1_trabajo_LH",
+  "Ob_Dtec_Valla_2_trabajo_RH"
 ];
 
 const PROJECT_VAR_LABELS = {
-  "Ob_Poner_Pegatina":    "Poner Pegatina",
-  "Ob_Abortar_Secuencia": "Abortar Secuencia",
-  "Ib_LUZ_Pulsador_1":    "Luz Pulsador 1",
-  "Ib_LUZ_Pulsador_2":    "Luz Pulsador 2",
-  "OW_Numero_Pallets":    "Número de Pallets",
-  "Ob_Bit_VIDA_PLC_APP":  "Bit Vida (PLC → APP)",
-  "Ib_Bit_VIDA_APP_PLC":  "Bit Vida (APP → PLC)",
-  "OR_Altura_Carretilla": "Láser Altura Elevación"
+  "Ob_Poner_Pegatina":            "Poner Pegatina",
+  "Ob_Abortar_Secuencia":         "Abortar Secuencia",
+  "Ib_LUZ_Pulsador_1":            "Luz Pulsador 1",
+  "Ib_LUZ_Pulsador_2":            "Luz Pulsador 2",
+  "OW_Numero_Pallets":            "Número de Pallets",
+  "Ob_Bit_VIDA_PLC_APP":          "Bit Vida (PLC → APP)",
+  "Ib_Bit_VIDA_APP_PLC":          "Bit Vida (APP → PLC)",
+  "OR_Altura_Carretilla":         "Láser Altura Elevación",
+  "Ob_Dtec_Valla_1_trabajo_LH":   "Detector Valla 1 Trabajo (LH)",
+  "Ob_Dtec_Valla_2_trabajo_RH":   "Detector Valla 2 Trabajo (RH)"
 };
 
 const PROJECT_VAR_DEFAULT_DIR = {
-  "Ob_Poner_Pegatina":    "OUT",
-  "Ob_Abortar_Secuencia": "OUT",
-  "Ib_LUZ_Pulsador_1":    "IN",
-  "Ib_LUZ_Pulsador_2":    "IN",
-  "OW_Numero_Pallets":    "OUT",
-  "Ob_Bit_VIDA_PLC_APP":  "OUT",
-  "Ib_Bit_VIDA_APP_PLC":  "IN",
-  "OR_Altura_Carretilla": "OUT"
+  "Ob_Poner_Pegatina":            "OUT",
+  "Ob_Abortar_Secuencia":         "OUT",
+  "Ib_LUZ_Pulsador_1":            "IN",
+  "Ib_LUZ_Pulsador_2":            "IN",
+  "OW_Numero_Pallets":            "OUT",
+  "Ob_Bit_VIDA_PLC_APP":          "OUT",
+  "Ib_Bit_VIDA_APP_PLC":          "IN",
+  "OR_Altura_Carretilla":         "OUT",
+  "Ob_Dtec_Valla_1_trabajo_LH":   "OUT",
+  "Ob_Dtec_Valla_2_trabajo_RH":   "OUT"
 };
 
 const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pulsePlc }) => {
   const [outputs, setOutputs] = useState({ 
     Ib_LUZ_VERDE: false, Ib_LUZ_AZUL: false, Ib_LUZ_ROJA: false,
     Ib_LUZ_Pulsador_1: false, Ib_LUZ_Pulsador_2: false,
-    Ib_Bit_VIDA_APP_PLC: false
+    Ib_Bit_VIDA_APP_PLC: false,
+    Ob_Subir_Vallas: false, Ob_Bajar_Vallas: false
   });
   const [analogs, setAnalogs] = useState({
     OR_Altura_Carretilla: 0,
@@ -146,6 +153,8 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
         Ib_LUZ_Pulsador_1: !!telemetry.mappedPlc.Ib_LUZ_Pulsador_1,
         Ib_LUZ_Pulsador_2: !!telemetry.mappedPlc.Ib_LUZ_Pulsador_2,
         Ib_Bit_VIDA_APP_PLC: !!telemetry.mappedPlc.Ib_Bit_VIDA_APP_PLC,
+        Ob_Subir_Vallas: !!telemetry.mappedPlc.Ob_Subir_Vallas,
+        Ob_Bajar_Vallas: !!telemetry.mappedPlc.Ob_Bajar_Vallas,
       }));
       setAnalogs({
         OR_Altura_Carretilla: telemetry.mappedPlc.OR_Altura_Carretilla || 0,
@@ -517,10 +526,74 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
                 </div>
               </div>
 
+              {/* Control Vallas */}
+              <div className="bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-4">
+                <h4 className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest mb-3 border-b border-[#2e404a] pb-2">
+                  Control de Vallas (Jaula)
+                </h4>
+                <div className="flex gap-3">
+                  {/* Subir Vallas */}
+                  <div className="flex flex-col flex-1 gap-1">
+                    <button
+                      disabled={!isSimulation && !forceMode}
+                      onClick={() => {
+                        const newValue = !outputs.Ob_Subir_Vallas;
+                        const newOutputs = { ...outputs, Ob_Subir_Vallas: newValue, Ob_Bajar_Vallas: false };
+                        setOutputs(newOutputs);
+                        lastWriteTime.current = Date.now();
+                        sendWrite({ Ob_Subir_Vallas: newValue, Ob_Bajar_Vallas: false, is_force: true });
+                      }}
+                      className={`flex-1 flex flex-col items-center justify-center p-3 border rounded-xl transition-all duration-300 ${
+                        (!isSimulation && !forceMode)
+                          ? 'opacity-30 cursor-not-allowed border-[#2e404a] bg-[#0a0f12]'
+                          : outputs.Ob_Subir_Vallas
+                            ? 'bg-indigo-500/20 border-indigo-500 text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.3)]'
+                            : 'border-[#2e404a] bg-[#1d2930] hover:border-indigo-500/50 text-logisnext-lightslate hover:text-indigo-400'
+                      }`}
+                    >
+                      <span className="text-xs font-black uppercase tracking-widest">⬆ Subir Vallas</span>
+                      <span className={`text-[9px] font-bold uppercase mt-1 ${outputs.Ob_Subir_Vallas ? 'text-indigo-400' : 'text-gray-500'}`}>
+                        {outputs.Ob_Subir_Vallas ? 'Activo' : 'Reposo'}
+                      </span>
+                    </button>
+                    <div className="self-center">{renderPlcVarTag('Ob_Subir_Vallas')}</div>
+                  </div>
+
+                  {/* Bajar Vallas */}
+                  <div className="flex flex-col flex-1 gap-1">
+                    <button
+                      disabled={!isSimulation && !forceMode}
+                      onClick={() => {
+                        const newValue = !outputs.Ob_Bajar_Vallas;
+                        const newOutputs = { ...outputs, Ob_Subir_Vallas: false, Ob_Bajar_Vallas: newValue };
+                        setOutputs(newOutputs);
+                        lastWriteTime.current = Date.now();
+                        sendWrite({ Ob_Subir_Vallas: false, Ob_Bajar_Vallas: newValue, is_force: true });
+                      }}
+                      className={`flex-1 flex flex-col items-center justify-center p-3 border rounded-xl transition-all duration-300 ${
+                        (!isSimulation && !forceMode)
+                          ? 'opacity-30 cursor-not-allowed border-[#2e404a] bg-[#0a0f12]'
+                          : outputs.Ob_Bajar_Vallas
+                            ? 'bg-orange-500/20 border-orange-500 text-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.3)]'
+                            : 'border-[#2e404a] bg-[#1d2930] hover:border-orange-500/50 text-logisnext-lightslate hover:text-orange-400'
+                      }`}
+                    >
+                      <span className="text-xs font-black uppercase tracking-widest">⬇ Bajar Vallas</span>
+                      <span className={`text-[9px] font-bold uppercase mt-1 ${outputs.Ob_Bajar_Vallas ? 'text-orange-400' : 'text-gray-500'}`}>
+                        {outputs.Ob_Bajar_Vallas ? 'Activo' : 'Reposo'}
+                      </span>
+                    </button>
+                    <div className="self-center">{renderPlcVarTag('Ob_Bajar_Vallas')}</div>
+                  </div>
+                </div>
+              </div>
+
               {[
                 { id: 'Ob_Bit_VIDA_PLC_APP', label: 'BIT VIDA (PLC → APP)', isAnalog: false, canSimulateClick: true },
                 { id: 'OR_Altura_Carretilla', label: 'Láser Altura Elevación', isAnalog: true, unit: 'mm' },
-                { id: 'OW_Numero_Pallets', label: 'Número de Pallets (Carga)', isAnalog: true, unit: ' uds' }
+                { id: 'OW_Numero_Pallets', label: 'Número de Pallets (Carga)', isAnalog: true, unit: ' uds' },
+                { id: 'Ob_Dtec_Valla_1_trabajo_LH', label: 'Detector Valla 1 Trabajo (LH)', isAnalog: false, canSimulateClick: true, isDanger: false },
+                { id: 'Ob_Dtec_Valla_2_trabajo_RH', label: 'Detector Valla 2 Trabajo (RH)', isAnalog: false, canSimulateClick: true, isDanger: false }
               ].map((sensor) => {
                 const value = telemetry?.plc ? telemetry.plc[sensor.id] : undefined;
                 const active = !!value; // Para los digitales

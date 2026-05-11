@@ -40,29 +40,17 @@ class OpcUaConfig:
 # ──────────────────────────────────────────────────────────────────────────────
 # Variables expuestas por el PLC (las mismas que en plc_sim_state de main.py)
 # ──────────────────────────────────────────────────────────────────────────────
-PLC_READ_VARS = [
-    "OR_Altura_Carretilla",
-    "OW_Numero_Pallets",
-    "Ob_Iniciar_Secuencia",
-    "Ob_Poner_Pegatina",
-    "Ob_Abortar_Secuencia",
-    "Ob_Bit_VIDA_PLC_APP",
-    # Mantenemos las de escritura aquí también para poder leer su estado
-    "Ib_LUZ_VERDE",
-    "Ib_LUZ_AZUL",
-    "Ib_LUZ_ROJA",
-    "Ib_LUZ_Pulsador_1",
-    "Ib_LUZ_Pulsador_2",
-    "Ib_Bit_VIDA_APP_PLC"
-]
-
+# Nota: la lista de lectura es ahora dinámica (autodiscovery del DB completo).
+# Solo se mantiene una lista fija para los nodos de ESCRITURA esenciales.
 PLC_WRITE_VARS = [
     "Ib_LUZ_VERDE",
     "Ib_LUZ_AZUL",
     "Ib_LUZ_ROJA",
     "Ib_LUZ_Pulsador_1",
     "Ib_LUZ_Pulsador_2",
-    "Ib_Bit_VIDA_APP_PLC"
+    "Ib_Bit_VIDA_APP_PLC",
+    "Ob_Subir_Vallas",
+    "Ob_Bajar_Vallas"
 ]
 
 
@@ -77,7 +65,7 @@ class OpcUaClientManager:
 
     def __init__(self):
         self.config    = OpcUaConfig()
-        self.state     = {v: False for v in PLC_READ_VARS}
+        self.state     = {}  # Se llena dinámicamente con autodiscovery
 
         self.connected      = False
         self.active         = False          # True = modo PLC real
@@ -177,12 +165,16 @@ class OpcUaClientManager:
             nodes = {}
 
             # 1. Intentar descubrir dinámicamente desde ServerInterfaces
+            # Sistema de nodos excluidos (solo nombres de sistema de TIA Portal)
+            SYSTEM_NODES = {"Icon", "ServerRedundancy", "ServerCapabilities", "ModellingRules",
+                            "AggregateFunctions", "HistoryServerCapabilities"}
+
             async def discover_vars(node):
                 try:
                     bname = await node.read_browse_name()
                     node_class = await node.read_node_class()
                     if node_class == ua.NodeClass.Variable:
-                        if bname.Name not in {"Icon", "OW_Altura_Elevacion", "OW_Pallet"}:
+                        if bname.Name not in SYSTEM_NODES:
                             nodes[bname.Name] = node
                     elif node_class == ua.NodeClass.Object:
                         for child in await node.get_children():
@@ -202,9 +194,10 @@ class OpcUaClientManager:
             except Exception as e:
                 logger.warning("[OPC UA] Error descubriendo nodos: %s", e)
 
-            # 2. Añadir/Forzar estáticos si no se encontraron dinámicamente
-            for var in PLC_READ_VARS:
-                if var not in nodes:
+            # 2. Si la discovery no encontró nada, añadir nodos de escritura esenciales como fallback
+            if not nodes:
+                logger.warning("[OPC UA] Discovery vacía, usando nodos de escritura como fallback")
+                for var in PLC_WRITE_VARS:
                     try:
                         nodes[var] = client.get_node(self.config.node_id(var))
                     except Exception:
