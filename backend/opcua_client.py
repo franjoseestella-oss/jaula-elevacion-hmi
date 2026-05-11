@@ -164,44 +164,57 @@ class OpcUaClientManager:
             from asyncua import ua
             nodes = {}
 
-            # 1. Intentar descubrir dinámicamente desde ServerInterfaces
-            # Sistema de nodos excluidos (solo nombres de sistema de TIA Portal)
-            SYSTEM_NODES = {"Icon", "ServerRedundancy", "ServerCapabilities", "ModellingRules",
-                            "AggregateFunctions", "HistoryServerCapabilities"}
+            # Nodos de sistema a excluir (TIA Portal / OPC UA estándar)
+            SYSTEM_NODES = {
+                "Icon", "Server", "ServerRedundancy", "ServerCapabilities",
+                "ModellingRules", "AggregateFunctions", "HistoryServerCapabilities",
+                "ServerInterfaces", "DeviceSet", "NetworkSet"
+            }
 
-            async def discover_vars(node):
+            async def discover_vars(node, depth=0):
+                """Recorre recursivamente el árbol OPC UA buscando variables."""
+                if depth > 6:
+                    return
                 try:
                     bname = await node.read_browse_name()
                     node_class = await node.read_node_class()
                     if node_class == ua.NodeClass.Variable:
                         if bname.Name not in SYSTEM_NODES:
                             nodes[bname.Name] = node
+                            logger.debug("[OPC UA] Var: %s", bname.Name)
                     elif node_class == ua.NodeClass.Object:
-                        for child in await node.get_children():
-                            await discover_vars(child)
+                        if bname.Name not in SYSTEM_NODES:
+                            for child in await node.get_children():
+                                await discover_vars(child, depth + 1)
                 except Exception:
                     pass
 
             try:
-                server_interfaces = None
-                for child in await client.nodes.objects.get_children():
-                    if (await child.read_browse_name()).Name == "ServerInterfaces":
-                        server_interfaces = child
-                        break
-                if server_interfaces:
-                    logger.info("[OPC UA] Explorando ServerInterfaces...")
-                    await discover_vars(server_interfaces)
+                logger.info("[OPC UA] Iniciando discovery completa...")
+                all_objects = await client.nodes.objects.get_children()
+                logger.info("[OPC UA] Nodos raíz: %d", len(all_objects))
+                for child in all_objects:
+                    try:
+                        bname = await child.read_browse_name()
+                        logger.info("[OPC UA] Explorando: %s", bname.Name)
+                        await discover_vars(child, depth=0)
+                    except Exception as e:
+                        logger.warning("[OPC UA] Error en nodo: %s", e)
+                logger.info("[OPC UA] Discovery: %d variables encontradas", len(nodes))
             except Exception as e:
-                logger.warning("[OPC UA] Error descubriendo nodos: %s", e)
+                logger.warning("[OPC UA] Error en discovery: %s", e)
 
-            # 2. Si la discovery no encontró nada, añadir nodos de escritura esenciales como fallback
+            # Fallback: acceso directo por NodeId al DB configurado
             if not nodes:
-                logger.warning("[OPC UA] Discovery vacía, usando nodos de escritura como fallback")
+                logger.warning("[OPC UA] Discovery vacía — acceso directo al DB '%s'", self.config.db_name)
                 for var in PLC_WRITE_VARS:
                     try:
-                        nodes[var] = client.get_node(self.config.node_id(var))
+                        n = client.get_node(self.config.node_id(var))
+                        await n.read_value()
+                        nodes[var] = n
                     except Exception:
                         pass
+
 
             write_nodes = {
                 var: nodes[var]
