@@ -239,6 +239,11 @@ function App() {
   const pulsePlc = async (varName, durationSecs = 3) => {
     if (pulseActive && pulseActive.varName === varName) return; // Prevent overlapping pulses
 
+    if (varName === 'Ob_Iniciar_Secuencia' && !appPlc?.Ob_Estado_Automatico) {
+      alert("No se puede iniciar la secuencia: La máquina está en modo MANUAL.");
+      return;
+    }
+
     // Llamada directa al Sequencer (sin latencia de WebSocket)
     if (varName === 'Ob_Iniciar_Secuencia' && sequencerRef.current?.onIniciarSecuencia) {
       sequencerRef.current.onIniciarSecuencia();
@@ -368,6 +373,7 @@ function App() {
     <div className="h-screen w-screen flex flex-col bg-logisnext-darkslate text-white overflow-hidden font-primary">
       <Header
         status={networkStatus}
+        isAuto={appPlc?.Ob_Estado_Automatico === true}
         onErpClick={() => setErpModalOpen(true)}
         onSettingsClick={() => setSettingsOpen(true)}
         onLogsClick={() => setLogsOpen(true)}
@@ -931,11 +937,15 @@ function App() {
                       alert("No se puede iniciar la secuencia: Hay alarmas críticas activas.");
                       return;
                     }
+                    if (!appPlc?.Ob_Estado_Automatico) {
+                      alert("No se puede iniciar la secuencia: La máquina está en modo MANUAL.");
+                      return;
+                    }
                     pulsePlc('Ob_Iniciar_Secuencia');
                   }}
-                  disabled={hasActiveCriticalAlarm || (pulseActive && pulseActive.varName === 'Ob_Iniciar_Secuencia')}
+                  disabled={hasActiveCriticalAlarm || !appPlc?.Ob_Estado_Automatico || (pulseActive && pulseActive.varName === 'Ob_Iniciar_Secuencia')}
                   className={`w-14 h-14 rounded-full flex items-center justify-center transition-all border-4 shadow-[0_4px_10px_rgba(34,197,94,0.3)]
-                    ${hasActiveCriticalAlarm || (pulseActive && pulseActive.varName === 'Ob_Iniciar_Secuencia')
+                    ${hasActiveCriticalAlarm || !appPlc?.Ob_Estado_Automatico || (pulseActive && pulseActive.varName === 'Ob_Iniciar_Secuencia')
                       ? 'bg-gray-600 border-gray-500 opacity-50 cursor-not-allowed' 
                       : 'bg-gradient-to-b from-green-500 to-green-700 active:from-green-700 active:to-green-900 border-[#1d2930] active:scale-95 active:shadow-inner'}`}
                 >

@@ -32,6 +32,7 @@ const PROJECT_VARS = [
   "OR_Altura_Carretilla",
   "Ob_Dtec_Valla_1_trabajo_LH",
   "Ob_Dtec_Valla_2_trabajo_RH",
+  "Ob_Estado_Automatico",
 ];
 
 const PROJECT_VAR_LABELS = {
@@ -49,6 +50,7 @@ const PROJECT_VAR_LABELS = {
   OR_Altura_Carretilla: "Láser Altura Elevación",
   Ob_Dtec_Valla_1_trabajo_LH: "Detector Valla 1 Trabajo (LH)",
   Ob_Dtec_Valla_2_trabajo_RH: "Detector Valla 2 Trabajo (RH)",
+  Ob_Estado_Automatico: "Estado Automático (Auto/Manual)",
 };
 
 const PROJECT_VAR_DEFAULT_DIR = {
@@ -66,6 +68,7 @@ const PROJECT_VAR_DEFAULT_DIR = {
   OR_Altura_Carretilla: "OUT",
   Ob_Dtec_Valla_1_trabajo_LH: "OUT",
   Ob_Dtec_Valla_2_trabajo_RH: "OUT",
+  Ob_Estado_Automatico: "OUT",
   Ob_Subir_Vallas: "OUT",
   Ob_Bajar_Vallas: "OUT",
 };
@@ -298,6 +301,9 @@ const PlcModal = ({
       shouldSend = true;
     } else {
       // Modo PLC real o Force Mode: traducir nombres de variables según el mapeo configurado
+      if (payload.is_force !== undefined) {
+        newPayload.is_force = payload.is_force;
+      }
       Object.entries(payload).forEach(([key, value]) => {
         if (key === "is_force") return;
         const found = Object.entries(varMapping).find(

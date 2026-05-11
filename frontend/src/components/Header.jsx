@@ -13,7 +13,7 @@ const StatusLED = ({ active, label, icon: Icon, onClick }) => (
   </div>
 );
 
-const Header = ({ status, onErpClick, onSettingsClick, onLogsClick, onPlcClick, operario, onOperatorClick, canChangeOperator, hasAlarms, onAlarmsClick }) => {
+const Header = ({ status, isAuto, onErpClick, onSettingsClick, onLogsClick, onPlcClick, operario, onOperatorClick, canChangeOperator, hasAlarms, onAlarmsClick }) => {
   return (
     <header className="h-20 bg-gradient-to-b from-[#151f25] to-[#11191e] border-b border-[#2e404a] flex items-center justify-between px-8 shrink-0 z-20 relative">
       {/* Accent Top Border */}
@@ -26,8 +26,15 @@ const Header = ({ status, onErpClick, onSettingsClick, onLogsClick, onPlcClick, 
         </div>
         
         <div className="flex flex-col justify-center">
-          <h1 className="text-xl font-black tracking-widest text-white drop-shadow-md">
+          <h1 className="text-xl font-black tracking-widest text-white drop-shadow-md flex items-center gap-4">
             PRUEBAS DE ELEVACIÓN <span className="text-logisnext-lightslate font-light">| FORKLIFT</span>
+            <div className={`px-3 py-1 rounded-md text-xs font-black tracking-widest uppercase border shadow-sm ${
+              isAuto 
+                ? 'bg-green-500/20 text-green-400 border-green-500/50 shadow-[0_0_10px_rgba(34,197,94,0.3)]' 
+                : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50 shadow-[0_0_10px_rgba(234,179,8,0.3)]'
+            }`}>
+              {isAuto ? 'AUTOMÁTICO' : 'MANUAL'}
+            </div>
           </h1>
         </div>
       </div>

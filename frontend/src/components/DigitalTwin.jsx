@@ -196,15 +196,15 @@ const CageAssembly = ({ plcState, currentStep, erpData }) => {
   useFrame((state, delta) => {
     // Determine target height based on plcState
     // Default up if nothing specified, or UP if Ob_Subir_Vallas
-    // Leer el estado de los detectores de trabajo
-    const isDownRear = plcRef.current?.Ob_Dtec_Valla_1_trabajo_LH === true;
-    const isUpRear = !isDownRear;
-    
-    const isDownFront = plcRef.current?.Ob_Dtec_Valla_2_trabajo_RH === true;
+    // Leer el estado de los detectores de trabajo (Valla 1 = Adelante, Valla 2 = Atras)
+    const isDownFront = plcRef.current?.Ob_Dtec_Valla_1_trabajo_LH === true;
     const isUpFront = !isDownFront;
     
-    // La posición original de la valla trasera (Valla 1) en reposo es Y=4.0
-    // La valla frontal (Valla 2) no debe bajar tanto para no chocar con los pallets (Y=5.4)
+    const isDownRear = plcRef.current?.Ob_Dtec_Valla_2_trabajo_RH === true;
+    const isUpRear = !isDownRear;
+    
+    // La posición original de la valla trasera (Valla 2) en reposo es Y=4.0
+    // La valla frontal (Valla 1) no debe bajar tanto para no chocar con los pallets (Y=5.4)
     // Al subir, ambas se elevan a Y=7.1 (tope de la jaula es 8.7, la valla mide 3.0, 7.1 + 1.5 = 8.6)
     const targetRearY = isDownRear ? 4.0 : (isUpRear ? 7.1 : 4.0);
     const targetFrontY = isDownFront ? 5.4 : (isUpFront ? 7.1 : 5.4);

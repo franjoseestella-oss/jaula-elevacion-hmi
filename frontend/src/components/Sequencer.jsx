@@ -619,8 +619,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   useEffect(() => {
     // Solo abortar si las vallas se abren en la etapa 4 o 5 (índices 3 y 4) Y la etapa ya está iniciada
     if (erpData && (currentStep === 3 || currentStep === 4) && stepStarted[currentStep]) {
-      const isDownRear = plcState?.Ob_Dtec_Valla_1_trabajo_LH === true;
-      const isDownFront = plcState?.Ob_Dtec_Valla_2_trabajo_RH === true;
+      const isDownFront = plcState?.Ob_Dtec_Valla_1_trabajo_LH === true;
+      const isDownRear = plcState?.Ob_Dtec_Valla_2_trabajo_RH === true;
 
       if (!isDownRear || !isDownFront) {
         console.warn("Seguridad Comprometida: Vallas abiertas durante el test. Abortando...");
@@ -656,8 +656,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     if (currentStep >= 1 && currentStep <= 4 && !stepStarted[currentStep]) {
       // Bloquear el inicio de etapas 4 y 5 si las vallas no están en trabajo
       if (currentStep === 3 || currentStep === 4) {
-        const isDownRear = plcState?.Ob_Dtec_Valla_1_trabajo_LH === true;
-        const isDownFront = plcState?.Ob_Dtec_Valla_2_trabajo_RH === true;
+        const isDownFront = plcState?.Ob_Dtec_Valla_1_trabajo_LH === true;
+        const isDownRear = plcState?.Ob_Dtec_Valla_2_trabajo_RH === true;
         if (!isDownRear || !isDownFront) {
           console.warn("[INICIAR] Bloqueado: Vallas no en posición para etapa", currentStep);
           return;
@@ -995,8 +995,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     if (step >= 1 && step <= 4 && !started[step]) {
       // Bloquear el inicio de etapas 4 y 5 si las vallas no están en trabajo
       if (step === 3 || step === 4) {
-        const isDownRear = pState?.Ob_Dtec_Valla_1_trabajo_LH === true;
-        const isDownFront = pState?.Ob_Dtec_Valla_2_trabajo_RH === true;
+        const isDownFront = pState?.Ob_Dtec_Valla_1_trabajo_LH === true;
+        const isDownRear = pState?.Ob_Dtec_Valla_2_trabajo_RH === true;
         if (!isDownRear || !isDownFront) {
           console.warn("[DIRECTO] Bloqueado: Vallas no en posición para etapa", step);
           return;
