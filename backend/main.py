@@ -582,7 +582,7 @@ def set_force_mode(params: ForceModeParams):
     return {"status": "ok", "force_mode": global_force_mode}
 
 @app.post("/plc/write")
-def write_to_plc(params: PlcWriteParams):
+def write_to_plc(payload: dict):
     """
     Simula la escritura de señales hacia el PLC vía OPC UA.
     En el futuro, esto utilizará la librería asyncua para escribir en el S7-1200.
@@ -590,47 +590,48 @@ def write_to_plc(params: PlcWriteParams):
     global plc_sim_state
     global global_force_mode
     
+    is_force = payload.get("is_force", False)
+    
     # Si el forzado manual está activado, ignorar comandos automáticos de la app
-    if global_force_mode and not params.is_force:
+    if global_force_mode and not is_force:
         return {"status": "ignored", "message": "Comando ignorado, el forzado manual está activo."}
         
-    escrito = params.dict(exclude_none=True, exclude={'is_force'})
+    escrito = {k: v for k, v in payload.items() if k != 'is_force' and v is not None}
     
     # Si el cliente OPC UA está activo, escribimos en el PLC real
     if opcua_manager.active:
         opcua_manager.write(escrito)
     
     for key, value in escrito.items():
-        if key in plc_sim_state:
-            plc_sim_state[key] = value
+        plc_sim_state[key] = value
+        
+        # Exclusión mutua para luces
+        if value is True:
+            if key == "b_LUZ_ROJA":
+                plc_sim_state["b_LUZ_VERDE"] = False
+                plc_sim_state["b_LUZ_AZUL"] = False
+            elif key == "b_LUZ_VERDE":
+                plc_sim_state["b_LUZ_ROJA"] = False
+                plc_sim_state["b_LUZ_AZUL"] = False
+            elif key == "b_LUZ_AZUL":
+                plc_sim_state["b_LUZ_ROJA"] = False
+                plc_sim_state["b_LUZ_VERDE"] = False
+        
+        # Lógica de simulación de vallas
+        if key == "Ob_Subir_Vallas" and value is True:
+            plc_sim_state["Ob_Bajar_Vallas"] = False
             
-            # Exclusión mutua para luces
-            if value is True:
-                if key == "b_LUZ_ROJA":
-                    plc_sim_state["b_LUZ_VERDE"] = False
-                    plc_sim_state["b_LUZ_AZUL"] = False
-                elif key == "b_LUZ_VERDE":
-                    plc_sim_state["b_LUZ_ROJA"] = False
-                    plc_sim_state["b_LUZ_AZUL"] = False
-                elif key == "b_LUZ_AZUL":
-                    plc_sim_state["b_LUZ_ROJA"] = False
-                    plc_sim_state["b_LUZ_VERDE"] = False
+            plc_sim_state["Ob_Dtec_Valla_1_trabajo_LH"] = False
+            plc_sim_state["Ob_Dtec_Valla_1_trabajo_RH"] = False
+            plc_sim_state["Ob_Dtec_Valla_2_trabajo_LH"] = False
+            plc_sim_state["Ob_Dtec_Valla_2_trabajo_RH"] = False
             
-            # Lógica de simulación de vallas
-            if key == "Ob_Subir_Vallas" and value is True:
-                plc_sim_state["Ob_Bajar_Vallas"] = False
-                
-                plc_sim_state["Ob_Dtec_Valla_1_trabajo_LH"] = False
-                plc_sim_state["Ob_Dtec_Valla_1_trabajo_RH"] = False
-                plc_sim_state["Ob_Dtec_Valla_2_trabajo_LH"] = False
-                plc_sim_state["Ob_Dtec_Valla_2_trabajo_RH"] = False
-                
-            elif key == "Ob_Bajar_Vallas" and value is True:
-                plc_sim_state["Ob_Subir_Vallas"] = False
-                plc_sim_state["Ob_Dtec_Valla_1_trabajo_LH"] = True
-                plc_sim_state["Ob_Dtec_Valla_1_trabajo_RH"] = True
-                plc_sim_state["Ob_Dtec_Valla_2_trabajo_LH"] = True
-                plc_sim_state["Ob_Dtec_Valla_2_trabajo_RH"] = True
+        elif key == "Ob_Bajar_Vallas" and value is True:
+            plc_sim_state["Ob_Subir_Vallas"] = False
+            plc_sim_state["Ob_Dtec_Valla_1_trabajo_LH"] = True
+            plc_sim_state["Ob_Dtec_Valla_1_trabajo_RH"] = True
+            plc_sim_state["Ob_Dtec_Valla_2_trabajo_LH"] = True
+            plc_sim_state["Ob_Dtec_Valla_2_trabajo_RH"] = True
                     
     print(f"[OPC UA SIM] Escribiendo salidas al PLC: {escrito}")
     return {"status": "ok", "message": "Valores enviados al PLC simulado", "data": escrito}
@@ -663,7 +664,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 "state": state_str,
                 "plc": current_plc_state,
                 "opcua_connected": opcua_manager.connected,
-                "opcua_error": opcua_manager.error_msg
+                "opcua_error": opcua_manager.error_msg,
+                "opcua_latency_ms": opcua_manager.latency_ms if opcua_manager.active else 0
             })
 
             await asyncio.sleep(0.1)  # 10 Hz

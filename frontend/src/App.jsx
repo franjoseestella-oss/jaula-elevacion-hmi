@@ -168,13 +168,13 @@ function App() {
       await fetch('http://localhost:8001/plc/write', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [targetVar]: true })
+        body: JSON.stringify({ [targetVar]: true, is_force: true })
       });
       setTimeout(async () => {
         await fetch('http://localhost:8001/plc/write', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ [targetVar]: false })
+          body: JSON.stringify({ [targetVar]: false, is_force: true })
         });
       }, 800);
     } catch (err) {
@@ -738,7 +738,7 @@ function App() {
                 <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Pegatina<br/>Colocada</span>
               </div>
 
-              <div className="flex flex-col items-center">
+              <div className="flex flex-col items-center border-r border-gray-700 pr-3 mr-1">
                 <button
                   onClick={() => pulsePlc('Ob_Abortar_Secuencia')}
                   className="w-14 h-14 rounded-full bg-gradient-to-b from-red-500 to-red-700 active:from-red-700 active:to-red-900 border-4 border-[#1d2930] shadow-[0_4px_10px_rgba(239,68,68,0.3)] flex items-center justify-center transition-all active:scale-95 active:shadow-inner"
@@ -746,6 +746,53 @@ function App() {
                   <PowerOff size={20} className="text-white" />
                 </button>
                 <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider">Abortar<br/>Secuencia</span>
+              </div>
+
+              {/* Control de Vallas Simuladas */}
+              <div className="flex flex-col gap-1 items-center justify-center border-r border-gray-700 pr-3 mr-1">
+                <span className="text-[9px] font-black uppercase text-gray-500 tracking-wider mb-1">Jaula</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      const newVal = !appPlc.Ob_Subir_Vallas;
+                      try {
+                        await fetch('http://localhost:8001/plc/write', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ Ob_Subir_Vallas: newVal, Ob_Bajar_Vallas: false, is_force: true })
+                        });
+                      } catch(e) {}
+                    }}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                      appPlc.Ob_Subir_Vallas 
+                        ? 'bg-indigo-500 border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.6)] text-white scale-105' 
+                        : 'bg-[#1d2930] border-[#2e404a] text-gray-400 hover:bg-indigo-900/50 hover:text-indigo-300'
+                    } border-2`}
+                    title="Subir Vallas"
+                  >
+                    <span className="text-sm font-black">↑</span>
+                  </button>
+                  <button
+                    onClick={async () => {
+                      const newVal = !appPlc.Ob_Bajar_Vallas;
+                      try {
+                        await fetch('http://localhost:8001/plc/write', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ Ob_Bajar_Vallas: newVal, Ob_Subir_Vallas: false, is_force: true })
+                        });
+                      } catch(e) {}
+                    }}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                      appPlc.Ob_Bajar_Vallas 
+                        ? 'bg-orange-500 border-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.6)] text-white scale-105' 
+                        : 'bg-[#1d2930] border-[#2e404a] text-gray-400 hover:bg-orange-900/50 hover:text-orange-300'
+                    } border-2`}
+                    title="Bajar Vallas"
+                  >
+                    <span className="text-sm font-black">↓</span>
+                  </button>
+                </div>
               </div>
 
               <div className="flex flex-col items-center border-l border-gray-700 pl-3 ml-1">

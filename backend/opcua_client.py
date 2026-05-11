@@ -70,6 +70,7 @@ class OpcUaClientManager:
         self.connected      = False
         self.active         = False          # True = modo PLC real
         self.error_msg      = ""
+        self.latency_ms     = 0.0            # Latency (cycle time) in milliseconds
         self._write_queue: asyncio.Queue = None  # type: ignore
         self._loop: asyncio.AbstractEventLoop = None  # type: ignore
         self._thread: threading.Thread = None  # type: ignore
@@ -134,8 +135,8 @@ class OpcUaClientManager:
             except Exception as e:
                 self.connected = False
                 self.error_msg = str(e)
-                logger.warning("[OPC UA] Reconectando en 3s... (%s)", e)
-                await asyncio.sleep(3)
+                logger.warning("[OPC UA] Reconectando en 10s... (%s)", e)
+                await asyncio.sleep(10)
 
     async def _session(self):
         """Una sesión completa: conecta y lee/escribe hasta desconexión."""
@@ -239,6 +240,7 @@ class OpcUaClientManager:
             app_heartbeat_state = False
 
             while self.active:
+                cycle_start = time.time()
                 # ── Leer todas las variables ────────────────────────────────
                 for var, node in nodes.items():
                     try:
@@ -254,8 +256,8 @@ class OpcUaClientManager:
                 if "Ob_Bit_VIDA_PLC_APP" in nodes:
                     if self.state.get("Ob_Bit_VIDA_PLC_APP") is True:
                         last_heartbeat = time.time()
-                    elif time.time() - last_heartbeat > 3.0:
-                        raise Exception("Conexión perdida (BIT VIDA PLC no recibido en 3s)")
+                    elif time.time() - last_heartbeat > 10.0:
+                        raise Exception("Conexión perdida (BIT VIDA PLC no recibido en 10s)")
 
                 # ── Generar BIT VIDA APP -> PLC (Toggle 1s) ─────────────────
                 if time.time() - last_app_heartbeat >= 1.0:
@@ -274,6 +276,8 @@ class OpcUaClientManager:
                 while not self._write_queue.empty():
                     payload = await self._write_queue.get()
                     await self._do_write(client, write_nodes, payload)
+
+                self.latency_ms = round((time.time() - cycle_start) * 1000, 1)
 
                 await asyncio.sleep(0.1)   # 10 Hz
 
