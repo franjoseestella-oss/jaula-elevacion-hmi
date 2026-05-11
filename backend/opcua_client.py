@@ -164,56 +164,66 @@ class OpcUaClientManager:
             from asyncua import ua
             nodes = {}
 
-            # Nodos de sistema a excluir (TIA Portal / OPC UA estándar)
-            SYSTEM_NODES = {
-                "Icon", "Server", "ServerRedundancy", "ServerCapabilities",
-                "ModellingRules", "AggregateFunctions", "HistoryServerCapabilities",
-                "ServerInterfaces", "DeviceSet", "NetworkSet"
-            }
-
-            async def discover_vars(node, depth=0):
-                """Recorre recursivamente el árbol OPC UA buscando variables."""
-                if depth > 6:
+            async def discover_vars_in_node(node, depth=0):
+                """Recorre un nodo OPC UA buscando variables (máx. 4 niveles)."""
+                if depth > 4:
                     return
                 try:
-                    bname = await node.read_browse_name()
                     node_class = await node.read_node_class()
                     if node_class == ua.NodeClass.Variable:
-                        if bname.Name not in SYSTEM_NODES:
-                            nodes[bname.Name] = node
-                            logger.debug("[OPC UA] Var: %s", bname.Name)
+                        bname = await node.read_browse_name()
+                        nodes[bname.Name] = node
+                        logger.debug("[OPC UA] Var: %s", bname.Name)
                     elif node_class == ua.NodeClass.Object:
-                        if bname.Name not in SYSTEM_NODES:
-                            for child in await node.get_children():
-                                await discover_vars(child, depth + 1)
+                        for child in await node.get_children():
+                            await discover_vars_in_node(child, depth + 1)
                 except Exception:
                     pass
 
             try:
-                logger.info("[OPC UA] Iniciando discovery completa...")
+                logger.info("[OPC UA] Buscando DB '%s' en Objects...", self.config.db_name)
                 all_objects = await client.nodes.objects.get_children()
-                logger.info("[OPC UA] Nodos raíz: %d", len(all_objects))
+
+                # 1. Buscar el nodo con el nombre del DB configurado (ej. "DB_App")
+                db_node = None
+                server_interfaces_node = None
                 for child in all_objects:
                     try:
-                        bname = await child.read_browse_name()
-                        logger.info("[OPC UA] Explorando: %s", bname.Name)
-                        await discover_vars(child, depth=0)
-                    except Exception as e:
-                        logger.warning("[OPC UA] Error en nodo: %s", e)
+                        bname = (await child.read_browse_name()).Name
+                        logger.info("[OPC UA] Nodo raíz: %s", bname)
+                        if bname == self.config.db_name:
+                            db_node = child
+                        elif bname == "ServerInterfaces":
+                            server_interfaces_node = child
+                    except Exception:
+                        pass
+
+                if db_node:
+                    logger.info("[OPC UA] DB '%s' encontrado — explorando variables...", self.config.db_name)
+                    await discover_vars_in_node(db_node, depth=0)
+                elif server_interfaces_node:
+                    logger.info("[OPC UA] DB no encontrado directamente — usando ServerInterfaces...")
+                    await discover_vars_in_node(server_interfaces_node, depth=0)
+                else:
+                    logger.warning("[OPC UA] Ni DB ni ServerInterfaces encontrados en Objects.")
+
                 logger.info("[OPC UA] Discovery: %d variables encontradas", len(nodes))
             except Exception as e:
                 logger.warning("[OPC UA] Error en discovery: %s", e)
 
-            # Fallback: acceso directo por NodeId al DB configurado
+            # Fallback: construir nodos directamente por NodeId
             if not nodes:
-                logger.warning("[OPC UA] Discovery vacía — acceso directo al DB '%s'", self.config.db_name)
+                logger.warning("[OPC UA] Discovery vacía — construyendo NodeIds directos para '%s'", self.config.db_name)
                 for var in PLC_WRITE_VARS:
                     try:
                         n = client.get_node(self.config.node_id(var))
                         await n.read_value()
                         nodes[var] = n
-                    except Exception:
-                        pass
+                        logger.info("[OPC UA] NodeId directo OK: %s", var)
+                    except Exception as ex:
+                        logger.warning("[OPC UA] NodeId directo FAIL: %s → %s", var, ex)
+
+
 
 
             write_nodes = {
