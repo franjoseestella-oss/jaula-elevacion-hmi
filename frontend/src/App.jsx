@@ -144,8 +144,8 @@ function App() {
     
     const currentActive = alarmConfig.in.filter(a => telemetry.plc[a.plcVar]).map(a => a.plcVar);
 
-    // Inject manual mode alarm if not automatic
-    if (telemetry?.opcua_connected && !telemetry.mappedPlc?.Ob_Estado_Automatico && !telemetry.plc?.Ob_Estado_Automatico) {
+    // Inject manual mode alarm if not automatic (and not in simulation)
+    if (!isSimulation && telemetry?.opcua_connected && !telemetry.mappedPlc?.Ob_Estado_Automatico && !telemetry.plc?.Ob_Estado_Automatico) {
       currentActive.push('SYS_MODO_MANUAL');
     }
 
@@ -271,6 +271,86 @@ function App() {
     }
   }, []);
 
+  const usePlcCountdown = (varValue, onComplete) => {
+    const [timeLeft, setTimeLeft] = useState(null);
+    const onCompleteRef = useRef(onComplete);
+    
+    useEffect(() => {
+      onCompleteRef.current = onComplete;
+    }, [onComplete]);
+
+    useEffect(() => {
+      let interval;
+      let triggered = false;
+      let currentLeft = 3;
+      if (varValue) {
+        setTimeLeft(3);
+        interval = setInterval(() => {
+          currentLeft -= 1;
+          if (currentLeft <= 0) {
+             setTimeLeft(0);
+             if (!triggered) {
+               triggered = true;
+               if (onCompleteRef.current) onCompleteRef.current();
+             }
+          } else {
+             setTimeLeft(currentLeft);
+          }
+        }, 1000);
+      } else {
+        setTimeLeft(null);
+      }
+      return () => clearInterval(interval);
+    }, [varValue]);
+
+    return timeLeft;
+  };
+
+
+  const handleHoldStart = (varName) => {
+    if (varName === 'Ob_Iniciar_Secuencia' && !appPlc?.Ob_Estado_Automatico) {
+      alert("No se puede iniciar la secuencia: La máquina está en modo MANUAL.");
+      return;
+    }
+    let targetVar = varName;
+    if (!isSimulation) {
+      const mappingStr = localStorage.getItem('plcVarMapping');
+      if (mappingStr) {
+         try {
+            const mapping = JSON.parse(mappingStr);
+            const found = Object.entries(mapping).find(([k, v]) => v.appVar === varName);
+            if (found) targetVar = found[0];
+            else return;
+         } catch(e) {}
+      } else return;
+    }
+    fetch('http://localhost:8001/plc/write', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [targetVar]: true, is_force: isSimulation })
+    }).catch(console.error);
+  };
+
+  const handleHoldEnd = (varName) => {
+    let targetVar = varName;
+    if (!isSimulation) {
+      const mappingStr = localStorage.getItem('plcVarMapping');
+      if (mappingStr) {
+         try {
+            const mapping = JSON.parse(mappingStr);
+            const found = Object.entries(mapping).find(([k, v]) => v.appVar === varName);
+            if (found) targetVar = found[0];
+            else return;
+         } catch(e) {}
+      } else return;
+    }
+    fetch('http://localhost:8001/plc/write', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [targetVar]: false, is_force: isSimulation })
+    }).catch(console.error);
+  };
+
   // Enviar comando al PLC para activar un bit, esperar N segundos y desactivarlo
   const pulsePlc = async (varName, durationSecs = 3) => {
     if (pulseActive && pulseActive.varName === varName) return; // Prevent overlapping pulses
@@ -369,6 +449,59 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // ── Parpadeo de luces en modal NOK ──
+  useEffect(() => {
+    let intervalId = null;
+    let lightState = false;
+
+    if (testHUDOverlay?.cameraTestState === 'nok') {
+      const alarm = testHUDOverlay?.testAlarm;
+      const isIncomplete = alarm === 'ascenso_incompleto' || alarm === 'descenso_incompleto';
+      const isLoadError = typeof alarm === 'string' && alarm.startsWith('Carga incorrecta');
+      const onlyBtn1 = isIncomplete || isLoadError;
+
+      intervalId = setInterval(() => {
+        lightState = !lightState;
+        fetch('http://localhost:8001/plc/write', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            Ib_LUZ_Pulsador_1: lightState,
+            Ib_LUZ_Pulsador_2: onlyBtn1 ? false : lightState,
+            is_force: isSimulation 
+          })
+        }).catch(err => console.error('Error parpadeo luces:', err));
+      }, 500); // 500ms on, 500ms off
+    } else {
+      // Apagamos las luces si salimos del modo NOK
+      fetch('http://localhost:8001/plc/write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          Ib_LUZ_Pulsador_1: false,
+          Ib_LUZ_Pulsador_2: false,
+          is_force: isSimulation 
+        })
+      }).catch(err => console.error('Error apagando luces:', err));
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+      // Solo lanzamos el fetch al desmontar si estábamos parpadeando
+      if (testHUDOverlay?.cameraTestState === 'nok') {
+        fetch('http://localhost:8001/plc/write', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            Ib_LUZ_Pulsador_1: false,
+            Ib_LUZ_Pulsador_2: false,
+            is_force: isSimulation 
+          })
+        }).catch(err => console.error('Error apagando luces al desmontar:', err));
+      }
+    };
+  }, [testHUDOverlay?.cameraTestState, isSimulation]);
+
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:8001/ws');
     ws.onopen = () => setNetworkStatus(prev => ({ ...prev, opc: true, basler: true }));
@@ -403,7 +536,17 @@ function App() {
     return () => ws.close();
   }, []);
 
-  const appPlc = isSimulation ? (telemetry?.plc || {}) : (telemetry?.mappedPlc || {});
+  const appPlc = isSimulation ? { ...(telemetry?.plc || {}), Ob_Estado_Automatico: true } : (telemetry?.mappedPlc || {});
+  
+  const iniciarPlcTime = usePlcCountdown(appPlc?.Ob_Iniciar_Secuencia, () => {
+    if (sequencerRef.current?.onIniciarSecuencia) sequencerRef.current.onIniciarSecuencia();
+  });
+  const pegatinaPlcTime = usePlcCountdown(appPlc?.Ob_Poner_Pegatina, () => {
+    if (sequencerRef.current?.onPegatina) sequencerRef.current.onPegatina();
+  });
+  const abortarPlcTime = usePlcCountdown(appPlc?.Ob_Abortar_Secuencia, () => {
+    if (sequencerRef.current?.onAbortar) sequencerRef.current.onAbortar();
+  });
   
   const isMainScreen = !erpModalOpen && !settingsOpen && !plcModalOpen && !logsOpen && !showAlarmsHistory;
 
@@ -446,9 +589,13 @@ function App() {
                       {step2Overlay.min} mm <span className="text-gray-400 mx-1">—</span> {step2Overlay.max} mm
                     </span>
                   </div>
-                  {step2Overlay.isOk && (
+                  {step2Overlay.isOk ? (
                     <span className="text-xl font-black tracking-widest text-green-200 mt-2 border-t border-green-500/50 pt-2">
                       CARRETILLA EN POSICIÓN. PUEDE COLOCAR PEGATINA.
+                    </span>
+                  ) : (
+                    <span className="text-xl font-black tracking-widest text-blue-200 mt-2 border-t border-blue-500/50 pt-2">
+                      PUEDE COLOCAR PEGATINA.
                     </span>
                   )}
                 </div>
@@ -468,7 +615,7 @@ function App() {
 
           {/* ALARMAS ACTIVAS MODAL (FLOATING PANEL) */}
           {showActiveAlarms && (
-            <div className="absolute top-32 right-6 z-50 w-[600px] bg-[#0a0f12]/95 border border-red-500/50 rounded-2xl shadow-[0_0_40px_rgba(220,38,38,0.3)] backdrop-blur-md overflow-hidden flex flex-col max-h-[80vh] animate-in slide-in-from-right-8 duration-300">
+            <div className="absolute top-56 right-6 z-50 w-[600px] bg-[#0a0f12]/95 border border-red-500/50 rounded-2xl shadow-[0_0_40px_rgba(220,38,38,0.3)] backdrop-blur-md overflow-hidden flex flex-col max-h-[70vh] animate-in slide-in-from-right-8 duration-300">
               <div className="bg-red-600/20 border-b border-red-500/30 p-5 flex justify-between items-center shrink-0">
                  <div className="flex items-center gap-3">
                     <AlertTriangle size={24} className="text-red-500" />
@@ -896,22 +1043,46 @@ function App() {
                   {/* Botones */}
                   <div className="flex gap-4 w-full">
                     <button
-                      onClick={() => pulsePlc('Ob_Iniciar_Secuencia')}
-                      className="flex-1 flex flex-col items-center gap-1 py-4 rounded-2xl bg-gradient-to-b from-green-500 to-green-700 border-2 border-green-400/50 text-white font-black text-lg uppercase tracking-wider shadow-[0_0_20px_rgba(34,197,94,0.4)] hover:shadow-[0_0_30px_rgba(34,197,94,0.7)] hover:scale-[1.03] active:scale-95 transition-all"
+                      onClick={() => {
+                        pulsePlc('Ob_Iniciar_Secuencia', 0.5);
+                        if (sequencerRef.current?.onIniciarSecuencia) sequencerRef.current.onIniciarSecuencia();
+                      }}
+                      className={`flex-1 flex flex-col items-center gap-1 py-4 rounded-2xl border-2 text-white font-black text-lg uppercase tracking-wider transition-all ${iniciarPlcTime !== null ? 'bg-green-800 border-green-700 opacity-50 cursor-not-allowed' : 'bg-gradient-to-b from-green-500 to-green-700 border-green-400/50 shadow-[0_0_20px_rgba(34,197,94,0.4)] hover:shadow-[0_0_30px_rgba(34,197,94,0.7)] hover:scale-[1.03] active:scale-95'}`}
                     >
-                      <span className="text-2xl">▶</span>
-                      <span>SÍ — Repetir</span>
-                      <span className="text-[10px] font-normal opacity-70 normal-case">Iniciar secuencia</span>
+                      {iniciarPlcTime !== null ? (
+                        <>
+                          <span className="text-4xl animate-pulse py-1">{iniciarPlcTime}</span>
+                          <span className="text-[10px] font-normal opacity-70 normal-case">Pulsador físico detectado...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-2xl">▶</span>
+                          <span>SÍ — Repetir</span>
+                          <span className="text-[10px] font-normal opacity-70 normal-case">Click para iniciar</span>
+                        </>
+                      )}
                     </button>
                     {/* NO CONTINUAR solo disponible si el fallo es de tolerancia, no de movimiento incompleto ni de carga */}
                     {!isIncomplete && !isLoadError && (
                       <button
-                        onClick={() => pulsePlc('Ob_Poner_Pegatina')}
-                        className="flex-1 flex flex-col items-center gap-1 py-4 rounded-2xl bg-gradient-to-b from-gray-600 to-gray-800 border-2 border-gray-500/50 text-white font-black text-lg uppercase tracking-wider shadow-[0_0_10px_rgba(0,0,0,0.4)] hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:scale-[1.03] active:scale-95 transition-all"
+                        onClick={() => {
+                          pulsePlc('Ob_Poner_Pegatina', 0.5);
+                          if (sequencerRef.current?.onPegatina) sequencerRef.current.onPegatina();
+                        }}
+                        className={`flex-1 flex flex-col items-center gap-1 py-4 rounded-2xl border-2 text-white font-black text-lg uppercase tracking-wider transition-all ${pegatinaPlcTime !== null ? 'bg-gray-700 border-gray-600 opacity-50 cursor-not-allowed' : 'bg-gradient-to-b from-gray-600 to-gray-800 border-gray-500/50 shadow-[0_0_10px_rgba(0,0,0,0.4)] hover:shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:scale-[1.03] active:scale-95'}`}
                       >
-                        <span className="text-2xl">✓</span>
-                        <span>NO — Continuar</span>
-                        <span className="text-[10px] font-normal opacity-70 normal-case">Poner pegatina</span>
+                        {pegatinaPlcTime !== null ? (
+                          <>
+                            <span className="text-4xl animate-pulse py-1">{pegatinaPlcTime}</span>
+                            <span className="text-[10px] font-normal opacity-70 normal-case">Pulsador físico detectado...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-2xl">✓</span>
+                            <span>NO — Continuar</span>
+                            <span className="text-[10px] font-normal opacity-70 normal-case">Click para continuar</span>
+                          </>
+                        )}
                       </button>
                     )}
                   </div>
@@ -992,20 +1163,17 @@ function App() {
                       alert("No se puede iniciar la secuencia: Hay alarmas críticas activas.");
                       return;
                     }
-                    if (!appPlc?.Ob_Estado_Automatico) {
-                      alert("No se puede iniciar la secuencia: La máquina está en modo MANUAL.");
-                      return;
-                    }
-                    pulsePlc('Ob_Iniciar_Secuencia');
+                    if (!appPlc?.Ob_Estado_Automatico) return;
+                    pulsePlc('Ob_Iniciar_Secuencia', 0.5);
+                    if (sequencerRef.current?.onIniciarSecuencia) sequencerRef.current.onIniciarSecuencia();
                   }}
-                  disabled={hasActiveCriticalAlarm || !appPlc?.Ob_Estado_Automatico || (pulseActive && pulseActive.varName === 'Ob_Iniciar_Secuencia')}
                   className={`w-14 h-14 rounded-full flex items-center justify-center transition-all border-4 shadow-[0_4px_10px_rgba(34,197,94,0.3)]
-                    ${hasActiveCriticalAlarm || !appPlc?.Ob_Estado_Automatico || (pulseActive && pulseActive.varName === 'Ob_Iniciar_Secuencia')
+                    ${hasActiveCriticalAlarm || !appPlc?.Ob_Estado_Automatico || iniciarPlcTime !== null
                       ? 'bg-gray-600 border-gray-500 opacity-50 cursor-not-allowed' 
                       : 'bg-gradient-to-b from-green-500 to-green-700 active:from-green-700 active:to-green-900 border-[#1d2930] active:scale-95 active:shadow-inner'}`}
                 >
-                  {pulseActive?.varName === 'Ob_Iniciar_Secuencia' ? (
-                     <span className="text-white font-black text-2xl animate-pulse">{pulseActive.timeLeft}</span>
+                  {iniciarPlcTime !== null ? (
+                     <span className="text-white font-black text-2xl animate-pulse">{iniciarPlcTime}</span>
                   ) : (
                      <Play size={20} className="text-white ml-1" />
                   )}
@@ -1015,15 +1183,17 @@ function App() {
               
               <div className="flex flex-col items-center">
                 <button
-                  onClick={() => pulsePlc('Ob_Poner_Pegatina')}
-                  disabled={pulseActive && pulseActive.varName === 'Ob_Poner_Pegatina'}
+                  onClick={() => {
+                    pulsePlc('Ob_Poner_Pegatina', 0.5);
+                    if (sequencerRef.current?.onPegatina) sequencerRef.current.onPegatina();
+                  }}
                   className={`w-14 h-14 rounded-full border-4 border-[#1d2930] shadow-[0_4px_10px_rgba(59,130,246,0.3)] flex items-center justify-center transition-all active:scale-95 active:shadow-inner
-                    ${(pulseActive && pulseActive.varName === 'Ob_Poner_Pegatina')
+                    ${pegatinaPlcTime !== null
                       ? 'bg-gray-600 opacity-50 cursor-not-allowed'
                       : 'bg-gradient-to-b from-blue-500 to-blue-700 active:from-blue-700 active:to-blue-900'}`}
                 >
-                  {pulseActive?.varName === 'Ob_Poner_Pegatina' ? (
-                     <span className="text-white font-black text-2xl animate-pulse">{pulseActive.timeLeft}</span>
+                  {pegatinaPlcTime !== null ? (
+                     <span className="text-white font-black text-2xl animate-pulse">{pegatinaPlcTime}</span>
                   ) : (
                      <CheckCircle2 size={24} className="text-white" />
                   )}
@@ -1033,15 +1203,17 @@ function App() {
 
               <div className="flex flex-col items-center border-r border-gray-700 pr-3 mr-1">
                 <button
-                  onClick={() => pulsePlc('Ob_Abortar_Secuencia')}
-                  disabled={pulseActive && pulseActive.varName === 'Ob_Abortar_Secuencia'}
+                  onClick={() => {
+                    pulsePlc('Ob_Abortar_Secuencia', 0.5);
+                    if (sequencerRef.current?.onAbortar) sequencerRef.current.onAbortar();
+                  }}
                   className={`w-14 h-14 rounded-full border-4 border-[#1d2930] shadow-[0_4px_10px_rgba(239,68,68,0.3)] flex items-center justify-center transition-all active:scale-95 active:shadow-inner
-                    ${(pulseActive && pulseActive.varName === 'Ob_Abortar_Secuencia')
+                    ${abortarPlcTime !== null
                       ? 'bg-gray-600 opacity-50 cursor-not-allowed'
                       : 'bg-gradient-to-b from-red-500 to-red-700 active:from-red-700 active:to-red-900'}`}
                 >
-                  {pulseActive?.varName === 'Ob_Abortar_Secuencia' ? (
-                     <span className="text-white font-black text-2xl animate-pulse">{pulseActive.timeLeft}</span>
+                  {abortarPlcTime !== null ? (
+                     <span className="text-white font-black text-2xl animate-pulse">{abortarPlcTime}</span>
                   ) : (
                      <PowerOff size={20} className="text-white" />
                   )}

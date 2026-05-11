@@ -172,6 +172,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   const [stepDurations, setStepDurations] = useState([null, null, null, null, null]); // segundos
   // Posición real de la pegatina (mm)
   const [pegatinaPosicion, setPegatinaPosicion] = useState(null);
+  const [iniciarCountdown, setIniciarCountdown] = useState(null);
+  const [abortarCountdown, setAbortarCountdown] = useState(null);
+  const [pegatinaCountdown, setPegatinaCountdown] = useState(null);
+  const [repetirCountdown, setRepetirCountdown] = useState(null);
   const currentStep = stepStatus.findIndex(s => s === STEP_STATUS.ACTIVE);
   const isSequenceFinished = stepStatus[0] === STEP_STATUS.OK && !stepStatus.includes(STEP_STATUS.ACTIVE) && !stepStatus.includes(STEP_STATUS.PENDING);
 
@@ -238,11 +242,13 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     selections: [true, true, true, true]
   });
 
-  // ── Temporizadores simulados basados en altura (window.__carriageY) ──
+  const plcStateRef = useRef(plcState);
+  useEffect(() => { plcStateRef.current = plcState; }, [plcState]);
+
+  // ── Temporizadores simulados y máquina de estados (válido para ambos modos) ──
   useEffect(() => {
-    if (!isSimulation) return;
     if (cameraTestState === 'standby') {
-      setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+      if (isSimulation) setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
       setWaitCountdown(null);
       setTestAlarm(null);
       return;
@@ -252,19 +258,24 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     let tStartElev = null;
     let tStartDesc = null;
 
-    let lastH = window.__carriageY || 0;
+    const getH = () => {
+      if (isSimulation) return window.__carriageY || 0;
+      return (plcStateRef.current?.OR_Altura_Carretilla || 0) / 1000;
+    };
+
+    let lastH = getH();
     let lastHChangeTime = Date.now();
     let tTopReachTime = null;
     // Para detectar el cruce de 1500 mm (1.5 m) SOLO en ascenso (viniendo de abajo)
-    let prevH = window.__carriageY || 0;
+    let prevH = getH();
     // Flag: solo permite disparar si la carretilla estuvo por debajo de 1.5m en algún momento
     // Si al iniciar ya está por encima, hay que bajar primero
-    let hasBeenBelow1500 = (window.__carriageY || 0) < 1.5;
+    let hasBeenBelow1500 = getH() < 1.5;
 
     const testDist = is1mTest ? 1.0 : 2.0;
 
     const loop = () => {
-      const h = window.__carriageY || 0;
+      const h = getH();
 
 
       // ── ESTADO: esperando_1500 — detectar cruce ascendente de 1.5m ──
@@ -358,15 +369,22 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           const minDesc = isSinCarga ? erpData?.tpo_desc_min_scarga : erpData?.tpo_descenso_min;
           const maxDesc = isSinCarga ? erpData?.tpo_desc_max_scarga : erpData?.tpo_descenso_max;
 
-          // Guardar tiempo final de descenso
-          setSimTimers(prev => ({ ...prev, finishedDesc: true, desc: elapsed }));
+          let finalElev, finalDesc;
+          if (isSimulation) {
+            finalElev = simTimers.elev;
+            finalDesc = elapsed;
+            setSimTimers(prev => ({ ...prev, finishedDesc: true, desc: elapsed }));
+          } else {
+            finalElev = plcStateRef.current?.OW_Tiempo_Elevacion || 0;
+            finalDesc = plcStateRef.current?.OW_Tiempo_Descenso || 0;
+          }
 
           // Evaluar OK / NOK
-          const isElevOk = simTimers.elev >= minElev && simTimers.elev <= maxElev;
-          const isDescOk = elapsed >= minDesc && elapsed <= maxDesc;
+          const isElevOk = finalElev >= minElev && finalElev <= maxElev;
+          const isDescOk = finalDesc >= minDesc && finalDesc <= maxDesc;
           setCameraTestState(isElevOk && isDescOk ? 'ok' : 'nok');
         } else if (!simTimers.finishedDesc) {
-          // Acumular timer descenso
+          // Acumular timer descenso (solo visual en simulación)
           setSimTimers(prev => {
             if (h <= 1.5 + testDist) {
               if (!tStartDesc) tStartDesc = Date.now();
@@ -631,123 +649,155 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
   // ── Controles de PLC (Botones físicos) ────────────────────────────────────
 
-  // 1. Abortar secuencia
+  // 1. Abortar secuencia — detección robusta con temporizador de 3 segundos
   useEffect(() => {
-    if (plcState?.Ob_Abortar_Secuencia === true) {
-      if (stepStatus.some(s => s !== STEP_STATUS.PENDING)) {
+    if (plcState?.Ob_Abortar_Secuencia === true && stepStatus.some(s => s !== STEP_STATUS.PENDING)) {
+      if (abortarCountdown === null) {
+        setAbortarCountdown(3);
+      } else if (abortarCountdown > 0) {
+        const timer = setTimeout(() => setAbortarCountdown(abortarCountdown - 1), 1000);
+        return () => clearTimeout(timer);
+      } else if (abortarCountdown === 0) {
         console.warn("ABORTAR SECUENCIA (Pulsador PLC)");
         handleAbort();
+        setAbortarCountdown(-1);
       }
+    } else {
+      setAbortarCountdown(null);
     }
-  }, [plcState?.Ob_Abortar_Secuencia]);
+  }, [plcState?.Ob_Abortar_Secuencia, abortarCountdown, stepStatus]);
 
-  // 2. Iniciar Secuencia — detección robusta de flanco de subida
-  const prevInciarRef = useRef(false);
+  // 2. Iniciar Secuencia — detección robusta con temporizador de 3 segundos
+  const handleIniciarActionRef = useRef();
   useEffect(() => {
-    const curr = plcState?.Ob_Iniciar_Secuencia === true;
-    const risingEdge = curr && !prevInciarRef.current;
-    prevInciarRef.current = curr;
+    handleIniciarActionRef.current = () => {
+      console.log('[INICIAR] Acción ejecutada. currentStep:', currentStep, 'stepStarted:', stepStarted);
 
-    if (!risingEdge) return;
-
-    console.log('[INICIAR] Rising edge detectado. currentStep:', currentStep, 'stepStarted:', stepStarted);
-
-    // Si el paso actual (1-4) aún no está iniciado → desbloquearlo
-    if (currentStep >= 1 && currentStep <= 4 && !stepStarted[currentStep]) {
-      // Bloquear el inicio de etapas 4 y 5 si las vallas no están en trabajo
-      if (currentStep === 3 || currentStep === 4) {
-        const isDownFront = plcState?.Ob_Dtec_Valla_1_trabajo_LH === true;
-        const isDownRear = plcState?.Ob_Dtec_Valla_2_trabajo_RH === true;
-        if (!isDownRear || !isDownFront) {
-          console.warn("[INICIAR] Bloqueado: Vallas no en posición para etapa", currentStep);
-          return;
+      // Si el paso actual (1-4) aún no está iniciado → desbloquearlo
+      if (currentStep >= 1 && currentStep <= 4 && !stepStarted[currentStep]) {
+        // Bloquear el inicio de etapas 4 y 5 si las vallas no están en trabajo
+        if (currentStep === 3 || currentStep === 4) {
+          const isDownFront = plcState?.Ob_Dtec_Valla_1_trabajo_LH === true;
+          const isDownRear = plcState?.Ob_Dtec_Valla_2_trabajo_RH === true;
+          if (!isDownRear || !isDownFront) {
+            console.warn("[INICIAR] Bloqueado: Vallas no en posición para etapa", currentStep);
+            return;
+          }
         }
+
+        console.log('[INICIAR] Desbloqueando paso', currentStep);
+        setStepStarted(prev => {
+          const next = [...prev];
+          next[currentStep] = true;
+          return next;
+        });
+        return; // en el mismo pulso no avanzamos, solo desbloqueamos
       }
 
-      console.log('[INICIAR] Desbloqueando paso', currentStep);
-      setStepStarted(prev => {
-        const next = [...prev];
-        next[currentStep] = true;
-        return next;
-      });
-      return; // en el mismo pulso no avanzamos, solo desbloqueamos
-    }
+      // Si ya estaba desbloqueado → ejecutar acción de avance
+      if (currentStep >= 1 && currentStep <= 4 && stepStarted[currentStep]) {
+        if (stepStatus[2] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
+          // NOK: REPETIR — reiniciar la prueba desde 'esperando_1500'
+          if (cameraTestState === 'nok') {
+            setCameraTestState('esperando_1500');
+            setTestAlarm(null);
+            setSimTimers({ tStart: null, tEndElev: null, tStartDesc: null, tEndDesc: null, finishedElev: false, finishedDesc: false });
+            setWaitCountdown(null);
+            return;
+          }
+          if (cameraTestState === 'standby') {
+            setCameraTestState('esperando_1500');
+          } else if (cameraTestState === 'ok') {
+            markOk(2);
+          }
+        } else if (stepStatus[3] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
+          // Validación de carga
+          const currentPallets = plcState?.OW_Numero_Pallets || 0;
+          const targetLoad = erpData?.capac_interm_1 || 0;
+          const currentLoad = currentPallets * 250;
 
-    // Si ya estaba desbloqueado → ejecutar acción de avance
-    if (currentStep >= 1 && currentStep <= 4 && stepStarted[currentStep]) {
-      if (stepStatus[2] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
-        // NOK: REPETIR — reiniciar la prueba desde 'esperando_1500'
-        if (cameraTestState === 'nok') {
-          setCameraTestState('esperando_1500');
-          setTestAlarm(null);
-          setSimTimers({ tStart: null, tEndElev: null, tStartDesc: null, tEndDesc: null, finishedElev: false, finishedDesc: false });
-          setWaitCountdown(null);
-          return;
-        }
-        if (isSimulation && cameraTestState === 'standby') {
-          setCameraTestState('ascenso');
-        } else if (!isSimulation || cameraTestState === 'ok') {
-          markOk(2);
-        }
-      } else if (stepStatus[3] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
-        // Validación de carga
-        const currentPallets = plcState?.OW_Numero_Pallets || 0;
-        const targetLoad = erpData?.capac_interm_1 || 0;
-        const currentLoad = currentPallets * 250;
+          if (currentLoad !== targetLoad) {
+            setTestAlarm(`Carga incorrecta: ${currentLoad}kg actual vs ${targetLoad}kg requerido (ERP). Compruebe los pallets.`);
+            return;
+          } else {
+            setTestAlarm(null);
+          }
 
-        if (currentLoad !== targetLoad) {
-          setTestAlarm(`Carga incorrecta: ${currentLoad}kg actual vs ${targetLoad}kg requerido (ERP). Compruebe los pallets.`);
-          return;
-        } else {
-          setTestAlarm(null);
-        }
-
-        // NOK: REPETIR — reiniciar la prueba desde 'esperando_1500'
-        if (cameraTestState === 'nok') {
-          setCameraTestState('esperando_1500');
-          setTestAlarm(null);
-          setSimTimers({ tStart: null, tEndElev: null, tStartDesc: null, tEndDesc: null, finishedElev: false, finishedDesc: false });
-          setWaitCountdown(null);
-          return;
-        }
-        if (isSimulation && cameraTestState === 'standby') {
-          setCameraTestState('ascenso');
-        } else if (!isSimulation || cameraTestState === 'ok') {
-          markOk(3);
-        }
-      } else if (stepStatus[4] === STEP_STATUS.ACTIVE) {
-        if (test5mState === 'ok') {
-          markOk(4);
+          // NOK: REPETIR — reiniciar la prueba desde 'esperando_1500'
+          if (cameraTestState === 'nok') {
+            setCameraTestState('esperando_1500');
+            setTestAlarm(null);
+            setSimTimers({ tStart: null, tEndElev: null, tStartDesc: null, tEndDesc: null, finishedElev: false, finishedDesc: false });
+            setWaitCountdown(null);
+            return;
+          }
+          if (cameraTestState === 'standby') {
+            setCameraTestState('esperando_1500');
+          } else if (cameraTestState === 'ok') {
+            markOk(3);
+          }
+        } else if (stepStatus[4] === STEP_STATUS.ACTIVE) {
+          if (test5mState === 'ok') {
+            markOk(4);
+          }
         }
       }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plcState?.Ob_Iniciar_Secuencia]);
+    };
+  });
 
-  // 3. Pegatina Colocada -> avanzar en Paso 2
   useEffect(() => {
-    if (plcState?.Ob_Poner_Pegatina === true && stepStatus[1] === STEP_STATUS.ACTIVE && erpData && stepStarted[1]) {
-      const altura = erpData.altura_max_interm;
-      const act = plcState?.OR_Altura_Carretilla || 0;
-      const posOk = act >= (altura - tolerancias.negativa) && act <= (altura + tolerancias.positiva);
+    let interval;
+    // La secuencia solo se inicia (y cuenta atrás) si estamos en las etapas 2 a la 5 (currentStep de 1 a 4)
+    if (plcState?.Ob_Iniciar_Secuencia === true && currentStep >= 1 && currentStep <= 4) {
+      if (iniciarCountdown === null) {
+        setIniciarCountdown(3);
+      } else if (iniciarCountdown > 0) {
+        interval = setTimeout(() => {
+          setIniciarCountdown(prev => prev - 1);
+        }, 1000);
+      } else if (iniciarCountdown === 0) {
+        if (handleIniciarActionRef.current) handleIniciarActionRef.current();
+        setIniciarCountdown(-1);
+      }
+    } else {
+      if (iniciarCountdown !== null) {
+        setIniciarCountdown(null);
+      }
+    }
+    return () => clearTimeout(interval);
+  }, [plcState?.Ob_Iniciar_Secuencia, iniciarCountdown, currentStep]);
 
-      if (posOk) {
+  // 3. Pegatina Colocada y Confirmación — detección robusta con temporizador de 3 segundos
+  const handlePegatinaActionRef = useRef();
+  useEffect(() => {
+    handlePegatinaActionRef.current = () => {
+      // a) Pegatina Colocada -> avanzar en Paso 2 (sin esperar posición del mástil)
+      if (stepStatus[1] === STEP_STATUS.ACTIVE && erpData && stepStarted[1]) {
         markOk(1);
       }
-    }
-  }, [plcState?.Ob_Poner_Pegatina, stepStatus[1], erpData, tolerancias]);
+      // b) Pegatina Colocada con resultado NOK -> CONTINUAR (avanzar paso sin repetir)
+      if (cameraTestState === 'nok') {
+        const activeTestStep = stepStatus[2] === STEP_STATUS.ACTIVE ? 2 : stepStatus[3] === STEP_STATUS.ACTIVE ? 3 : null;
+        if (activeTestStep !== null) markOk(activeTestStep);
+      }
+    };
+  }, [stepStatus, erpData, stepStarted, plcState?.OR_Altura_Carretilla, tolerancias, cameraTestState]);
 
-  // 3b. Pegatina Colocada con resultado NOK → CONTINUAR (avanzar paso sin repetir)
   useEffect(() => {
-    if (plcState?.Ob_Poner_Pegatina !== true) return;
-    if (cameraTestState !== 'nok') return;
-    const activeTestStep = stepStatus[2] === STEP_STATUS.ACTIVE ? 2
-      : stepStatus[3] === STEP_STATUS.ACTIVE ? 3 : null;
-    if (activeTestStep === null) return;
-    // Avanzar al siguiente paso (marcar NOK y continuar)
-    markOk(activeTestStep);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plcState?.Ob_Poner_Pegatina]);
+    if (plcState?.Ob_Poner_Pegatina === true) {
+      if (pegatinaCountdown === null) {
+        setPegatinaCountdown(3);
+      } else if (pegatinaCountdown > 0) {
+        const timer = setTimeout(() => setPegatinaCountdown(pegatinaCountdown - 1), 1000);
+        return () => clearTimeout(timer);
+      } else if (pegatinaCountdown === 0) {
+        if (handlePegatinaActionRef.current) handlePegatinaActionRef.current();
+        setPegatinaCountdown(-1);
+      }
+    } else {
+      setPegatinaCountdown(null);
+    }
+  }, [plcState?.Ob_Poner_Pegatina, pegatinaCountdown]);
 
   // ── Overlay Datos Multiload (Paso 2) ───────────────────────────────────────
   useEffect(() => {
@@ -871,13 +921,28 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   }, [cameraTestState, currentStep]);
 
   // 3. Confirmar Pegatina (Repetir Secuencia) -> avanzar Paso 2 (Multiload)
+  const handleRepetirActionRef = useRef();
+  useEffect(() => {
+    handleRepetirActionRef.current = () => {
+      if (stepStatus[1] === STEP_STATUS.ACTIVE && palletState !== 'animating') markOk(1);
+    };
+  }, [stepStatus, palletState]);
+
   useEffect(() => {
     if (plcState?.Ob_Repetir_Secuencia === true) {
-      if (stepStatus[1] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
-        markOk(1);
+      if (repetirCountdown === null) {
+        setRepetirCountdown(3);
+      } else if (repetirCountdown > 0) {
+        const timer = setTimeout(() => setRepetirCountdown(repetirCountdown - 1), 1000);
+        return () => clearTimeout(timer);
+      } else if (repetirCountdown === 0) {
+        if (handleRepetirActionRef.current) handleRepetirActionRef.current();
+        setRepetirCountdown(-1);
       }
+    } else {
+      setRepetirCountdown(null);
     }
-  }, [plcState?.Ob_Repetir_Secuencia]);
+  }, [plcState?.Ob_Repetir_Secuencia, repetirCountdown]);
 
   // ── Teclado numérico manual ───────────────────────────────────────────────
   const handleNumpadPress = (key) => {
@@ -967,7 +1032,6 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   const currentStepRef = useRef(currentStep);
   const erpDataRef = useRef(erpData);
   const toleranciasRef = useRef(tolerancias);
-  const plcStateRef = useRef(plcState);
   const simTimersRef = useRef(simTimers);
 
   useEffect(() => { stepStatusRef.current = stepStatus; }, [stepStatus]);
@@ -975,7 +1039,6 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   useEffect(() => { currentStepRef.current = currentStep; }, [currentStep]);
   useEffect(() => { erpDataRef.current = erpData; }, [erpData]);
   useEffect(() => { toleranciasRef.current = tolerancias; }, [tolerancias]);
-  useEffect(() => { plcStateRef.current = plcState; }, [plcState]);
   useEffect(() => { simTimersRef.current = simTimers; }, [simTimers]);
 
   // Registrar timestamp de inicio cuando un paso se activa
@@ -1020,8 +1083,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     // Ya desbloqueada — avanzar
     if (step >= 1 && step <= 4 && started[step]) {
       if (statuses[2] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') {
-        if (isSimulation && cameraTestState === 'standby') setCameraTestState('esperando_1500');
-        else if (!isSimulation || cameraTestState === 'ok') markOk(2);
+        if (cameraTestState === 'standby') setCameraTestState('esperando_1500');
+        else if (cameraTestState === 'ok') markOk(2);
       } else if (statuses[3] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') {
         const currentPallets = pState?.OW_Numero_Pallets || 0;
         const targetLoad = erpDataRef.current?.capac_interm_1 || 0;
@@ -1034,8 +1097,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           setTestAlarm(null);
         }
 
-        if (isSimulation && cameraTestState === 'standby') setCameraTestState('esperando_1500');
-        else if (!isSimulation || cameraTestState === 'ok') markOk(3);
+        if (cameraTestState === 'standby') setCameraTestState('esperando_1500');
+        else if (cameraTestState === 'ok') markOk(3);
       } else if (statuses[4] === STEP_STATUS.ACTIVE) {
         if (test5mState === 'ok') markOk(4);
       }
@@ -1143,6 +1206,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   useEffect(() => {
     if (currentStep === 2 && stepStatus[2] === STEP_STATUS.ACTIVE && erpData && !stepInitRef.current[2]) {
       stepInitRef.current[2] = true;
+      setCameraTestState('standby');
       if (isSimulation) {
         // Bajar la carga abajo automáticamente para iniciar la prueba
         fetch(`${API_BASE}/plc/write`, {
@@ -1153,9 +1217,6 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
         // Recoger la carga (pallet de madera) si no la tiene ya
         if (palletState === 'idle') setPalletState('animating');
-
-        // Reset camera state for this new step
-        setCameraTestState('standby');
       }
     }
   }, [currentStep, stepStatus, erpData, isSimulation, palletState, setPalletState]);
@@ -1164,10 +1225,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   useEffect(() => {
     if (currentStep === 3 && stepStatus[3] === STEP_STATUS.ACTIVE && erpData && !stepInitRef.current[3]) {
       stepInitRef.current[3] = true;
+      setCameraTestState('standby');
       if (isSimulation) {
         // Recoger la carga (pallets pesados) - Repetir animación si ya tenía el de madera
         if (palletState === 'idle' || palletState === 'picked_up') setPalletState('animating');
-        setCameraTestState('standby');
       }
     }
   }, [currentStep, stepStatus, erpData, isSimulation, palletState, setPalletState]);
@@ -1347,7 +1408,56 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   return (
     <aside className="w-80 bg-gradient-to-b from-[#151f25] to-[#0a0f12] h-full flex flex-col border-l border-[#2e404a] z-10 shrink-0 relative">
 
-      {/* Header */}
+      {/* Overlays de cuenta atrás unificados */}
+      {(iniciarCountdown > 0 || abortarCountdown > 0 || pegatinaCountdown > 0 || repetirCountdown > 0) && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none">
+          <div className="text-center flex flex-col items-center">
+            {iniciarCountdown > 0 && (
+              <>
+                <span className="text-[12rem] leading-none font-black text-logisnext-magenta tracking-tighter animate-pulse drop-shadow-[0_0_40px_#dd2876]">
+                  {iniciarCountdown}
+                </span>
+                <span className="text-white text-4xl font-bold uppercase tracking-[0.2em] mt-8 drop-shadow-md">
+                  Iniciando Prueba...
+                </span>
+              </>
+            )}
+            {abortarCountdown > 0 && (
+              <>
+                <span className="text-[12rem] leading-none font-black text-red-500 tracking-tighter animate-pulse drop-shadow-[0_0_40px_rgba(239,68,68,0.8)]">
+                  {abortarCountdown}
+                </span>
+                <span className="text-white text-4xl font-bold uppercase tracking-[0.2em] mt-8 drop-shadow-md">
+                  Abortando Secuencia...
+                </span>
+              </>
+            )}
+            {pegatinaCountdown > 0 && (
+              <>
+                <span className="text-[12rem] leading-none font-black text-blue-500 tracking-tighter animate-pulse drop-shadow-[0_0_40px_rgba(59,130,246,0.8)]">
+                  {pegatinaCountdown}
+                </span>
+                <span className="text-white text-4xl font-bold uppercase tracking-[0.2em] mt-8 drop-shadow-md">
+                  Confirmando Pegatina...
+                </span>
+              </>
+            )}
+            {repetirCountdown > 0 && (
+              <>
+                <span className="text-[12rem] leading-none font-black text-yellow-500 tracking-tighter animate-pulse drop-shadow-[0_0_40px_rgba(234,179,8,0.8)]">
+                  {repetirCountdown}
+                </span>
+                <span className="text-white text-4xl font-bold uppercase tracking-[0.2em] mt-8 drop-shadow-md">
+                  Repitiendo Prueba...
+                </span>
+              </>
+            )}
+            <span className="text-white/70 text-2xl font-bold uppercase tracking-[0.1em] mt-4 opacity-75">
+              Mantenga Pulsado
+            </span>
+          </div>
+        </div>
+      )}
       <div className="p-5 bg-[#1d2930]/80 backdrop-blur-md border-b border-[#2e404a] flex items-center justify-between shadow-lg">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-logisnext-slate/20 rounded-md border border-logisnext-slate/40 text-logisnext-lightslate">
@@ -1614,14 +1724,14 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                 ) : (
                   <>
                     <p className="text-[9px] text-logisnext-slate leading-relaxed mt-2">
-                      Posiciona el mástil a la altura indicada dentro de la tolerancia. Confirma con "Pegatina Colocada" cuando esté en posición.
+                      Coloca la pegatina. No es necesario esperar a que el mástil esté en posición.
                     </p>
                     {palletState === 'animating' && (
                       <div className="flex items-center gap-2 mt-2 py-1.5 px-2 bg-logisnext-magenta/10 border border-logisnext-magenta/30 rounded text-[9px] text-logisnext-magenta">
                         <Loader2 size={12} className="animate-spin" /> Animación de recogida del palet en curso...
                       </div>
                     )}
-                    <ActionBtn onClick={() => markOk(1)} variant="primary" disabled={palletState === 'animating' || !isPosOk}>
+                    <ActionBtn onClick={() => markOk(1)} variant="primary" disabled={palletState === 'animating'}>
                       <CheckCircle2 size={12} /> Pegatina Posicionada
                     </ActionBtn>
                   </>
