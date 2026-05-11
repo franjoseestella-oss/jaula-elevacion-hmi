@@ -135,8 +135,8 @@ class OpcUaClientManager:
             except Exception as e:
                 self.connected = False
                 self.error_msg = str(e)
-                logger.warning("[OPC UA] Reconectando en 10s... (%s)", e)
-                await asyncio.sleep(10)
+                logger.warning("[OPC UA] Reconectando en 3s... (%s)", e)
+                await asyncio.sleep(3)
 
     async def _session(self):
         """Una sesión completa: conecta y lee/escribe hasta desconexión."""
@@ -149,12 +149,12 @@ class OpcUaClientManager:
             return
 
         client = Client(url=self.config.url)
-        client.session_timeout = 10_000          # 10 s
-        client.secure_channel_timeout = 10_000
+        client.session_timeout = 30_000          # 30 s
+        client.secure_channel_timeout = 30_000
 
         logger.info("[OPC UA] Conectando a %s ...", self.config.url)
         try:
-            await asyncio.wait_for(client.connect(), timeout=4.0)
+            await asyncio.wait_for(client.connect(), timeout=10.0)
         except asyncio.TimeoutError:
             raise Exception("Timeout conectando al PLC (Revisa IP o red)")
         self.connected = True
