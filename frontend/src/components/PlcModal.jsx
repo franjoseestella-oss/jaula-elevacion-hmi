@@ -1,11 +1,6 @@
 import React, { useState } from 'react';
 import { X, Cpu, TestTube, Network, Activity, Lightbulb, Zap, Play, CheckCircle2, PowerOff, RefreshCw, Settings, Database, Link as LinkIcon, Save, AlertTriangle } from 'lucide-react';
 const PROJECT_VARS = [
-  "",
-  "Ib_LUZ_VERDE",
-  "Ib_LUZ_AZUL",
-  "Ib_LUZ_ROJA",
-  "Ob_Iniciar_Secuencia",
   "Ob_Poner_Pegatina",
   "Ob_Abortar_Secuencia",
   "Ib_LUZ_Pulsador_1",
@@ -15,6 +10,28 @@ const PROJECT_VARS = [
   "Ib_Bit_VIDA_APP_PLC",
   "OR_Altura_Carretilla"
 ];
+
+const PROJECT_VAR_LABELS = {
+  "Ob_Poner_Pegatina":    "Poner Pegatina",
+  "Ob_Abortar_Secuencia": "Abortar Secuencia",
+  "Ib_LUZ_Pulsador_1":    "Luz Pulsador 1",
+  "Ib_LUZ_Pulsador_2":    "Luz Pulsador 2",
+  "OW_Numero_Pallets":    "Número de Pallets",
+  "Ob_Bit_VIDA_PLC_APP":  "Bit Vida (PLC → APP)",
+  "Ib_Bit_VIDA_APP_PLC":  "Bit Vida (APP → PLC)",
+  "OR_Altura_Carretilla": "Láser Altura Elevación"
+};
+
+const PROJECT_VAR_DEFAULT_DIR = {
+  "Ob_Poner_Pegatina":    "OUT",
+  "Ob_Abortar_Secuencia": "OUT",
+  "Ib_LUZ_Pulsador_1":    "IN",
+  "Ib_LUZ_Pulsador_2":    "IN",
+  "OW_Numero_Pallets":    "OUT",
+  "Ob_Bit_VIDA_PLC_APP":  "OUT",
+  "Ib_Bit_VIDA_APP_PLC":  "IN",
+  "OR_Altura_Carretilla": "OUT"
+};
 
 const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pulsePlc }) => {
   const [outputs, setOutputs] = useState({ 
@@ -49,15 +66,24 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
 
   const updateMappingFromAppVar = (appVar, newPlcKey, direction) => {
     const newMapping = { ...varMapping };
-    // Eliminar cualquier mapeo previo para esta variable de proyecto
+    // Eliminar mapeo previo de esta appVar (si estaba en otra plcKey)
     Object.keys(newMapping).forEach(key => {
-      if (newMapping[key].appVar === appVar) {
-        delete newMapping[key];
-      }
+      if (newMapping[key].appVar === appVar) delete newMapping[key];
     });
-    // Agregar el nuevo mapeo si se seleccionó una variable del PLC
     if (newPlcKey) {
-      newMapping[newPlcKey] = { appVar, direction: direction || (appVar.startsWith('O') ? 'OUT' : 'IN') };
+      newMapping[newPlcKey] = { appVar, direction: direction || PROJECT_VAR_DEFAULT_DIR[appVar] || 'IN' };
+    }
+    setVarMapping(newMapping);
+    localStorage.setItem('plcVarMapping', JSON.stringify(newMapping));
+  };
+
+  // También usada internamente por updateMappingFromPlcKey (compatible con localStorage existente)
+  const updateMappingFromPlcKey = (plcKey, newAppVar, direction) => {
+    const newMapping = { ...varMapping };
+    if (newAppVar) {
+      newMapping[plcKey] = { appVar: newAppVar, direction: direction || (newAppVar.startsWith('O') ? 'OUT' : 'IN') };
+    } else {
+      delete newMapping[plcKey];
     }
     setVarMapping(newMapping);
     localStorage.setItem('plcVarMapping', JSON.stringify(newMapping));
@@ -717,12 +743,12 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
 
         </div>
 
-        {/* VISOR DE VARIABLES DEL DATA BLOCK (Raw) */}
+        {/* MAPEO DE VARIABLES DEL PROYECTO */}
         <div className="flex flex-col h-[400px] shrink-0">
           <h4 className="text-[11px] text-gray-400 font-bold uppercase tracking-widest mb-3 flex items-center justify-between">
-            <span>Listado Completo del Data Block</span>
+            <span>Configuración de Variables — Asignar PLC a Proyecto</span>
             <span className="bg-[#2e404a]/50 px-2 py-0.5 rounded text-white text-[9px]">
-              {telemetry?.plc ? Object.keys(telemetry.plc).length : 0} VARS
+              {Object.values(varMapping).filter(m => m.appVar).length}/{PROJECT_VARS.length} MAPEADAS
             </span>
           </h4>
           
@@ -730,41 +756,52 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
             <table className="w-full text-left text-[10px] text-gray-300">
               <thead className="bg-[#1d2930] sticky top-0 border-b border-[#2e404a] z-10 shadow-md">
                 <tr>
-                  <th className="p-2 px-4 font-bold uppercase tracking-wider w-[30%]">Variable Proyecto</th>
-                  <th className="p-2 px-4 font-bold uppercase tracking-wider w-[30%]">Variable PLC</th>
-                  <th className="p-2 px-4 font-bold uppercase tracking-wider w-[15%]">Dirección</th>
+                  <th className="p-2 px-4 font-bold uppercase tracking-wider w-[28%]">Variable Proyecto</th>
+                  <th className="p-2 px-4 font-bold uppercase tracking-wider w-[32%]">Variable PLC (Data Block)</th>
+                  <th className="p-2 px-4 font-bold uppercase tracking-wider w-[15%]">APP → PLC</th>
                   <th className="p-2 px-4 font-bold uppercase tracking-wider text-right w-[25%]">Valor Real</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#2e404a]/50">
-                {PROJECT_VARS.filter(v => v !== "").map(appVar => {
-                  // Buscar si esta variable de proyecto está mapeada a alguna llave del PLC
+                {PROJECT_VARS.map(appVar => {
                   const mappingEntry = Object.entries(varMapping).find(([k, v]) => v.appVar === appVar);
-                  const plcKey = mappingEntry ? mappingEntry[0] : '';
-                  const direction = mappingEntry ? mappingEntry[1].direction : (appVar.startsWith('O') ? 'OUT' : 'IN');
-                  const plcKeys = telemetry?.plc ? Object.keys(telemetry.plc) : [];
-                  const value = plcKey && telemetry?.plc ? telemetry.plc[plcKey] : null;
+                  const plcKey   = mappingEntry ? mappingEntry[0] : '';
+                  const direction = mappingEntry ? mappingEntry[1].direction : PROJECT_VAR_DEFAULT_DIR[appVar] || 'IN';
+                  const plcKeys  = telemetry?.plc ? Object.keys(telemetry.plc).sort((a,b) => a.localeCompare(b)) : [];
+                  const value    = plcKey && telemetry?.plc ? telemetry.plc[plcKey] : null;
+                  const isMapped = !!plcKey;
 
                   return (
                     <tr key={appVar} className="hover:bg-[#1d2930]/50 transition-colors group">
-                      <td className="p-2 px-4 font-mono text-blue-400/90 group-hover:text-blue-300 font-bold">{appVar}</td>
-                      
+
+                      {/* Nombre descriptivo */}
                       <td className="p-2 px-4">
-                        <select 
-                          value={plcKey} 
+                        <span className="font-bold uppercase tracking-wide text-[11px] text-white">
+                          {PROJECT_VAR_LABELS[appVar]}
+                        </span>
+                      </td>
+
+                      {/* Dropdown con las variables reales del PLC */}
+                      <td className="p-2 px-4">
+                        <select
+                          value={plcKey}
                           onChange={(e) => updateMappingFromAppVar(appVar, e.target.value, direction)}
-                          className="w-full bg-[#1d2930] border border-[#2e404a] text-white rounded p-1 text-[10px] outline-none focus:border-blue-500"
+                          className="w-full bg-[#1d2930] border border-[#2e404a] text-white rounded p-1 text-[10px] outline-none focus:border-blue-500 transition-colors"
                         >
                           <option value="">-- Ninguna --</option>
-                          {plcKeys.sort((a, b) => a.localeCompare(b)).map(k => (
+                          {plcKeys.map(k => (
                             <option key={k} value={k}>{k}</option>
                           ))}
                         </select>
+                        {plcKeys.length === 0 && (
+                          <span className="text-[9px] text-gray-600 italic">Sin conexión OPC UA</span>
+                        )}
                       </td>
-                      
+
+                      {/* Dirección */}
                       <td className="p-2 px-4">
-                        <select 
-                          value={direction} 
+                        <select
+                          value={direction}
                           onChange={(e) => updateMappingFromAppVar(appVar, plcKey, e.target.value)}
                           className="w-full bg-[#1d2930] border border-[#2e404a] text-white rounded p-1 text-[10px] outline-none focus:border-blue-500"
                         >
@@ -772,16 +809,19 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
                           <option value="OUT">OUT (Escritura)</option>
                         </select>
                       </td>
-                      
+
+                      {/* Valor real */}
                       <td className="p-2 px-4 text-right font-mono font-bold">
-                        {typeof value === 'boolean' 
+                        {typeof value === 'boolean'
                           ? (
                             <div className="flex items-center justify-end gap-2">
-                              <span className={value ? 'text-green-400' : 'text-gray-500'}>{value ? 'TRUE' : 'FALSE'}</span>
-                              <div className={`w-2 h-2 rounded-full ${value ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]' : 'bg-gray-700'}`}></div>
+                              <span className={`text-base font-black ${value ? 'text-green-400' : 'text-gray-400'}`}>{value ? 'TRUE' : 'FALSE'}</span>
+                              <div className={`w-3 h-3 rounded-full ${value ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.9)]' : 'bg-gray-600'}`} />
                             </div>
                           )
-                          : <span className="text-yellow-400 bg-yellow-400/10 px-1.5 py-0.5 rounded">{value !== null && value !== undefined ? value.toString() : '---'}</span>
+                          : <span className="text-base font-black text-yellow-400 bg-yellow-400/10 px-2 py-1 rounded">
+                              {value !== null && value !== undefined ? value.toString() : '---'}
+                            </span>
                         }
                       </td>
                     </tr>
