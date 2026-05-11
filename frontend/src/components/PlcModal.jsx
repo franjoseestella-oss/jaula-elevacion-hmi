@@ -595,7 +595,11 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
                 { id: 'Ob_Dtec_Valla_1_trabajo_LH', label: 'Detector Valla 1 Trabajo (LH)', isAnalog: false, canSimulateClick: true, isDanger: false },
                 { id: 'Ob_Dtec_Valla_2_trabajo_RH', label: 'Detector Valla 2 Trabajo (RH)', isAnalog: false, canSimulateClick: true, isDanger: false }
               ].map((sensor) => {
-                const value = telemetry?.plc ? telemetry.plc[sensor.id] : undefined;
+                // Leer primero de mappedPlc (valores ya traducidos por el mapeo de variables)
+                // y si no existe, de plc directamente (compatibilidad modo simulación)
+                const value = telemetry?.mappedPlc?.[sensor.id] !== undefined
+                  ? telemetry.mappedPlc[sensor.id]
+                  : telemetry?.plc?.[sensor.id];
                 const active = !!value; // Para los digitales
 
                 return (
@@ -611,11 +615,8 @@ const PlcModal = ({ open, onClose, telemetry, isSimulation, setIsSimulation, pul
                           {(() => {
                             let val = isSimulation ? Number(analogs[sensor.id] || 0) : (value !== undefined ? Number(value) : null);
                             if (val === null) return '---';
-                            if (sensor.id === 'OR_Altura_Carretilla') {
-                              return (val / 1000).toFixed(2);
-                            }
                             return val.toFixed(0);
-                          })()} <span className="text-[10px] text-blue-400/70">{sensor.id === 'OR_Altura_Carretilla' ? 'm' : sensor.unit.trim()}</span>
+                          })()} <span className="text-[10px] text-blue-400/70">{sensor.unit.trim()}</span>
                           {sensor.id === 'OW_Numero_Pallets' && (
                             <span className="ml-2 text-xs text-yellow-400 font-bold">
                               ({(isSimulation ? Number(analogs[sensor.id] || 0) : (value !== undefined ? Number(value) : 0)) * 250} kg)
