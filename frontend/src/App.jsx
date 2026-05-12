@@ -581,7 +581,7 @@ function App() {
                 {step2Overlay.isOk ? <CheckCircle2 size={64} className="text-white drop-shadow-lg" /> : <AlertTriangle size={64} className="text-blue-400 drop-shadow-lg" />}
                 <div className="flex flex-col gap-2">
                   <span className="text-3xl font-black tracking-widest text-white drop-shadow-md">
-                    ALTURA ACTUAL: <span className={step2Overlay.isOk ? "text-white" : "text-blue-400"}>{step2Overlay.actual} mm</span>
+                    ALTURA ACTUAL: <span className={step2Overlay.isOk ? "text-white" : "text-blue-400"}>{step2Overlay.actual.toFixed(2)} mm</span>
                   </span>
                   <div className="flex gap-4 items-center">
                     <span className="text-lg font-bold tracking-widest text-gray-300">OBJETIVO:</span>
@@ -778,7 +778,7 @@ function App() {
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] text-gray-300 font-mono font-bold">
                       {testHUDOverlay.cameraTestState === 'standby' && 'ESPERANDO...'}
-                      {testHUDOverlay.cameraTestState === 'esperando_1500' && 'ESPERA 1500 mm ↑'}
+                      {testHUDOverlay.cameraTestState === 'esperando_1500' && `ESPERA ${localStorage.getItem('cotaInicialPruebas') || 1500} mm ↑`}
                       {testHUDOverlay.cameraTestState === 'ascenso' && 'ASCENSO ACTIVO'}
                       {testHUDOverlay.cameraTestState === 'espera_arriba' && 'ESPERA ARRIBA'}
                       {testHUDOverlay.cameraTestState === 'descenso' && 'DESCENSO ACTIVO'}

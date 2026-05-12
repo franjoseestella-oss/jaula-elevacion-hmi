@@ -525,7 +525,7 @@ const PlcModal = ({
           ) : (
             <span className="text-xs font-black text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1 py-0.5 rounded">
               {value !== null && value !== undefined
-                ? value.toString()
+                ? (typeof value === 'number' && !Number.isInteger(value) ? value.toFixed(2) : value.toString())
                 : "---"}
             </span>
           )}

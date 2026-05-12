@@ -221,8 +221,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   const [test5mState, setTest5mState] = useState('idle'); // 'idle' | 'stabilizing' | 'running' | 'ok' | 'nok'
   const [test5mConfig, setTest5mConfig] = useState({
     duration: parseInt(localStorage.getItem('test5mDuration')) || 300,
-    tolerancia: parseInt(localStorage.getItem('test5mTolerancia')) || 15
+    tolerancia: parseInt(localStorage.getItem('test5mTolerancia')) || 10
   });
+  
+  const [cotaInicial, setCotaInicial] = useState(() => parseInt(localStorage.getItem('cotaInicialPruebas')) || 1500);
 
   // Refs para lógica de la etapa 5
   const stage5InitialHeightRef = useRef(null);
@@ -260,18 +262,20 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     let tStartDesc = null;
 
     const getH = () => {
-      if (isSimulation) return window.__carriageY || 0;
-      return (plcStateRef.current?.OR_Altura_Carretilla || 0) / 1000;
+      if (isSimulation) return parseFloat(((window.__carriageY || 0) * 1000).toFixed(2)) / 1000;
+      return parseFloat(Number(plcStateRef.current?.OR_Altura_Carretilla || 0).toFixed(2)) / 1000;
     };
 
     let lastH = getH();
     let lastHChangeTime = Date.now();
     let tTopReachTime = null;
-    // Para detectar el cruce de 1500 mm (1.5 m) SOLO en ascenso (viniendo de abajo)
+    let hTopReach = null;
+    const cotaM = cotaInicial / 1000;
+    // Para detectar el cruce de cotaInicial SOLO en ascenso (viniendo de abajo)
     let prevH = getH();
-    // Flag: solo permite disparar si la carretilla estuvo por debajo de 1.5m en algún momento
+    // Flag: solo permite disparar si la carretilla estuvo por debajo de la cotaInicial en algún momento
     // Si al iniciar ya está por encima, hay que bajar primero
-    let hasBeenBelow1500 = getH() < 1.5;
+    let hasBeenBelow1500 = getH() < cotaM;
 
     const testDist = is1mTest ? 1.0 : 2.0;
 
@@ -279,14 +283,14 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       const h = getH();
 
 
-      // ── ESTADO: esperando_1500 — detectar cruce ascendente de 1.5m ──
+      // ── ESTADO: esperando_1500 — detectar cruce ascendente de cotaM ──
       if (cameraTestState === 'esperando_1500') {
-        // Registrar si en algún momento bajamos por debajo de 1.5m
-        if (h < 1.5) hasBeenBelow1500 = true;
+        // Registrar si en algún momento bajamos por debajo de cotaM
+        if (h < cotaM) hasBeenBelow1500 = true;
 
         // Solo disparar si venimos de abajo (hasBeenBelow1500 = true)
-        // y cruzamos 1.5m de forma ascendente (prevH < 1.5 → h >= 1.5)
-        if (hasBeenBelow1500 && prevH < 1.5 && h >= 1.5) {
+        // y cruzamos cotaM de forma ascendente
+        if (hasBeenBelow1500 && prevH < cotaM && h >= cotaM) {
           setCameraTestState('ascenso');
           prevH = h;
           reqId = requestAnimationFrame(loop);
@@ -303,7 +307,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         lastHChangeTime = Date.now();
       }
 
-      if (cameraTestState === 'ascenso' && h > 0.1 && h < 1.5 + testDist) {
+      if (cameraTestState === 'ascenso' && h > 0.1 && h < cotaM + testDist) {
         if (Date.now() - lastHChangeTime > 2000) {
           setTestAlarm('ascenso_incompleto');
           setCameraTestState('nok');
@@ -311,7 +315,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
       }
 
-      if (cameraTestState === 'descenso' && h < 1.5 + testDist - 0.05 && h > 1.5) {
+      if (cameraTestState === 'descenso' && h < cotaM + testDist - 0.05 && h > cotaM) {
         if (Date.now() - lastHChangeTime > 2000) {
           setTestAlarm('descenso_incompleto');
           setCameraTestState('nok');
@@ -322,7 +326,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
 
       // ── Ascenso: detectar llegada arriba ──────────────────────────────────
-      if (cameraTestState === 'ascenso' && h >= 1.5 + testDist && !simTimers.finishedElev) {
+      if (cameraTestState === 'ascenso' && h >= cotaM + testDist && !simTimers.finishedElev) {
         // Marcar ascenso completo y pasar a espera_arriba
         setSimTimers(prev => ({ ...prev, finishedElev: true, elev: prev.elev }));
         setCameraTestState('espera_arriba');
@@ -332,36 +336,40 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         // Acumular timer ascenso
         setSimTimers(prev => {
           if (prev.finishedElev) return prev;
-          if (h >= 1.5) {
+          if (h >= cotaM) {
             if (!tStartElev) tStartElev = Date.now();
             return { ...prev, elev: Math.floor((Date.now() - tStartElev) / 10) };
           }
           return prev;
         });
       } else if (cameraTestState === 'espera_arriba') {
-        if (!tTopReachTime) tTopReachTime = Date.now();
+        if (!tTopReachTime) {
+          tTopReachTime = Date.now();
+          hTopReach = h;
+        }
 
         const waited = Date.now() - tTopReachTime;
 
         if (waited < 3000) {
-          // Antes de los 3s: si la carretilla baja, reiniciar el contador
-          if (h < 1.5 + testDist - 0.05) {
+          // Antes de los 3s: si la carretilla varía más de 10mm (+/- 0.01m), reiniciar el contador
+          if (Math.abs(h - hTopReach) > 0.01) {
             tTopReachTime = Date.now();
+            hTopReach = h;
           }
           const remaining = Math.ceil((3000 - (Date.now() - tTopReachTime)) / 1000);
           setWaitCountdown(Math.max(1, remaining));
         } else {
           // 3 segundos completados — mostrar GO! hasta que el operario baje
           setWaitCountdown(0);
-          if (h < 1.5 + testDist - 0.05) {
+          if (h < hTopReach - 0.05) {
             setWaitCountdown(null);
             setCameraTestState('descenso');
             tStartDesc = null; // resetear para inicializar al entrar en descenso
           }
         }
       } else if (cameraTestState === 'descenso') {
-        // ── Descenso completado: h vuelve a bajar de 1.5m ─────────────────
-        if (h <= 1.5 && !simTimers.finishedDesc) {
+        // ── Descenso completado: h vuelve a bajar de cotaM ─────────────────
+        if (h <= cotaM && !simTimers.finishedDesc) {
           const elapsed = tStartDesc ? Math.floor((Date.now() - tStartDesc) / 10) : 0;
           // Leer tolerancias ERP
           const isSinCarga = currentStep === 2;
@@ -387,7 +395,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         } else if (!simTimers.finishedDesc) {
           // Acumular timer descenso (solo visual en simulación)
           setSimTimers(prev => {
-            if (h <= 1.5 + testDist) {
+            if (h <= cotaM + testDist) {
               if (!tStartDesc) tStartDesc = Date.now();
               return { ...prev, desc: Math.floor((Date.now() - tStartDesc) / 10) };
             }
@@ -401,7 +409,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
     reqId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(reqId);
-  }, [isSimulation, cameraTestState, erpData, currentStep]);
+  }, [isSimulation, cameraTestState, erpData, currentStep, cotaInicial]);
 
   const inputRef = useRef(null);
 
@@ -421,14 +429,19 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     const handle5mConfig = () => {
       setTest5mConfig({
         duration: parseInt(localStorage.getItem('test5mDuration')) || 300,
-        tolerancia: parseInt(localStorage.getItem('test5mTolerancia')) || 15
+        tolerancia: parseInt(localStorage.getItem('test5mTolerancia')) || 10
       });
+    };
+    const handleCota = () => {
+      setCotaInicial(parseInt(localStorage.getItem('cotaInicialPruebas')) || 1500);
     };
     window.addEventListener('toleranciaChanged', handleTolerancia);
     window.addEventListener('test5mConfigChanged', handle5mConfig);
+    window.addEventListener('toleranciaChanged', handleCota);
     return () => {
       window.removeEventListener('toleranciaChanged', handleTolerancia);
       window.removeEventListener('test5mConfigChanged', handle5mConfig);
+      window.removeEventListener('toleranciaChanged', handleCota);
     };
   }, []);
 
@@ -1433,7 +1446,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
     let reqId;
     const loop = () => {
-      const currentHeight = isSimulation ? (window.__carriageY || 0) * 1000 : (plcStateRef.current?.OR_Altura_Carretilla || 0);
+      const currentHeight = isSimulation 
+        ? parseFloat(((window.__carriageY || 0) * 1000).toFixed(2))
+        : parseFloat(Number(plcStateRef.current?.OR_Altura_Carretilla || 0).toFixed(2));
 
       const currentPallets = plcStateRef.current?.OW_Numero_Pallets || 0;
       const targetLoad = erpDataRef.current?.capac_interm_1 || 0;
@@ -1443,17 +1458,17 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         let nextState = prevState;
 
         if (prevState === 'idle') {
-          if (currentHeight >= 1500 && currentLoad === targetLoad) {
+          if (currentHeight >= cotaInicial && currentLoad === targetLoad) {
             nextState = 'stabilizing';
             stage5StableStartRef.current = Date.now();
             stage5InitialHeightRef.current = currentHeight;
           }
         } else if (prevState === 'stabilizing') {
-          if (currentHeight < 1500) {
+          if (currentHeight < cotaInicial) {
             nextState = 'idle';
           } else {
-            // Si fluctúa mucho, reseteamos estabilización
-            if (Math.abs(currentHeight - stage5InitialHeightRef.current) > 30) {
+            // Si fluctúa mucho (> 10mm), reseteamos estabilización
+            if (Math.abs(currentHeight - stage5InitialHeightRef.current) > 10) {
               stage5StableStartRef.current = Date.now();
               stage5InitialHeightRef.current = currentHeight;
             }
@@ -1470,10 +1485,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           const remaining = Math.max(0, test5mConfig.duration - elapsedSeconds);
           setTimer5min(remaining);
 
-          // Comprobar variación > tolerancia
-          if (Math.abs(currentHeight - stage5InitialHeightRef.current) > test5mConfig.tolerancia) {
+          // Comprobar variación > tolerancia requerida de 10 mm
+          if (Math.abs(currentHeight - stage5InitialHeightRef.current) > 10) {
             nextState = 'nok';
-            setTestAlarm(`Caída de cota excedida. Variación: ${Math.abs(currentHeight - stage5InitialHeightRef.current).toFixed(1)} mm (> ${test5mConfig.tolerancia} mm)`);
+            setTestAlarm(`Caída de cota excedida. Variación: ${Math.abs(currentHeight - stage5InitialHeightRef.current).toFixed(2)} mm (> 10 mm)`);
             stageDataRef.current[5] = {
               ...stageDataRef.current[5],
               altura_final: currentHeight,
@@ -1500,7 +1515,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
     reqId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(reqId);
-  }, [currentStep, stepStatus, stepStarted, test5mConfig, isSimulation]);
+  }, [currentStep, stepStatus, stepStarted, test5mConfig, isSimulation, cotaInicial]);
 
   const timer5minDisplay = timer5min !== null
     ? `${String(Math.floor(timer5min / 60)).padStart(2, '0')}:${String(timer5min % 60).padStart(2, '0')}`
@@ -1875,7 +1890,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             }
             else if (cameraTestState === 'ascenso') {
               const actualElev = isSimulation ? (window.__carriageY || 0) : (plcState?.OR_Altura_Carretilla || 0);
-              const isTiming = isSimulation ? (actualElev >= 1.5) : (actualElev >= 1500);
+              const isTiming = isSimulation ? (actualElev >= cotaInicial / 1000) : (actualElev >= cotaInicial);
               ledState = isTiming ? 'active' : 'standby';
             }
             else if (cameraTestState === 'espera_arriba' || cameraTestState === 'descenso') {
@@ -1975,7 +1990,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             }
             else if (cameraTestState === 'ascenso') {
               const actualElev = isSimulation ? (window.__carriageY || 0) : (plcState?.OR_Altura_Carretilla || 0);
-              const isTiming = isSimulation ? (actualElev >= 1.5) : (actualElev >= 1500);
+              const isTiming = isSimulation ? (actualElev >= cotaInicial / 1000) : (actualElev >= cotaInicial);
               ledState = isTiming ? 'active' : 'standby';
             }
             else if (cameraTestState === 'espera_arriba' || cameraTestState === 'descenso') {
@@ -2004,7 +2019,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                     <div className="flex items-center gap-2">
                       <span className="text-[9px] text-gray-400 font-mono">
                         {cameraTestState === 'standby' && 'ESPERANDO CONDICIONES'}
-                        {cameraTestState === 'esperando_1500' && 'ESPERANDO ASCENSO (>1.5M)'}
+                        {cameraTestState === 'esperando_1500' && `ESPERANDO ASCENSO (>${cotaInicial / 1000}M)`}
                         {cameraTestState === 'ascenso' && 'ASCENSO ACTIVO'}
                         {cameraTestState === 'espera_arriba' && 'ESPERANDO ARRIBA'}
                         {cameraTestState === 'descenso' && 'DESCENSO ACTIVO'}
@@ -2107,7 +2122,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
                   {test5mState === 'idle' && (
                     <p className="text-[9px] text-logisnext-slate leading-relaxed">
-                      Verifique que la carga actual coincida con la requerida y eleve el mástil por encima de 1500 mm. La prueba comenzará automáticamente una vez estabilizado.
+                      Verifique que la carga actual coincida con la requerida y eleve el mástil por encima de {cotaInicial} mm. La prueba comenzará automáticamente una vez estabilizado.
                     </p>
                   )}
 

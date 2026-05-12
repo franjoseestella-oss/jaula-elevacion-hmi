@@ -24,6 +24,7 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
   // Parámetros Prueba 5 minutos
   const [test5mDuration, setTest5mDuration] = useState(() => parseInt(localStorage.getItem('test5mDuration')) || 300);
   const [test5mTolerancia, setTest5mTolerancia] = useState(() => parseInt(localStorage.getItem('test5mTolerancia')) || 15);
+  const [cotaInicial, setCotaInicial] = useState(() => parseInt(localStorage.getItem('cotaInicialPruebas')) || 1500);
 
   // Estado local para las salidas del PLC
   const [luces, setLuces] = useState({ Ib_LUZ_VERDE: false, Ib_LUZ_AZUL: false, Ib_LUZ_ROJA: false });
@@ -49,6 +50,7 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
     localStorage.setItem('toleranciaNegativa', toleranciaNegativa);
     localStorage.setItem('test5mDuration', test5mDuration);
     localStorage.setItem('test5mTolerancia', test5mTolerancia);
+    localStorage.setItem('cotaInicialPruebas', cotaInicial);
     // Notificar al sistema para actualizar tolerancias si es necesario
     window.dispatchEvent(new Event('toleranciaChanged'));
     window.dispatchEvent(new Event('test5mConfigChanged'));
@@ -291,6 +293,23 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
                         className="bg-[#0a0f12] border border-red-500/30 rounded-lg px-4 py-3 text-white text-sm font-black outline-none focus:border-red-400 transition-colors"
                       />
                     </div>
+                  </div>
+                </div>
+
+                <div className="bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-5 space-y-6 mt-6">
+                  <p className="text-xs text-logisnext-lightslate font-medium">
+                    Configure la cota de inicio estandarizada para las pruebas de elevación. Normalmente 1500 mm.
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">
+                      Cota Inicial Pruebas (mm)
+                    </label>
+                    <input
+                      type="number"
+                      value={cotaInicial}
+                      onChange={(e) => setCotaInicial(e.target.value)}
+                      className="bg-[#0a0f12] border border-blue-500/30 rounded-lg px-4 py-3 text-white text-sm font-black outline-none focus:border-blue-400 transition-colors w-1/2"
+                    />
                   </div>
                 </div>
               </div>
