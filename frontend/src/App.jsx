@@ -1107,6 +1107,7 @@ function App() {
             onPalletAnimComplete={() => setPalletState('picked_up')} 
             showStickers={appPlc.Ob_Poner_Pegatina || currentStep > 1}
             zoomToStickers={currentStep === 1 && step2Overlay?.isOk && !appPlc.Ob_Poner_Pegatina}
+            zoomOutMultiload={currentStep >= 1}
           />
 
 

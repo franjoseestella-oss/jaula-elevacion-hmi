@@ -821,7 +821,7 @@ const ForkliftAssembly = ({ currentStep, erpData, distance, palletState, onPalle
               </group>
             );
           })()}
-          
+
           {/* Pegatina Basler Target (Simulada) */}
           <mesh position={[0, 1.0, 0.03]}>
             <planeGeometry args={[0.15, 0.15]} />
@@ -833,19 +833,23 @@ const ForkliftAssembly = ({ currentStep, erpData, distance, palletState, onPalle
   );
 };
 
-const CameraAnimator = ({ zoomToStickers }) => {
+const CameraAnimator = ({ zoomToStickers, zoomOutMultiload }) => {
   useFrame((state, delta) => {
     if (zoomToStickers && state.controls) {
-      // Las pegatinas est\u00e1n en la cara trasera (Z=-0.09) a Y=1.5m
+      // Las pegatinas están en la cara trasera (Z=-0.09) a Y=1.5m
       // Cámara desde delante de la carretilla mirando hacia las pegatinas traseras
       state.camera.position.lerp(new THREE.Vector3(-0.2, 1.5, -2.0), delta * 2);
       state.controls.target.lerp(new THREE.Vector3(-0.2, 1.5, -0.09), delta * 2);
+    } else if (zoomOutMultiload && state.controls) {
+      // Alejar la cámara para ver la jaula y la carretilla
+      state.camera.position.lerp(new THREE.Vector3(7, 4, 8), delta * 2);
+      state.controls.target.lerp(new THREE.Vector3(0, 2.5, 0), delta * 2);
     }
   });
   return null;
 };
 
-const DigitalTwin = ({ currentStep, distance, plcState, palletState, erpData, onPalletAnimComplete, showStickers, zoomToStickers }) => {
+const DigitalTwin = ({ currentStep, distance, plcState, palletState, erpData, onPalletAnimComplete, showStickers, zoomToStickers, zoomOutMultiload }) => {
   return (
     <div className="w-full h-full bg-gradient-to-b from-[#1d2930] to-[#0f171e]">
       <Canvas camera={{ position: [4, 3, 5], fov: 50 }}>
@@ -856,7 +860,7 @@ const DigitalTwin = ({ currentStep, distance, plcState, palletState, erpData, on
         
         <CageAssembly plcState={plcState} currentStep={currentStep} erpData={erpData} />
         <ForkliftAssembly distance={distance} palletState={palletState} erpData={erpData} currentStep={currentStep} onPalletAnimComplete={onPalletAnimComplete} showStickers={showStickers} zoomToStickers={zoomToStickers} />
-        <CameraAnimator zoomToStickers={zoomToStickers} />
+        <CameraAnimator zoomToStickers={zoomToStickers} zoomOutMultiload={zoomOutMultiload} />
         
         {/* Suelo Industrial */}
         <Grid 
