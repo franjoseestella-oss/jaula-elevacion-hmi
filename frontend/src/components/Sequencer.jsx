@@ -262,8 +262,11 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     let tStartDesc = null;
 
     const getH = () => {
-      const raw = isSimulation ? ((window.__carriageY || 0) * 1000) / 1000 : (plcStateRef.current?.OR_Altura_Carretilla || 0);
-      return parseFloat(Number(raw).toFixed(2));
+      // h siempre en metros para que sea consistente con cotaM
+      const raw = isSimulation
+        ? (window.__carriageY || 0)                                 // ya está en metros
+        : (plcStateRef.current?.OR_Altura_Carretilla || 0) / 1000;  // PLC da mm → convertir a m
+      return parseFloat(Number(raw).toFixed(3));
     };
 
     let lastH = getH();
@@ -408,13 +411,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             setCameraTestState('ok');
           }
         } else if (!simTimers.finishedDesc) {
-          setSimTimers(prev => {
-            if (h <= cotaM + testDist + 0.05) {
-              if (!tStartDesc) tStartDesc = Date.now();
-              return { ...prev, desc: Math.floor((Date.now() - tStartDesc) / 10) };
-            }
-            return prev;
-          });
+          // Timer de descenso: arranca en cuanto entramos en estado descenso (h bajando)
+          if (!tStartDesc) tStartDesc = Date.now();
+          setSimTimers(prev => ({
+            ...prev,
+            desc: Math.floor((Date.now() - tStartDesc) / 10)
+          }));
         }
       }
 
