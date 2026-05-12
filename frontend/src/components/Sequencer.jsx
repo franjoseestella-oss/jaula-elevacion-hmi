@@ -274,7 +274,20 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     let prevH = getH();
 
     // The target height difference
-    const testDist = isSimulation ? 3.0 : ((erpData?.alt_max_interm || 3700) / 1000) - cotaM;
+    let testDist = 2.0;
+    if (isSimulation) {
+      testDist = 3.0;
+    } else if (erpData?.mastil) {
+      const str = String(erpData.mastil).trim().toUpperCase();
+      if (str.startsWith('2F')) {
+        testDist = 1.0;
+      } else {
+        const match = str.match(/\d{3,}/);
+        if (match && parseInt(match[0], 10) < 400) {
+          testDist = 1.0;
+        }
+      }
+    }
 
     const loop = () => {
       const h = getH();
@@ -302,9 +315,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       }
 
       if (cameraTestState === 'ascenso') {
-        const ascTime = plcStateRef.current?.OW_Tiempo_Elevacion || 0;
-        // In real mode, test finishes when PLC gives us > 0. In sim, when h reaches target.
-        const isAscentFinished = isSimulation ? (h >= cotaM + testDist) : (ascTime > 0);
+        // In real mode AND sim mode, test finishes when h reaches target.
+        const isAscentFinished = h >= cotaM + testDist - 0.05;
         
         if (!isAscentFinished && isSimulation && h > 0.1 && h < cotaM + testDist) {
           if (Date.now() - lastHChangeTime > 2000) {
@@ -356,8 +368,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           }
         }
       } else if (cameraTestState === 'descenso') {
-        const descTime = plcStateRef.current?.OW_Tiempo_Descenso || 0;
-        const isDescentFinished = isSimulation ? (h <= cotaM + 0.05) : (descTime > 0);
+        const isDescentFinished = h <= cotaM + 0.05;
 
         if (!isDescentFinished && isSimulation && h < cotaM + testDist - 0.05 && h > cotaM + 0.05) {
           if (Date.now() - lastHChangeTime > 2000) {
@@ -391,11 +402,11 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           
           if (!isElevOk || !isDescOk) {
             setTestAlarm('fuera_tolerancia');
+            setCameraTestState('nok');
+          } else {
+            setTestAlarm(null);
+            setCameraTestState('ok');
           }
-          
-          // La prueba física se ha completado. Avanzamos a 'ok' aunque esté fuera de tolerancia
-          // (solo se pide repetir en fallos de ejecución como ascenso_incompleto).
-          setCameraTestState('ok');
         } else if (!simTimers.finishedDesc) {
           setSimTimers(prev => {
             if (h <= cotaM + testDist + 0.05) {
@@ -1402,8 +1413,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
         // Solo mostrar tiempos si el test ya está en marcha (no antes de condición inicial)
         const testIsRunning = ['ascenso', 'espera_arriba', 'descenso', 'ok', 'nok'].includes(cameraTestState);
-        const rawElev = (!isSimulation && simTimers.finishedElev && plcState?.OW_Tiempo_Elevacion) ? plcState.OW_Tiempo_Elevacion : simTimers.elev;
-        const rawDesc = (!isSimulation && simTimers.finishedDesc && plcState?.OW_Tiempo_Descenso) ? plcState.OW_Tiempo_Descenso : simTimers.desc;
+        
+        // En modo real, durante el movimiento mostramos el temporizador visual (simTimers).
+        // Al finalizar el movimiento (finishedElev/Desc = true), mostramos el valor final reportado por el PLC.
+        const rawElev = isSimulation ? simTimers.elev : (simTimers.finishedElev && plcState?.OW_Tiempo_Elevacion ? plcState.OW_Tiempo_Elevacion : simTimers.elev);
+        const rawDesc = isSimulation ? simTimers.desc : (simTimers.finishedDesc && plcState?.OW_Tiempo_Descenso ? plcState.OW_Tiempo_Descenso : simTimers.desc);
+        
         const realElev = testIsRunning ? rawElev : null;
         const realDesc = testIsRunning ? rawDesc : null;
 
@@ -1884,8 +1899,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             const minDesc = erpData.tpo_desc_min_scarga;
             const maxDesc = erpData.tpo_desc_max_scarga;
 
-            const realElev = (!isSimulation && simTimers.finishedElev && plcState?.OW_Tiempo_Elevacion) ? plcState.OW_Tiempo_Elevacion : simTimers.elev;
-            const realDesc = (!isSimulation && simTimers.finishedDesc && plcState?.OW_Tiempo_Descenso) ? plcState.OW_Tiempo_Descenso : simTimers.desc;
+            const realElev = isSimulation ? simTimers.elev : plcState?.OW_Tiempo_Elevacion;
+            const realDesc = isSimulation ? simTimers.desc : plcState?.OW_Tiempo_Descenso;
 
             // Derivación del estado del LED
             let ledState = 'standby';
@@ -1984,8 +1999,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             const minDesc = erpData.tpo_descenso_min;
             const maxDesc = erpData.tpo_descenso_max;
 
-            const realElev = (!isSimulation && simTimers.finishedElev && plcState?.OW_Tiempo_Elevacion) ? plcState.OW_Tiempo_Elevacion : simTimers.elev;
-            const realDesc = (!isSimulation && simTimers.finishedDesc && plcState?.OW_Tiempo_Descenso) ? plcState.OW_Tiempo_Descenso : simTimers.desc;
+            const realElev = isSimulation ? simTimers.elev : plcState?.OW_Tiempo_Elevacion;
+            const realDesc = isSimulation ? simTimers.desc : plcState?.OW_Tiempo_Descenso;
 
             // Derivación del estado del LED
             let ledState = 'standby';
