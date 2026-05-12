@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useImperativeHandle } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Layers, Barcode, ArrowUpDown, Timer, Weight,
   CheckCircle2, AlertTriangle, SkipForward, Loader2,
@@ -568,6 +569,18 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     resetSequence();
   };
 
+  // ── Auto-Reseteo cuando la prueba termina y las vallas se abren ────────────
+  useEffect(() => {
+    if (isSequenceFinished && plcState) {
+      const valla1Trabajo = plcState.Ob_Dtec_Valla_1_trabajo_LH;
+      const valla2Trabajo = plcState.Ob_Dtec_Valla_2_trabajo_RH;
+      if (!valla1Trabajo && !valla2Trabajo) {
+        if (onSequenceEnd) onSequenceEnd();
+        resetSequence();
+      }
+    }
+  }, [isSequenceFinished, plcState?.Ob_Dtec_Valla_1_trabajo_LH, plcState?.Ob_Dtec_Valla_2_trabajo_RH]);
+
   // ── Auto-Avanzar PASO 1 si se carga desde ERP Modal ───────────────
   useEffect(() => {
     const initErpSequence = async () => {
@@ -769,9 +782,32 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
   // 3. Pegatina Colocada y Confirmación — detección robusta con temporizador de 3 segundos
   const handlePegatinaActionRef = useRef();
+  const isPegatinaActionValidRef = useRef(() => false);
+
   useEffect(() => {
+    isPegatinaActionValidRef.current = () => {
+      // Si estamos en Multiload, debe estar en la altura correcta
+      if (stepStatus[1] === STEP_STATUS.ACTIVE && erpData && stepStarted[1]) {
+        const alturaMax = erpData.altura_max_interm;
+        const alturaAct = plcStateRef.current?.OR_Altura_Carretilla || 0;
+        const tols = toleranciasRef.current;
+        if (alturaMax != null) {
+          const isPosOk = alturaAct >= (alturaMax - tols.negativa) && alturaAct <= (alturaMax + tols.positiva);
+          if (!isPosOk) return false;
+        }
+      }
+      // Si estamos en NOK, es siempre válido
+      if (cameraTestState === 'nok') {
+        const activeTestStep = stepStatus[2] === STEP_STATUS.ACTIVE ? 2 : stepStatus[3] === STEP_STATUS.ACTIVE ? 3 : null;
+        if (activeTestStep === null) return false;
+      } else if (stepStatus[1] !== STEP_STATUS.ACTIVE) {
+        return false;
+      }
+      return true;
+    };
+
     handlePegatinaActionRef.current = () => {
-      // a) Pegatina Colocada -> avanzar en Paso 2 (sin esperar posición del mástil)
+      // a) Pegatina Colocada -> avanzar en Paso 2
       if (stepStatus[1] === STEP_STATUS.ACTIVE && erpData && stepStarted[1]) {
         markOk(1);
       }
@@ -781,12 +817,14 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         if (activeTestStep !== null) markOk(activeTestStep);
       }
     };
-  }, [stepStatus, erpData, stepStarted, plcState?.OR_Altura_Carretilla, tolerancias, cameraTestState]);
+  }, [stepStatus, erpData, stepStarted, cameraTestState]);
 
   useEffect(() => {
     if (plcState?.Ob_Poner_Pegatina === true) {
       if (pegatinaCountdown === null) {
-        setPegatinaCountdown(3);
+        if (isPegatinaActionValidRef.current && isPegatinaActionValidRef.current()) {
+          setPegatinaCountdown(3);
+        }
       } else if (pegatinaCountdown > 0) {
         const timer = setTimeout(() => setPegatinaCountdown(pegatinaCountdown - 1), 1000);
         return () => clearTimeout(timer);
@@ -922,16 +960,35 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
   // 3. Confirmar Pegatina (Repetir Secuencia) -> avanzar Paso 2 (Multiload)
   const handleRepetirActionRef = useRef();
+  const isRepetirActionValidRef = useRef(() => false);
+
   useEffect(() => {
-    handleRepetirActionRef.current = () => {
-      if (stepStatus[1] === STEP_STATUS.ACTIVE && palletState !== 'animating') markOk(1);
+    isRepetirActionValidRef.current = () => {
+      if (stepStatus[1] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
+        const alturaMax = erpData?.altura_max_interm;
+        const alturaAct = plcStateRef.current?.OR_Altura_Carretilla || 0;
+        const tols = toleranciasRef.current;
+        
+        if (alturaMax != null) {
+          return alturaAct >= (alturaMax - tols.negativa) && alturaAct <= (alturaMax + tols.positiva);
+        }
+      }
+      return false;
     };
-  }, [stepStatus, palletState]);
+
+    handleRepetirActionRef.current = () => {
+      if (isRepetirActionValidRef.current()) {
+        markOk(1);
+      }
+    };
+  }, [stepStatus, palletState, erpData]);
 
   useEffect(() => {
     if (plcState?.Ob_Repetir_Secuencia === true) {
       if (repetirCountdown === null) {
-        setRepetirCountdown(3);
+        if (isRepetirActionValidRef.current && isRepetirActionValidRef.current()) {
+          setRepetirCountdown(3);
+        }
       } else if (repetirCountdown > 0) {
         const timer = setTimeout(() => setRepetirCountdown(repetirCountdown - 1), 1000);
         return () => clearTimeout(timer);
@@ -1429,8 +1486,11 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
               altura_final: currentHeight,
               diff: Math.abs(currentHeight - stage5InitialHeightRef.current)
             };
+            // Avanzar automáticamente cuando pasa el test
+            setTimeout(() => markOk(4), 500);
           }
         }
+
 
         return nextState;
       });
@@ -1462,54 +1522,32 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     <aside className="w-80 bg-gradient-to-b from-[#151f25] to-[#0a0f12] h-full flex flex-col border-l border-[#2e404a] z-10 shrink-0 relative">
 
       {/* Overlays de cuenta atrás unificados */}
-      {(iniciarCountdown > 0 || abortarCountdown > 0 || pegatinaCountdown > 0 || repetirCountdown > 0) && (
+      {(iniciarCountdown > 0 || abortarCountdown > 0 || pegatinaCountdown > 0 || repetirCountdown > 0) && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none">
           <div className="text-center flex flex-col items-center">
             {iniciarCountdown > 0 && (
-              <>
-                <span className="text-[12rem] leading-none font-black text-logisnext-magenta tracking-tighter animate-pulse drop-shadow-[0_0_40px_#dd2876]">
-                  {iniciarCountdown}
-                </span>
-                <span className="text-white text-4xl font-bold uppercase tracking-[0.2em] mt-8 drop-shadow-md">
-                  Iniciando Prueba...
-                </span>
-              </>
+              <span className="text-[12rem] leading-none font-black text-logisnext-magenta tracking-tighter animate-pulse drop-shadow-[0_0_40px_#dd2876]">
+                {iniciarCountdown}
+              </span>
             )}
             {abortarCountdown > 0 && (
-              <>
-                <span className="text-[12rem] leading-none font-black text-red-500 tracking-tighter animate-pulse drop-shadow-[0_0_40px_rgba(239,68,68,0.8)]">
-                  {abortarCountdown}
-                </span>
-                <span className="text-white text-4xl font-bold uppercase tracking-[0.2em] mt-8 drop-shadow-md">
-                  Abortando Secuencia...
-                </span>
-              </>
+              <span className="text-[12rem] leading-none font-black text-red-500 tracking-tighter animate-pulse drop-shadow-[0_0_40px_rgba(239,68,68,0.8)]">
+                {abortarCountdown}
+              </span>
             )}
             {pegatinaCountdown > 0 && (
-              <>
-                <span className="text-[12rem] leading-none font-black text-blue-500 tracking-tighter animate-pulse drop-shadow-[0_0_40px_rgba(59,130,246,0.8)]">
-                  {pegatinaCountdown}
-                </span>
-                <span className="text-white text-4xl font-bold uppercase tracking-[0.2em] mt-8 drop-shadow-md">
-                  Confirmando Pegatina...
-                </span>
-              </>
+              <span className="text-[12rem] leading-none font-black text-blue-500 tracking-tighter animate-pulse drop-shadow-[0_0_40px_rgba(59,130,246,0.8)]">
+                {pegatinaCountdown}
+              </span>
             )}
             {repetirCountdown > 0 && (
-              <>
-                <span className="text-[12rem] leading-none font-black text-yellow-500 tracking-tighter animate-pulse drop-shadow-[0_0_40px_rgba(234,179,8,0.8)]">
-                  {repetirCountdown}
-                </span>
-                <span className="text-white text-4xl font-bold uppercase tracking-[0.2em] mt-8 drop-shadow-md">
-                  Repitiendo Prueba...
-                </span>
-              </>
+              <span className="text-[12rem] leading-none font-black text-yellow-500 tracking-tighter animate-pulse drop-shadow-[0_0_40px_rgba(234,179,8,0.8)]">
+                {repetirCountdown}
+              </span>
             )}
-            <span className="text-white/70 text-2xl font-bold uppercase tracking-[0.1em] mt-4 opacity-75">
-              Mantenga Pulsado
-            </span>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       <div className="p-5 bg-[#1d2930]/80 backdrop-blur-md border-b border-[#2e404a] flex items-center justify-between shadow-lg">
         <div className="flex items-center gap-3">
@@ -1777,14 +1815,19 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                 ) : (
                   <>
                     <p className="text-[9px] text-logisnext-slate leading-relaxed mt-2">
-                      Coloca la pegatina. No es necesario esperar a que el mástil esté en posición.
+                      Coloca la pegatina. El mástil debe estar en la altura correcta para confirmar.
                     </p>
                     {palletState === 'animating' && (
                       <div className="flex items-center gap-2 mt-2 py-1.5 px-2 bg-logisnext-magenta/10 border border-logisnext-magenta/30 rounded text-[9px] text-logisnext-magenta">
                         <Loader2 size={12} className="animate-spin" /> Animación de recogida del palet en curso...
                       </div>
                     )}
-                    <ActionBtn onClick={() => markOk(1)} variant="primary" disabled={palletState === 'animating'}>
+                    {!isPosOk && (
+                      <div className="flex items-center gap-2 mt-2 py-1.5 px-2 bg-red-500/10 border border-red-500/30 rounded text-[9px] text-red-400">
+                        <AlertTriangle size={12} /> Altura incorrecta. Posiciona el mástil dentro del rango.
+                      </div>
+                    )}
+                    <ActionBtn onClick={() => markOk(1)} variant="primary" disabled={palletState === 'animating' || !isPosOk}>
                       <CheckCircle2 size={12} /> Pegatina Posicionada
                     </ActionBtn>
                   </>
@@ -2100,14 +2143,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                       </div>
                     </div>
                   )}
-
-                  {test5mState === 'ok' && (
-                    <ActionBtn onClick={() => markOk(4)} variant="success">
-                      <CheckCircle2 size={12} /> Confirmar y Finalizar
-                    </ActionBtn>
-                  )}
                 </>
               )}
+
             </>
           )}
           {stepStatus[4] === STEP_STATUS.SKIP && (
@@ -2221,11 +2259,13 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       )}
       {/* ── MENSAJE FLOTANTE: INICIAR SECUENCIA ────────────────────────── */}
       {(currentStep >= 1 && currentStep <= 4 && !stepStarted[currentStep]) && (
-        <div className="fixed bottom-6 right-6 p-3 rounded-xl border border-yellow-500/50 bg-yellow-900/40 backdrop-blur-md shadow-[0_0_20px_rgba(234,179,8,0.2)] flex items-center gap-3 animate-pulse z-[200]">
-          <div className="h-2 w-2 rounded-full bg-yellow-400" />
-          <p className="text-[11px] font-black text-yellow-400 uppercase tracking-widest">
-            Pulse INICIAR SECUENCIA para continuar
-          </p>
+        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-[90] pointer-events-none">
+          <div className="px-10 py-6 rounded-2xl border-2 border-yellow-500/80 bg-yellow-900/80 backdrop-blur-lg shadow-[0_0_50px_rgba(234,179,8,0.5)] flex items-center gap-6 animate-pulse">
+            <div className="h-6 w-6 rounded-full bg-yellow-400 shadow-[0_0_20px_rgba(234,179,8,1)]" />
+            <p className="text-3xl font-black text-yellow-400 uppercase tracking-widest drop-shadow-lg">
+              Pulse INICIAR SECUENCIA para continuar
+            </p>
+          </div>
         </div>
       )}
     </aside>

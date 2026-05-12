@@ -723,26 +723,15 @@ function App() {
             </div>
           )}
 
-          {/* BANNER GIGANTE ROJO: VALLAS PELIGRO */}
-          {isMainScreen && (currentStep === -1 || erpData === null) && !(appPlc?.Ob_Dtec_Valla_1_trabajo_LH || appPlc?.Ob_Dtec_Valla_2_trabajo_RH) && !(appPlc?.Ob_Dtec_Valla_1_origen_LH && appPlc?.Ob_Dtec_Valla_2_origen_RH) && (
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] bg-red-600 text-white px-20 py-8 rounded-2xl border-4 border-red-400 shadow-[0_0_100px_rgba(220,38,38,0.8)] flex items-center gap-10 animate-pulse">
-              <AlertTriangle size={80} className="text-white drop-shadow-lg" />
-              <div className="flex flex-col">
-                <span className="text-6xl font-black tracking-[0.2em] drop-shadow-md">VALLAS PELIGRO</span>
-                <span className="text-2xl font-bold tracking-widest text-red-100 drop-shadow">LA JAULA NO ESTÁ SEGURA</span>
-              </div>
-            </div>
-          )}
-
           {/* BANNER FIJO: VALLAS ABAJO (EN TRABAJO) */}
-          {isMainScreen && (currentStep === -1 || erpData === null) && (appPlc?.Ob_Dtec_Valla_1_trabajo_LH || appPlc?.Ob_Dtec_Valla_2_trabajo_RH) && (
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 z-[60] bg-yellow-400 text-black px-16 py-3 rounded-b-3xl border-4 border-t-0 border-black shadow-[0_15px_40px_rgba(234,179,8,0.6)] flex items-center gap-8" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(0,0,0,0.2) 20px, rgba(0,0,0,0.2) 40px)' }}>
-              <AlertTriangle size={42} className="text-black drop-shadow-sm animate-pulse" />
+          {isMainScreen && (appPlc?.Ob_Dtec_Valla_1_trabajo_LH || appPlc?.Ob_Dtec_Valla_2_trabajo_RH) && (
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 z-[60] bg-yellow-400 text-black px-10 py-2 rounded-b-3xl border-4 border-t-0 border-black shadow-[0_15px_40px_rgba(234,179,8,0.6)] flex items-center gap-6" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(0,0,0,0.2) 20px, rgba(0,0,0,0.2) 40px)' }}>
+              <AlertTriangle size={36} className="text-black drop-shadow-sm animate-pulse" />
               <div className="flex flex-col text-center">
-                <span className="text-3xl font-black tracking-[0.1em] uppercase drop-shadow-sm bg-yellow-400/80 px-2 rounded">¡¡ ATENCIÓN VALLAS ABAJO !!</span>
-                <span className="text-base font-black tracking-widest text-black/90 drop-shadow-sm bg-yellow-400/80 px-2 mt-1 rounded">SUBIRLAS AL FINALIZAR LA PRUEBA</span>
+                <span className="text-2xl font-black tracking-[0.1em] uppercase drop-shadow-sm bg-yellow-400/80 px-2 rounded">¡¡ ATENCIÓN VALLAS ABAJO !!</span>
+                <span className="text-sm font-black tracking-widest text-black/90 drop-shadow-sm bg-yellow-400/80 px-2 mt-1 rounded">SUBIRLAS AL FINALIZAR LA PRUEBA</span>
               </div>
-              <AlertTriangle size={42} className="text-black drop-shadow-sm animate-pulse" />
+              <AlertTriangle size={36} className="text-black drop-shadow-sm animate-pulse" />
             </div>
           )}
 
