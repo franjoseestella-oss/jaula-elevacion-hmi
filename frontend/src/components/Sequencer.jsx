@@ -277,20 +277,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     let prevH = getH();
 
     // The target height difference
-    let testDist = 2.0;
-    if (isSimulation) {
-      testDist = 3.0;
-    } else if (erpData?.mastil) {
-      const str = String(erpData.mastil).trim().toUpperCase();
-      if (str.startsWith('2F')) {
-        testDist = 1.0;
-      } else {
-        const match = str.match(/\d{3,}/);
-        if (match && parseInt(match[0], 10) < 400) {
-          testDist = 1.0;
-        }
-      }
-    }
+    let testDist = is1mTest ? 1.0 : 2.0;
 
     const loop = () => {
       const h = getH();
@@ -298,9 +285,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
       // ── ESTADO: esperando_1500 — detectar inicio del test ──
       if (cameraTestState === 'esperando_1500') {
-        // En modo real (test), esperamos que h suba por encima de cotaM o cambie si ya está cerca.
-        // Tolerancia de +/- 0.05m (5cm)
-        if (h > prevH && h >= cotaM - 0.05) {
+        if (h > cotaM) {
           setCameraTestState('ascenso');
           prevH = h;
           reqId = requestAnimationFrame(loop);
@@ -337,11 +322,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         } else {
           setSimTimers(prev => {
             if (prev.finishedElev) return prev;
-            if (h >= cotaM - 0.05) {
-              if (!tStartElev) tStartElev = Date.now();
-              return { ...prev, elev: Math.floor((Date.now() - tStartElev) / 10) };
-            }
-            return prev;
+            if (!tStartElev) tStartElev = Date.now();
+            return { ...prev, elev: Math.floor((Date.now() - tStartElev) / 10) };
           });
         }
       } else if (cameraTestState === 'espera_arriba') {
@@ -779,18 +761,56 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             markOk(3);
           }
         } else if (stepStatus[4] === STEP_STATUS.ACTIVE) {
+          const currentPallets = isSimulation ? (window.__simPallets || 0) : (plcStateRef.current?.OW_Numero_Pallets || 0);
+          const targetLoad = erpData?.capac_interm_1 || 0;
+          const currentLoad = currentPallets * 250;
+
+          if (currentLoad !== targetLoad) {
+            setTestAlarm(`Carga incorrecta: ${currentLoad}kg actual vs ${targetLoad}kg requerido (ERP). Compruebe los pallets.`);
+            return;
+          } else {
+            setTestAlarm(null);
+          }
+
+          if (test5mState === 'nok') {
+            setTest5mState('idle');
+            setTimer5min(null);
+            setTestAlarm(null);
+            return;
+          }
           if (test5mState === 'ok') {
             markOk(4);
+          } else if (test5mState === 'idle') {
+            setTest5mState('esperando_elevacion');
           }
         }
       }
     };
   });
 
+  // ── Altura actual en mm (consistente en sim y real) ──────────────────────
+  const currentHeightMm = isSimulation
+    ? Math.round((window.__carriageY || 0) * 1000)
+    : (plcState?.OR_Altura_Carretilla || 0);
+
+  // Carretilla por debajo de la cota inicial (condición de inicio para tests elev/5m)
+  const isCarriageBelowCota = currentHeightMm < cotaInicial;
+
   useEffect(() => {
     let interval;
     // La secuencia solo se inicia (y cuenta atrás) si estamos en las etapas 2 a la 5 (currentStep de 1 a 4)
     if (plcState?.Ob_Iniciar_Secuencia === true && currentStep >= 1 && currentStep <= 4) {
+      // Para etapas de test (sin carga, con carga, 5 min) bloquear si carretilla no está abajo
+      const isTestStep = currentStep >= 2;
+      const blockByHeight = isTestStep && 
+        ((currentStep === 2 || currentStep === 3) ? cameraTestState === 'standby' : test5mState === 'idle') 
+        && !isCarriageBelowCota;
+      if (blockByHeight) {
+        // No iniciar cuenta atrás, cancelar si la había
+        if (iniciarCountdown !== null) setIniciarCountdown(null);
+        return;
+      }
+
       if (iniciarCountdown === null) {
         setIniciarCountdown(3);
       } else if (iniciarCountdown > 0) {
@@ -807,7 +827,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       }
     }
     return () => clearTimeout(interval);
-  }, [plcState?.Ob_Iniciar_Secuencia, iniciarCountdown, currentStep]);
+  }, [plcState?.Ob_Iniciar_Secuencia, iniciarCountdown, currentStep, isCarriageBelowCota, cameraTestState]);
 
   // 3. Pegatina Colocada y Confirmación — detección robusta con temporizador de 3 segundos
   const handlePegatinaActionRef = useRef();
@@ -841,12 +861,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         markOk(1);
       }
       // b) Pegatina Colocada con resultado NOK -> CONTINUAR (avanzar paso sin repetir)
-      if (cameraTestState === 'nok') {
-        const activeTestStep = stepStatus[2] === STEP_STATUS.ACTIVE ? 2 : stepStatus[3] === STEP_STATUS.ACTIVE ? 3 : null;
+      if (cameraTestState === 'nok' || test5mState === 'nok') {
+        const activeTestStep = stepStatus[2] === STEP_STATUS.ACTIVE ? 2 : stepStatus[3] === STEP_STATUS.ACTIVE ? 3 : stepStatus[4] === STEP_STATUS.ACTIVE ? 4 : null;
         if (activeTestStep !== null) markOk(activeTestStep);
       }
     };
-  }, [stepStatus, erpData, stepStarted, cameraTestState]);
+  }, [stepStatus, erpData, stepStarted, cameraTestState, test5mState]);
 
   useEffect(() => {
     if (plcState?.Ob_Poner_Pegatina === true) {
@@ -1388,6 +1408,32 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   }, [isSequenceFinished, isSimulation, onSequenceEnd]);
 
 
+  // ── Sincronizar overlay de status panel (cota + estado) para steps 2-4 ──
+  useEffect(() => {
+    if (!setStep2Overlay) return;
+    const is5mActive = currentStep === 4 && stepStatus[4] === STEP_STATUS.ACTIVE && erpData && stepStarted[4];
+
+    if (is5mActive) {
+      setStep2Overlay({
+        active: true,
+        mode: 'test_5m',
+        actual: currentHeightMm,
+        cotaInicial,
+        test5mState,
+        timer5min,
+        testAlarm,
+        isAbove: currentHeightMm >= cotaInicial,
+      });
+    } else if (currentStep === 1 && stepStatus[1] === STEP_STATUS.ACTIVE && erpData) {
+      // Mantener el panel de multiload (lo gestiona el useEffect de multiload overlay)
+    } else {
+      setStep2Overlay(null);
+    }
+  }, [
+    currentStep, stepStatus, erpData, stepStarted, currentHeightMm, cotaInicial,
+    cameraTestState, waitCountdown, test5mState, timer5min, testAlarm, is1mTest
+  ]);
+
   // ── Sincronizar overlay de HUD ───────────────────────────────────────────
   useEffect(() => {
     if (setTestHUDOverlay) {
@@ -1445,11 +1491,19 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           waitCountdown,
           testAlarm
         });
+      } else if (currentStep === 4 && stepStatus[4] === STEP_STATUS.ACTIVE && erpData) {
+        setTestHUDOverlay({
+          title: 'ESTABILIDAD 5 MINUTOS',
+          subtitle: `CAÍDA MÁXIMA ${test5mConfig.tolerancia}mm`,
+          test5mState,
+          testAlarm,
+          is5mTest: true
+        });
       } else {
         setTestHUDOverlay(null);
       }
     }
-  }, [currentStep, stepStatus, erpData, cameraTestState, waitCountdown, plcState?.OW_Tiempo_Elevacion, plcState?.OW_Tiempo_Descenso, setTestHUDOverlay, isSimulation, simTimers]);
+  }, [currentStep, stepStatus, erpData, cameraTestState, waitCountdown, plcState?.OW_Tiempo_Elevacion, plcState?.OW_Tiempo_Descenso, setTestHUDOverlay, isSimulation, simTimers, test5mState, testAlarm]);
 
   // ── PASO 5: 5 minutos — decidir automáticamente al entrar ─────────────────
   useEffect(() => {
@@ -1478,7 +1532,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         let nextState = prevState;
         const toleranceM = test5mConfig.tolerancia / 1000; // 10mm = 0.01m
 
-        if (prevState === 'idle') {
+        if (prevState === 'esperando_elevacion') {
           // cotaInicial está en mm, currentHeight en metros. 
           // Esperamos que esté por encima de cotaInicial convertida a metros.
           if (currentHeight >= cotaInicial / 1000 && currentLoad === targetLoad) {
@@ -1560,7 +1614,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     <aside className="w-80 bg-gradient-to-b from-[#151f25] to-[#0a0f12] h-full flex flex-col border-l border-[#2e404a] z-10 shrink-0 relative">
 
       {/* Overlays de cuenta atrás unificados */}
-      {(iniciarCountdown > 0 || abortarCountdown > 0 || pegatinaCountdown > 0 || repetirCountdown > 0) && createPortal(
+      {(!repeatModal.show && test5mState !== 'nok' && cameraTestState !== 'nok') && (iniciarCountdown > 0 || abortarCountdown > 0 || pegatinaCountdown > 0 || repetirCountdown > 0) && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none">
           <div className="text-center flex flex-col items-center">
             {iniciarCountdown > 0 && (
@@ -1966,6 +2020,20 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                   </div>
                 ) : (
                   <>
+                    {/* Panel de cota — condición previa */}
+                    {(cameraTestState === 'standby' || cameraTestState === 'esperando_1500') && (
+                      <div className={`flex items-center justify-between p-2 mt-1 rounded-lg border text-[9px] ${
+                        isCarriageBelowCota
+                          ? 'bg-green-900/20 border-green-500/40 text-green-400'
+                          : 'bg-red-900/20 border-red-500/40 text-red-400'
+                      }`}>
+                        <span className="font-bold uppercase tracking-wider flex items-center gap-1">
+                          {isCarriageBelowCota ? <CheckCircle2 size={11}/> : <AlertTriangle size={11}/>}
+                          {isCarriageBelowCota ? 'Listo para iniciar' : `Baje por debajo de ${cotaInicial} mm`}
+                        </span>
+                        <span className="font-mono font-black">{currentHeightMm} mm</span>
+                      </div>
+                    )}
                     <p className="text-[9px] text-logisnext-slate leading-relaxed mt-1">
                       Retira la carga y ejecuta la prueba. La cámara registrará los tiempos de ciclo.
                     </p>
@@ -1974,10 +2042,6 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                         <Loader2 size={12} className="animate-spin" /> Animación de recogida del palet en curso...
                       </div>
                     )}
-
-
-
-
                   </>
                 )}
               </>
@@ -2077,6 +2141,20 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                   </div>
                 ) : (
                   <>
+                    {/* Panel de cota — condición previa */}
+                    {(cameraTestState === 'standby' || cameraTestState === 'esperando_1500') && (
+                      <div className={`flex items-center justify-between p-2 mt-1 rounded-lg border text-[9px] ${
+                        isCarriageBelowCota
+                          ? 'bg-green-900/20 border-green-500/40 text-green-400'
+                          : 'bg-red-900/20 border-red-500/40 text-red-400'
+                      }`}>
+                        <span className="font-bold uppercase tracking-wider flex items-center gap-1">
+                          {isCarriageBelowCota ? <CheckCircle2 size={11}/> : <AlertTriangle size={11}/>}
+                          {isCarriageBelowCota ? 'Listo para iniciar' : `Baje por debajo de ${cotaInicial} mm`}
+                        </span>
+                        <span className="font-mono font-black">{currentHeightMm} mm</span>
+                      </div>
+                    )}
                     <p className="text-[9px] text-logisnext-slate leading-relaxed mt-1">
                       Carga la carretilla con la capacidad indicada ({erpData.capac_interm_1} kg) y ejecuta la prueba. La cámara registrará los tiempos de ciclo.
                     </p>
@@ -2114,6 +2192,14 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                 <div className="flex items-center gap-2 text-yellow-400 font-bold bg-yellow-400/10 p-2 mt-1 mb-2 rounded border border-yellow-400/20 text-[9px]">
                   <AlertTriangle size={12} /> ESPERANDO: Pulse INICIAR SECUENCIA
                 </div>
+              ) : test5mState === 'esperando_elevacion' ? (
+                <div className="flex items-center justify-between p-2 mt-1 mb-2 rounded-lg border text-[9px] bg-amber-900/20 border-amber-500/40 text-amber-400">
+                  <span className="font-bold uppercase tracking-wider flex items-center gap-1">
+                    <AlertTriangle size={11}/>
+                    {`Eleve por encima de ${cotaInicial} mm`}
+                  </span>
+                  <span className="font-mono font-black">{currentHeightMm} mm</span>
+                </div>
               ) : (
                 <>
                   <div className="flex items-center justify-between bg-[#0a0f12] p-2 rounded-lg border border-[#2e404a] my-2">
@@ -2122,19 +2208,20 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                     </span>
                     <div className="flex items-center gap-2">
                       <span className="text-[9px] font-mono font-bold tracking-wider" style={{
-                        color: test5mState === 'idle' ? '#ef4444' :
+                        color: (test5mState === 'idle' || test5mState === 'esperando_elevacion') ? '#ef4444' :
                           test5mState === 'stabilizing' ? '#3b82f6' :
                             test5mState === 'running' ? '#22c55e' :
                               test5mState === 'ok' ? '#22c55e' : '#ef4444'
                       }}>
-                        {test5mState === 'idle' && 'ESPERANDO: ALTURA >1.5M Y CARGA OK'}
+                        {test5mState === 'idle' && 'ESPERANDO INICIO'}
+                        {test5mState === 'esperando_elevacion' && 'ESPERANDO: ALTURA >1.5M'}
                         {test5mState === 'stabilizing' && 'ESTABILIZANDO (3s)...'}
                         {test5mState === 'running' && 'PRUEBA EN CURSO'}
                         {test5mState === 'ok' && 'PRUEBA OK'}
                         {test5mState === 'nok' && 'PRUEBA NOK'}
                       </span>
                       <CameraLED
-                        state={test5mState === 'idle' ? 'standby' :
+                        state={(test5mState === 'idle' || test5mState === 'esperando_elevacion') ? 'standby' :
                           test5mState === 'stabilizing' ? 'standby' :
                             test5mState === 'running' ? 'active' :
                               test5mState === 'ok' ? 'ok' : 'nok'}

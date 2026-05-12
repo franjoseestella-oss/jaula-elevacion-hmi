@@ -570,36 +570,178 @@ function App() {
         <LeftPanel data={erpData} onErpData={handleBastidorSelect} />
 
         <div className="flex-1 relative flex items-center justify-center bg-black overflow-hidden scanlines">
-          {/* OVERLAY DATOS MULTILOAD (ETAPA 2) */}
+          {/* OVERLAYS GLOBALES DE ESTADO PARA LAS ETAPAS */}
           {step2Overlay && step2Overlay.active && (
-            <div className={`absolute top-10 left-10 z-50 px-8 py-6 rounded-2xl border-4 backdrop-blur-md shadow-2xl transition-colors duration-300 ${
-              step2Overlay.isOk 
+            <div className={`absolute top-10 left-10 z-[70] px-8 py-6 rounded-2xl border-4 backdrop-blur-md shadow-2xl transition-colors duration-300 ${
+              (!step2Overlay.mode && step2Overlay.isOk) || 
+              (step2Overlay.mode === 'test_elev' && step2Overlay.isAbove) || 
+              (step2Overlay.mode === 'test_5m' && step2Overlay.isAbove)
                 ? 'bg-green-600/90 border-green-500 shadow-[0_0_50px_rgba(34,197,94,0.6)]' 
                 : 'bg-[#0a0f12]/90 border-[#2e404a] shadow-[0_0_30px_rgba(0,0,0,0.8)]'
             }`}>
-              <div className="flex flex-col items-start gap-4">
-                {step2Overlay.isOk ? <CheckCircle2 size={64} className="text-white drop-shadow-lg" /> : <AlertTriangle size={64} className="text-blue-400 drop-shadow-lg" />}
-                <div className="flex flex-col gap-2">
-                  <span className="text-3xl font-black tracking-widest text-white drop-shadow-md">
-                    ALTURA ACTUAL: <span className={step2Overlay.isOk ? "text-white" : "text-blue-400"}>{step2Overlay.actual.toFixed(2)} mm</span>
-                  </span>
-                  <div className="flex gap-4 items-center">
-                    <span className="text-lg font-bold tracking-widest text-gray-300">OBJETIVO:</span>
-                    <span className="text-xl font-black text-gray-200 bg-black/30 px-3 py-1 rounded">
-                      {step2Overlay.min} mm <span className="text-gray-400 mx-1">—</span> {step2Overlay.max} mm
+              
+              {!step2Overlay.mode ? (
+                // --- MODO MULTILOAD (ETAPA 1) ---
+                <div className="flex flex-col items-start gap-4">
+                  {step2Overlay.isOk ? <CheckCircle2 size={64} className="text-white drop-shadow-lg" /> : <AlertTriangle size={64} className="text-blue-400 drop-shadow-lg" />}
+                  <div className="flex flex-col gap-2">
+                    <span className="text-3xl font-black tracking-widest text-white drop-shadow-md">
+                      ALTURA ACTUAL: <span className={step2Overlay.isOk ? "text-white" : "text-blue-400"}>{step2Overlay.actual.toFixed(2)} mm</span>
                     </span>
+                    <div className="flex gap-4 items-center">
+                      <span className="text-lg font-bold tracking-widest text-gray-300">OBJETIVO:</span>
+                      <span className="text-xl font-black text-gray-200 bg-black/30 px-3 py-1 rounded">
+                        {step2Overlay.min} mm <span className="text-gray-400 mx-1">—</span> {step2Overlay.max} mm
+                      </span>
+                    </div>
+                    {step2Overlay.isOk ? (
+                      <span className="text-xl font-black tracking-widest text-green-200 mt-2 border-t border-green-500/50 pt-2">
+                        CARRETILLA EN POSICIÓN. PUEDE COLOCAR PEGATINA.
+                      </span>
+                    ) : (
+                      <span className="text-xl font-black tracking-widest text-blue-200 mt-2 border-t border-blue-500/50 pt-2">
+                        PUEDE COLOCAR PEGATINA.
+                      </span>
+                    )}
                   </div>
-                  {step2Overlay.isOk ? (
-                    <span className="text-xl font-black tracking-widest text-green-200 mt-2 border-t border-green-500/50 pt-2">
-                      CARRETILLA EN POSICIÓN. PUEDE COLOCAR PEGATINA.
-                    </span>
-                  ) : (
-                    <span className="text-xl font-black tracking-widest text-blue-200 mt-2 border-t border-blue-500/50 pt-2">
-                      PUEDE COLOCAR PEGATINA.
-                    </span>
-                  )}
                 </div>
-              </div>
+              ) : step2Overlay.mode === 'test_elev' ? (
+                // --- MODO TEST DE ELEVACIÓN (ETAPAS 2 Y 3) ---
+                <div className="flex flex-col items-start gap-4">
+                  <div className="flex items-center gap-3 border-b border-gray-600 pb-2 w-full">
+                    <Camera size={32} className="text-gray-300" />
+                    <span className="text-2xl font-black tracking-widest text-white uppercase">{step2Overlay.testLabel} ({step2Overlay.testDist})</span>
+                  </div>
+                  <div className="flex flex-col gap-2 w-full">
+                    <span className="text-3xl font-black tracking-widest text-white drop-shadow-md">
+                      ALTURA ACTUAL: <span className="text-blue-400">{step2Overlay.actual.toFixed(0)} mm</span>
+                    </span>
+                    <div className="flex gap-4 items-center">
+                      <span className="text-lg font-bold tracking-widest text-gray-300">LÍMITE INICIO:</span>
+                      <span className="text-xl font-black text-gray-200 bg-black/30 px-3 py-1 rounded">
+                        &lt; {step2Overlay.cotaInicial} mm
+                      </span>
+                    </div>
+                    
+                    {/* Mensaje de advertencia si la carretilla está demasiado alta ANTES de empezar */}
+                    {step2Overlay.cameraTestState === 'standby' && step2Overlay.isAbove && (
+                      <div className="mt-2 bg-red-900/40 border border-red-500 p-3 rounded-xl flex items-center gap-3">
+                        <AlertTriangle size={32} className="text-red-400" />
+                        <span className="text-lg font-black text-red-300 tracking-wider">
+                          ¡CARRETILLA DEMASIADO ALTA!<br/>
+                          <span className="text-sm font-bold opacity-80">Baje por debajo de {step2Overlay.cotaInicial} mm para poder iniciar.</span>
+                        </span>
+                      </div>
+                    )}
+                    
+                    {/* Estados de la prueba en curso */}
+                    {step2Overlay.cameraTestState !== 'standby' && (
+                      <div className="mt-2 p-3 bg-blue-900/20 border border-blue-500/40 rounded-xl">
+                        <span className="text-xl font-black tracking-widest text-blue-300 uppercase block mb-2 border-b border-blue-500/30 pb-2">
+                          {step2Overlay.cameraTestState === 'esperando_1500' && 'ESPERANDO INICIO...'}
+                          {step2Overlay.cameraTestState === 'ascenso' && 'ASCENSO EN CURSO'}
+                          {step2Overlay.cameraTestState === 'espera_arriba' && `ESTABILIZANDO (${step2Overlay.waitCountdown}s)`}
+                          {step2Overlay.cameraTestState === 'descenso' && 'DESCENSO EN CURSO'}
+                          {step2Overlay.cameraTestState === 'ok' && <span className="text-green-400">PRUEBA COMPLETADA</span>}
+                          {step2Overlay.cameraTestState === 'nok' && <span className="text-red-400">PRUEBA FALLIDA</span>}
+                        </span>
+                        
+                        {testHUDOverlay && (
+                          <div className="flex justify-around items-center w-full mt-3">
+                            <div className={`flex flex-col items-center px-6 py-2 rounded-lg border-2 ${step2Overlay.cameraTestState === 'ascenso' ? 'border-blue-400 bg-blue-900/40 animate-pulse shadow-[0_0_20px_rgba(59,130,246,0.3)]' : 'border-gray-600 bg-gray-800/50 opacity-80'}`}>
+                              <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">↑ Ascenso</span>
+                              <span className={`text-4xl font-mono font-black ${step2Overlay.cameraTestState === 'ascenso' ? 'text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]' : 'text-gray-300'}`}>{testHUDOverlay.realElev ?? '0.00'}s</span>
+                            </div>
+                            
+                            <div className="text-blue-500/50 mx-2 text-3xl font-black">|</div>
+                            
+                            {/* ESTABILIZANDO */}
+                            {step2Overlay.cameraTestState === 'espera_arriba' && (
+                              <>
+                                <div className="flex flex-col items-center px-8 py-2 rounded-lg border-2 border-yellow-400 bg-yellow-900/40 animate-pulse shadow-[0_0_30px_rgba(250,204,21,0.4)] mx-2">
+                                  <span className="text-sm font-bold text-yellow-400 uppercase tracking-widest">Estabilizando</span>
+                                  <span className="text-5xl font-mono font-black text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.9)]">{step2Overlay.waitCountdown ?? 0}s</span>
+                                </div>
+                                <div className="text-blue-500/50 mx-2 text-3xl font-black">|</div>
+                              </>
+                            )}
+
+                            <div className={`flex flex-col items-center px-6 py-2 rounded-lg border-2 ${step2Overlay.cameraTestState === 'descenso' ? 'border-blue-400 bg-blue-900/40 animate-pulse shadow-[0_0_20px_rgba(59,130,246,0.3)]' : 'border-gray-600 bg-gray-800/50 opacity-80'}`}>
+                              <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">↓ Descenso</span>
+                              <span className={`text-4xl font-mono font-black ${step2Overlay.cameraTestState === 'descenso' ? 'text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]' : 'text-gray-300'}`}>{testHUDOverlay.realDesc ?? '0.00'}s</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : step2Overlay.mode === 'test_5m' ? (
+                // --- MODO TEST 5 MINUTOS (ETAPA 4) ---
+                <div className="flex flex-col items-start gap-4">
+                  <div className="flex items-center gap-3 border-b border-gray-600 pb-2 w-full">
+                    <AlertTriangle size={32} className="text-yellow-400" />
+                    <span className="text-2xl font-black tracking-widest text-white uppercase">TEST DE ESTABILIDAD (5 MIN)</span>
+                  </div>
+                  <div className="flex flex-col gap-2 w-full">
+                    <span className="text-3xl font-black tracking-widest text-white drop-shadow-md">
+                      ALTURA ACTUAL: <span className="text-blue-400">{step2Overlay.actual.toFixed(0)} mm</span>
+                    </span>
+                    <div className="flex gap-4 items-center">
+                      <span className="text-lg font-bold tracking-widest text-gray-300">LÍMITE INICIO:</span>
+                      <span className="text-xl font-black text-gray-200 bg-black/30 px-3 py-1 rounded">
+                        &lt; {step2Overlay.cotaInicial} mm
+                      </span>
+                    </div>
+
+                    {/* Mensaje de advertencia si la carretilla está demasiado alta ANTES de empezar */}
+                    {step2Overlay.test5mState === 'idle' && step2Overlay.isAbove && (
+                      <div className="mt-2 bg-red-900/40 border border-red-500 p-3 rounded-xl flex items-center gap-3">
+                        <AlertTriangle size={32} className="text-red-400" />
+                        <span className="text-lg font-black text-red-300 tracking-wider">
+                          ¡CARRETILLA DEMASIADO ALTA!<br/>
+                          <span className="text-sm font-bold opacity-80">Baje por debajo de {step2Overlay.cotaInicial} mm para poder iniciar.</span>
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Esperando a que el operador eleve por encima de cota */}
+                    {step2Overlay.test5mState === 'esperando_elevacion' && !step2Overlay.isAbove && (
+                      <div className="mt-2 bg-amber-900/40 border border-amber-500 p-3 rounded-xl flex items-center gap-3">
+                        <AlertTriangle size={32} className="text-amber-400" />
+                        <span className="text-lg font-black text-amber-300 tracking-wider">
+                          ¡CARRETILLA DEMASIADO BAJA!<br/>
+                          <span className="text-sm font-bold opacity-80">Eleve por encima de {step2Overlay.cotaInicial} mm para comenzar a estabilizar.</span>
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Estados de la prueba */}
+                    {(step2Overlay.test5mState !== 'idle' && step2Overlay.test5mState !== 'esperando_elevacion') && (
+                      <div className="mt-2 p-3 bg-[#1d2930] border border-[#2e404a] rounded-xl flex items-center justify-between gap-6">
+                        <span className={`text-xl font-black tracking-widest uppercase ${
+                          step2Overlay.test5mState === 'nok' ? 'text-red-400' : 'text-blue-300'
+                        }`}>
+                          {step2Overlay.test5mState === 'stabilizing' && 'ESTABILIZANDO...'}
+                          {step2Overlay.test5mState === 'running' && 'PRUEBA EN CURSO'}
+                          {step2Overlay.test5mState === 'ok' && <span className="text-green-400">PRUEBA SUPERADA</span>}
+                          {step2Overlay.test5mState === 'nok' && 'PRUEBA FALLIDA'}
+                        </span>
+                        {(step2Overlay.test5mState === 'running' || step2Overlay.test5mState === 'ok' || step2Overlay.test5mState === 'nok') && (
+                          <span className={`text-4xl font-mono font-black tracking-wider ${
+                            step2Overlay.test5mState === 'nok' ? 'text-red-500' :
+                            step2Overlay.timer5min <= 30 && step2Overlay.test5mState === 'running' ? 'text-red-400 animate-pulse' :
+                            step2Overlay.timer5min <= 60 && step2Overlay.test5mState === 'running' ? 'text-yellow-400' :
+                            'text-logisnext-magenta'
+                          }`}>
+                            {`${Math.floor(step2Overlay.timer5min / 60).toString().padStart(2, '0')}:${(step2Overlay.timer5min % 60).toString().padStart(2, '0')}`}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -878,7 +1020,7 @@ function App() {
 
           {/* ── CUENTA ATRÁS GRANDE — centrada en la vista 3D ── */}
           {testHUDOverlay?.cameraTestState === 'espera_arriba' && testHUDOverlay?.waitCountdown != null && (
-            <div className="absolute inset-0 z-30 flex flex-col items-center justify-center pointer-events-none">
+            <div className="absolute inset-0 z-[80] flex flex-col items-center justify-center pointer-events-none">
               <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" />
               <div className="relative flex flex-col items-center gap-2">
                 {testHUDOverlay.waitCountdown > 0 ? (
@@ -930,11 +1072,12 @@ function App() {
           )}
 
           {/* ── MODAL NOK — ¿Repetir la prueba? ── */}
-          {testHUDOverlay?.cameraTestState === 'nok' && (() => {
+          {(testHUDOverlay?.cameraTestState === 'nok' || testHUDOverlay?.test5mState === 'nok') && (() => {
             const alarm = testHUDOverlay?.testAlarm;
             const isIncomplete = alarm === 'ascenso_incompleto' || alarm === 'descenso_incompleto';
             const isAscIncomplete = alarm === 'ascenso_incompleto';
             const isLoadError = typeof alarm === 'string' && alarm.startsWith('Carga incorrecta');
+            const is5mError = testHUDOverlay?.is5mTest;
 
             return (
               <div className="absolute inset-0 z-50 flex items-center justify-center">
@@ -1012,6 +1155,14 @@ function App() {
                           </div>
                         </div>
                       </>
+                    ) : is5mError ? (
+                      <>
+                        <span className="text-red-400 text-sm font-black uppercase tracking-[0.25em]">CAÍDA EXCESIVA</span>
+                        <h2 className="text-white text-3xl font-black tracking-wide">¿Repetir la prueba?</h2>
+                        <p className="text-gray-400 text-sm font-medium">
+                          La altura ha descendido por debajo de la tolerancia configurada ({testHUDOverlay.subtitle}).
+                        </p>
+                      </>
                     ) : (
                       <>
                         <span className="text-red-400 text-sm font-black uppercase tracking-[0.25em]">RESULTADO FUERA DE TOLERANCIA</span>
@@ -1022,7 +1173,7 @@ function App() {
                   </div>
 
                   {/* Datos fallo — solo para fallo de tolerancia */}
-                  {!isIncomplete && !isLoadError && (
+                  {!isIncomplete && !isLoadError && !is5mError && (
                     <div className="w-full grid grid-cols-2 gap-3">
                       {[
                         { label: '↑ Ascenso', val: testHUDOverlay.realElev, min: testHUDOverlay.minElev, max: testHUDOverlay.maxElev, raw: testHUDOverlay._rawElev, rMin: testHUDOverlay._minElev, rMax: testHUDOverlay._maxElev },
