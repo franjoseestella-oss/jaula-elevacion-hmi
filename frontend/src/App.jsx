@@ -471,7 +471,7 @@ function App() {
             is_force: isSimulation 
           })
         }).catch(err => console.error('Error parpadeo luces:', err));
-      }, 500); // 500ms on, 500ms off
+      }, 1000); // 1000ms on, 1000ms off
     } else {
       // Apagamos las luces si salimos del modo NOK
       fetch('http://localhost:8001/plc/write', {

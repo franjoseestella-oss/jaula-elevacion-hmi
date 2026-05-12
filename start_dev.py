@@ -20,7 +20,7 @@ def main():
         python_exe = "python" # Fallback to system python
 
     backend_process = subprocess.Popen(
-        [python_exe, "launcher.py"],
+        [python_exe, "launcher.py", "--no-browser"],
         cwd=backend_dir,
         shell=True
     )

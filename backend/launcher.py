@@ -56,8 +56,9 @@ if __name__ == "__main__":
     server_thread.start()
 
     # Abrir navegador tras un breve delay
-    browser_thread = threading.Thread(target=open_browser, daemon=True)
-    browser_thread.start()
+    if "--no-browser" not in sys.argv:
+        browser_thread = threading.Thread(target=open_browser, daemon=True)
+        browser_thread.start()
 
     # Mantener el proceso principal vivo
     try:
