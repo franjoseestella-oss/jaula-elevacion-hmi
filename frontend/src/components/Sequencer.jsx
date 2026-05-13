@@ -304,10 +304,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
       if (cameraTestState === 'ascenso') {
         // In real mode AND sim mode, test finishes when h reaches target.
-        const isAscentFinished = h >= cotaM + testDist - 0.05;
+        // Aumentamos tolerancia a 150mm (0.15) para absorber el desfase de lectura del PLC
+        const isAscentFinished = h >= cotaM + testDist - 0.15;
         
         if (!isAscentFinished && h > 0.1 && h < cotaM + testDist) {
-          if (Date.now() - lastHChangeTime > 2000) {
+          // Aumentamos el temporizador de parada incompleta a 5000ms para evitar falsos NOK por lag del OPC UA
+          if (Date.now() - lastHChangeTime > 5000) {
             setTestAlarm('ascenso_incompleto');
             setCameraTestState('nok');
             return;
@@ -345,7 +347,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         } else {
           // 3 segundos completados — mostrar GO! hasta que el operario baje
           setWaitCountdown(0);
-          if (h < hTopReach - 0.05) {
+          if (h < hTopReach - 0.15) {
             setWaitCountdown(null);
             setCameraTestState('descenso');
             tStartDesc = null; // resetear para inicializar al entrar en descenso
@@ -353,10 +355,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           }
         }
       } else if (cameraTestState === 'descenso') {
-        const isDescentFinished = h <= cotaM + 0.05;
+        // Aumentamos tolerancia a 150mm (0.15) para absorber el desfase de lectura del PLC
+        const isDescentFinished = h <= cotaM + 0.15;
 
-        if (!isDescentFinished && h < cotaM + testDist - 0.05 && h > cotaM + 0.05) {
-          if (Date.now() - lastHChangeTime > 2000) {
+        if (!isDescentFinished && h < cotaM + testDist - 0.15 && h > cotaM + 0.15) {
+          // Aumentamos el temporizador de parada incompleta a 5000ms para evitar falsos NOK por lag
+          if (Date.now() - lastHChangeTime > 5000) {
             setTestAlarm('descenso_incompleto');
             setCameraTestState('nok');
             return;
