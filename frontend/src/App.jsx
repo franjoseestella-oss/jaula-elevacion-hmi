@@ -140,13 +140,20 @@ function App() {
   
   // Procesar flancos de subida de las alarmas configuradas (IN ALARMAS)
   useEffect(() => {
-    if (!telemetry?.plc || !alarmConfig?.in) return;
-    
-    const currentActive = alarmConfig.in.filter(a => telemetry.plc[a.plcVar]).map(a => a.plcVar);
+    const currentActive = [];
 
-    // Inject manual mode alarm if not automatic (and not in simulation)
-    if (!isSimulation && telemetry?.opcua_connected && !telemetry.mappedPlc?.Ob_Estado_Automatico && !telemetry.plc?.Ob_Estado_Automatico) {
-      currentActive.push('SYS_MODO_MANUAL');
+    if (!networkStatus.opc || telemetry?.opcua_connected === false) {
+      currentActive.push('SYS_PLC_DISCONNECTED');
+    }
+
+    if (telemetry?.plc && alarmConfig?.in) {
+      const plcActive = alarmConfig.in.filter(a => telemetry.plc[a.plcVar]).map(a => a.plcVar);
+      currentActive.push(...plcActive);
+
+      // Inject manual mode alarm if not automatic (and not in simulation)
+      if (!isSimulation && telemetry?.opcua_connected && !telemetry.mappedPlc?.Ob_Estado_Automatico && !telemetry.plc?.Ob_Estado_Automatico) {
+        currentActive.push('SYS_MODO_MANUAL');
+      }
     }
 
     const newAlarms = currentActive.filter(id => !activePlcAlarmsRef.current.includes(id));
@@ -156,6 +163,18 @@ function App() {
       const now = new Date();
       
       const newAlarmObjects = newAlarms.map(id => {
+        if (id === 'SYS_PLC_DISCONNECTED') {
+          return {
+            id: `SYS_PLC_DISCONNECTED-${now.getTime()}`,
+            plcVar: 'SYS_PLC_DISCONNECTED',
+            description: '[ALARMA CRÍTICA] Sin conexión con PLC (OPC UA).',
+            type: 'Alarma',
+            timestamp: now.toLocaleTimeString(),
+            startTime: now.getTime(),
+            endTime: null,
+            duration: 'Activa'
+          };
+        }
         if (id === 'SYS_MODO_MANUAL') {
           return {
             id: `SYS_MODO_MANUAL-${now.getTime()}`,
@@ -169,16 +188,16 @@ function App() {
           };
         }
 
-        const config = alarmConfig.in.find(a => a.plcVar === id);
+        const config = alarmConfig?.in?.find(a => a.plcVar === id);
         let desc = `[${id}]`;
-        if (config.desc) desc += ` ${config.desc}`;
-        if (config.remedy) desc += ` (Remedio: ${config.remedy})`;
+        if (config && config.desc) desc += ` ${config.desc}`;
+        if (config && config.remedy) desc += ` (Remedio: ${config.remedy})`;
         
         return {
           id: `${id}-${now.getTime()}`,
           plcVar: id,
           description: desc,
-          type: config.type || 'Alarma',
+          type: config?.type || 'Alarma',
           timestamp: now.toLocaleTimeString(),
           startTime: now.getTime(),
           endTime: null,
@@ -209,19 +228,31 @@ function App() {
     }
     
     activePlcAlarmsRef.current = currentActive;
-  }, [telemetry?.plc, alarmConfig?.in]);
+  }, [telemetry?.plc, telemetry?.opcua_connected, alarmConfig?.in, networkStatus.opc, isSimulation, telemetry?.mappedPlc]);
 
   const activeAlarmsList = React.useMemo(() => {
-    if (!telemetry?.plc || !alarmConfig?.in) return [];
-    const list = alarmConfig.in.filter(a => telemetry.plc[a.plcVar]).map(a => {
-      const typeStr = (a.type || 'Alarma').toUpperCase();
-      let desc = `[${typeStr}] ${a.plcVar}`;
-      if (a.desc) desc += `: ${a.desc}`;
-      if (a.remedy) desc += ` (Remedio: ${a.remedy})`;
-      return { id: a.plcVar, description: desc, type: a.type || 'Alarma' };
-    });
+    const list = [];
 
-    if (telemetry?.opcua_connected && !telemetry.mappedPlc?.Ob_Estado_Automatico && !telemetry.plc?.Ob_Estado_Automatico) {
+    if (!networkStatus.opc || telemetry?.opcua_connected === false) {
+      list.push({
+        id: 'SYS_PLC_DISCONNECTED',
+        description: '[ALARMA CRÍTICA] Sin conexión con PLC (OPC UA).',
+        type: 'Alarma'
+      });
+    }
+
+    if (telemetry?.plc && alarmConfig?.in) {
+      const plcList = alarmConfig.in.filter(a => telemetry.plc[a.plcVar]).map(a => {
+        const typeStr = (a.type || 'Alarma').toUpperCase();
+        let desc = `[${typeStr}] ${a.plcVar}`;
+        if (a.desc) desc += `: ${a.desc}`;
+        if (a.remedy) desc += ` (Remedio: ${a.remedy})`;
+        return { id: a.plcVar, description: desc, type: a.type || 'Alarma' };
+      });
+      list.push(...plcList);
+    }
+
+    if (!isSimulation && telemetry?.opcua_connected && !telemetry.mappedPlc?.Ob_Estado_Automatico && !telemetry.plc?.Ob_Estado_Automatico) {
       list.push({ 
         id: 'SYS_MODO_MANUAL', 
         description: '[ADVERTENCIA] Máquina en estado manual, no cumples condiciones iniciales', 
@@ -230,7 +261,13 @@ function App() {
     }
 
     return list;
-  }, [telemetry?.plc, telemetry?.mappedPlc, telemetry?.opcua_connected, alarmConfig?.in]);
+  }, [telemetry?.plc, telemetry?.mappedPlc, telemetry?.opcua_connected, alarmConfig?.in, networkStatus.opc, isSimulation]);
+
+  useEffect(() => {
+    if (!networkStatus.opc || telemetry?.opcua_connected === false) {
+      setShowActiveAlarms(true);
+    }
+  }, [networkStatus.opc, telemetry?.opcua_connected]);
 
   // Reset de alarmas: solo pulso al PLC, se conserva el histórico
   const handleResetAlarms = useCallback(() => {
@@ -241,9 +278,16 @@ function App() {
     // tras 1.5 segundos forzamos que se vuelva a detectar como "nueva" 
     // para que vuelva a "sacar el alarmero".
     setTimeout(() => {
-      activePlcAlarmsRef.current = [];
+      activePlcAlarmsRef.current = activePlcAlarmsRef.current.filter(id => id.startsWith('SYS_'));
     }, 1500);
   }, []);
+
+  // Auto-cierre del modal de alarmas activas si la lista se vacía
+  useEffect(() => {
+    if (showActiveAlarms && activeAlarmsList.length === 0) {
+      setShowActiveAlarms(false);
+    }
+  }, [activeAlarmsList.length, showActiveAlarms]);
 
   const handleExportAlarms = useCallback(() => {
     if (alarms.length === 0) return;
@@ -746,7 +790,7 @@ function App() {
           )}
 
           {/* ALARMS ICON */}
-          {hasUnreadAlarms && (
+          {(hasUnreadAlarms || activeAlarmsList.length > 0) && !showActiveAlarms && (
             <button 
               onClick={() => { setShowActiveAlarms(true); setHasUnreadAlarms(false); }}
               className="absolute top-48 right-12 z-50 bg-red-600/90 border-4 border-red-500 text-white p-8 rounded-full shadow-[0_0_50px_rgba(220,38,38,0.8)] hover:scale-110 active:scale-95 transition-all animate-pulse"
@@ -764,7 +808,11 @@ function App() {
                     <span className="text-base font-black text-red-500 uppercase tracking-widest drop-shadow-md">Alarmas Activas</span>
                  </div>
                  <div className="flex items-center gap-3">
-                   <button onClick={() => { handleResetAlarms(); setShowActiveAlarms(false); }} className="text-white text-xs font-bold uppercase tracking-wider bg-red-600/80 border border-red-500 hover:bg-red-500 px-3 py-1.5 rounded-lg shadow-sm transition-colors">
+                   <button onClick={() => { 
+                       handleResetAlarms(); 
+                       // No cerramos el modal manualmente. Se cerrará solo si activeAlarmsList se queda vacío.
+                     }} 
+                     className="text-white text-xs font-bold uppercase tracking-wider bg-red-600/80 border border-red-500 hover:bg-red-500 px-3 py-1.5 rounded-lg shadow-sm transition-colors">
                      Reset Alarmas
                    </button>
                    <button onClick={() => setShowActiveAlarms(false)} className="text-gray-400 hover:text-white bg-[#1d2930] p-2 rounded-lg hover:bg-red-600 transition-colors"><X size={20}/></button>
