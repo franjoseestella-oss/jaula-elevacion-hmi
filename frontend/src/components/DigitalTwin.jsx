@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Grid, Environment, RoundedBox, Text } from '@react-three/drei';
 import * as THREE from 'three';
 
@@ -833,15 +833,35 @@ const ForkliftAssembly = ({ currentStep, erpData, distance, palletState, onPalle
   );
 };
 
-const CameraAnimator = ({ zoomToStickers, zoomOutMultiload }) => {
+const CameraAnimator = ({ zoomToStickers, zoomOutMultiload, currentStep }) => {
+  const isAnimating = useRef(false);
+  const targetState = useRef({ zoomToStickers, zoomOutMultiload });
+  const { gl } = useThree();
+
+  useEffect(() => {
+    isAnimating.current = true;
+    window.cancelCameraAnim = false;
+    targetState.current = { zoomToStickers, zoomOutMultiload };
+    const timeout = setTimeout(() => { isAnimating.current = false; }, 2000);
+    return () => clearTimeout(timeout);
+  }, [zoomToStickers, zoomOutMultiload, currentStep]);
+
+  useEffect(() => {
+    const handleInteract = () => { window.cancelCameraAnim = true; };
+    const el = gl.domElement;
+    el.addEventListener('pointerdown', handleInteract);
+    el.addEventListener('wheel', handleInteract);
+    return () => {
+      el.removeEventListener('pointerdown', handleInteract);
+      el.removeEventListener('wheel', handleInteract);
+    };
+  }, [gl]);
+
   useFrame((state, delta) => {
-    if (zoomToStickers && state.controls) {
-      // Las pegatinas están en la cara trasera (Z=-0.09) a Y=1.5m
-      // Cámara desde delante de la carretilla mirando hacia las pegatinas traseras
-      state.camera.position.lerp(new THREE.Vector3(-0.2, 1.5, -2.0), delta * 2);
-      state.controls.target.lerp(new THREE.Vector3(-0.2, 1.5, -0.09), delta * 2);
-    } else if (zoomOutMultiload && state.controls) {
-      // Alejar la cámara para ver la jaula y la carretilla
+    if (window.cancelCameraAnim) isAnimating.current = false;
+    if (!isAnimating.current) return;
+    if (targetState.current.zoomOutMultiload && state.controls) {
+      // Alejar la cámara para ver la jaula y la carretilla (vista general para etapas 1 a 4)
       state.camera.position.lerp(new THREE.Vector3(7, 4, 8), delta * 2);
       state.controls.target.lerp(new THREE.Vector3(0, 2.5, 0), delta * 2);
     }
@@ -860,7 +880,7 @@ const DigitalTwin = ({ currentStep, distance, plcState, palletState, erpData, on
         
         <CageAssembly plcState={plcState} currentStep={currentStep} erpData={erpData} />
         <ForkliftAssembly distance={distance} palletState={palletState} erpData={erpData} currentStep={currentStep} onPalletAnimComplete={onPalletAnimComplete} showStickers={showStickers} zoomToStickers={zoomToStickers} />
-        <CameraAnimator zoomToStickers={zoomToStickers} zoomOutMultiload={zoomOutMultiload} />
+        <CameraAnimator zoomToStickers={zoomToStickers} zoomOutMultiload={zoomOutMultiload} currentStep={currentStep} />
         
         {/* Suelo Industrial */}
         <Grid 
@@ -879,6 +899,7 @@ const DigitalTwin = ({ currentStep, distance, plcState, palletState, erpData, on
           minDistance={3}
           maxDistance={15}
           enableDamping
+          onStart={() => { window.cancelCameraAnim = true; }}
         />
       </Canvas>
     </div>

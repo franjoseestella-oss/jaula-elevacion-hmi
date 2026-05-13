@@ -616,7 +616,7 @@ function App() {
         <div className="flex-1 relative flex items-center justify-center bg-black overflow-hidden scanlines">
           {/* OVERLAYS GLOBALES DE ESTADO PARA LAS ETAPAS */}
           {step2Overlay && step2Overlay.active && (
-            <div className={`absolute top-10 left-10 z-[70] px-8 py-6 rounded-2xl border-4 backdrop-blur-md shadow-2xl transition-colors duration-300 ${
+            <div className={`absolute top-[45%] left-10 z-[70] px-8 py-6 rounded-2xl border-4 backdrop-blur-md shadow-2xl transition-colors duration-300 ${
               (!step2Overlay.mode && step2Overlay.isOk) || 
               (step2Overlay.mode === 'test_elev' && step2Overlay.isAbove) || 
               (step2Overlay.mode === 'test_5m' && step2Overlay.isAbove)
@@ -734,7 +734,7 @@ function App() {
                     <div className="flex gap-4 items-center">
                       <span className="text-lg font-bold tracking-widest text-gray-300">LÍMITE INICIO:</span>
                       <span className="text-xl font-black text-gray-200 bg-black/30 px-3 py-1 rounded">
-                        &lt; {step2Overlay.cotaInicial} mm
+                        &gt; {step2Overlay.cotaInicial} mm
                       </span>
                     </div>
 
@@ -948,7 +948,7 @@ function App() {
           )}
 
           {/* OVERLAY DE COMPARATIVA DE TIEMPOS Y CÁMARA (Para pasos 3 y 4) */}
-          {testHUDOverlay && (
+          {testHUDOverlay && !testHUDOverlay.is5mTest && (
             <div className="absolute top-1/2 left-10 -translate-y-1/2 z-40 flex flex-col gap-3">
               <div className="glass-panel p-5 rounded-2xl border border-[#2e404a] shadow-[0_20px_50px_rgba(0,0,0,0.5)] w-[22rem] backdrop-blur-xl">
                 {/* Header */}
@@ -1128,7 +1128,7 @@ function App() {
             const is5mError = testHUDOverlay?.is5mTest;
 
             return (
-              <div className="absolute inset-0 z-50 flex items-center justify-center">
+              <div className="absolute inset-0 z-[80] flex items-center justify-center">
                 {/* Backdrop: pointer-events-none para no bloquear los botones de simulación */}
                 <div className="absolute inset-0 bg-black/60 backdrop-blur-[3px] pointer-events-none" />
                 {/* Dialog */}

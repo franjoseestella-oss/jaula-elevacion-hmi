@@ -306,7 +306,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         // In real mode AND sim mode, test finishes when h reaches target.
         const isAscentFinished = h >= cotaM + testDist - 0.05;
         
-        if (!isAscentFinished && isSimulation && h > 0.1 && h < cotaM + testDist) {
+        if (!isAscentFinished && h > 0.1 && h < cotaM + testDist) {
           if (Date.now() - lastHChangeTime > 2000) {
             setTestAlarm('ascenso_incompleto');
             setCameraTestState('nok');
@@ -355,7 +355,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       } else if (cameraTestState === 'descenso') {
         const isDescentFinished = h <= cotaM + 0.05;
 
-        if (!isDescentFinished && isSimulation && h < cotaM + testDist - 0.05 && h > cotaM + 0.05) {
+        if (!isDescentFinished && h < cotaM + testDist - 0.05 && h > cotaM + 0.05) {
           if (Date.now() - lastHChangeTime > 2000) {
             setTestAlarm('descenso_incompleto');
             setCameraTestState('nok');
@@ -773,7 +773,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           }
 
           if (test5mState === 'nok') {
-            setTest5mState('idle');
+            setTest5mState('esperando_elevacion');
             setTimer5min(null);
             setTestAlarm(null);
             return;
@@ -1226,9 +1226,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         } else if (cameraTestState === 'ok') markOk(3);
       } else if (statuses[4] === STEP_STATUS.ACTIVE) {
         if (test5mState === 'nok') {
-          setTest5mState('standby');
+          setTest5mState('esperando_elevacion');
           setTestAlarm(null);
-          setTest5mCountdown(null);
+          setTimer5min(null);
           return;
         }
         if (test5mState === 'ok') markOk(4);
@@ -1533,19 +1533,19 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         const toleranceM = test5mConfig.tolerancia / 1000; // 10mm = 0.01m
 
         if (prevState === 'esperando_elevacion') {
-          // cotaInicial está en mm, currentHeight en metros. 
-          // Esperamos que esté por encima de cotaInicial convertida a metros.
-          if (currentHeight >= cotaInicial / 1000 && currentLoad === targetLoad) {
+          // cotaInicial está en mm, currentHeight en mm. 
+          // Esperamos que esté por encima de cotaInicial.
+          if (currentHeight >= cotaInicial && currentLoad === targetLoad) {
             nextState = 'stabilizing';
             stage5StableStartRef.current = Date.now();
             stage5InitialHeightRef.current = currentHeight;
           }
         } else if (prevState === 'stabilizing') {
-          if (currentHeight < cotaInicial / 1000) {
+          if (currentHeight < cotaInicial) {
             nextState = 'idle';
           } else {
-            // Si fluctúa mucho (> 10mm), reseteamos estabilización
-            if (Math.abs(currentHeight - stage5InitialHeightRef.current) > toleranceM) {
+            // Si fluctúa mucho (> 30mm), reseteamos estabilización
+            if (Math.abs(currentHeight - stage5InitialHeightRef.current) > 30) {
               stage5StableStartRef.current = Date.now();
               stage5InitialHeightRef.current = currentHeight;
             }
@@ -1562,10 +1562,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           const remaining = Math.max(0, test5mConfig.duration - elapsedSeconds);
           setTimer5min(remaining);
 
-          // Comprobar variación > tolerancia requerida de 10 mm
-          if (Math.abs(currentHeight - stage5InitialHeightRef.current) > toleranceM) {
+          // Comprobar variación > tolerancia requerida (test5mConfig.tolerancia) en mm
+          if (Math.abs(currentHeight - stage5InitialHeightRef.current) > test5mConfig.tolerancia) {
             nextState = 'nok';
-            setTestAlarm(`Caída de cota excedida. Variación: ${(Math.abs(currentHeight - stage5InitialHeightRef.current) * 1000).toFixed(2)} mm (> ${test5mConfig.tolerancia} mm)`);
+            setTestAlarm(`Caída de cota excedida. Variación: ${Math.abs(currentHeight - stage5InitialHeightRef.current).toFixed(2)} mm (> ${test5mConfig.tolerancia} mm)`);
             stageDataRef.current[5] = {
               ...stageDataRef.current[5],
               altura_final: currentHeight,
@@ -1599,7 +1599,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     : null;
 
   const handleRepetir5m = () => {
-    setTest5mState('idle');
+    setTest5mState('esperando_elevacion');
     setTimer5min(null);
     setTestAlarm(null);
   };
