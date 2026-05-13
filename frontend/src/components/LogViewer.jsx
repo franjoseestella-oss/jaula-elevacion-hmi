@@ -153,7 +153,7 @@ const LogViewer = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-logisnext-darkslate/95 backdrop-blur-sm p-8">
+    <div className="fixed inset-0 z-[150] flex flex-col bg-logisnext-darkslate/95 backdrop-blur-sm p-8">
       <div className="flex-1 bg-[#0a0f12] rounded-2xl border border-[#2e404a] shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="h-16 bg-gradient-to-r from-[#151f25] to-[#11191e] border-b border-[#2e404a] flex items-center justify-between px-6 shrink-0 relative">

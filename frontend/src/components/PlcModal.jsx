@@ -540,12 +540,12 @@ const PlcModal = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-[150] flex items-center justify-center"
       style={{ background: "rgba(5,10,14,0.85)", backdropFilter: "blur(5px)" }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       {scanModal.isOpen && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+        <div className="absolute inset-0 z-[150] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
           <div className="bg-[#11191e] border border-[#2e404a] rounded-xl w-full max-w-md shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="p-4 border-b border-[#2e404a] flex justify-between items-center bg-[#151f25]">
               <h3 className="text-white font-bold uppercase tracking-widest flex items-center gap-2 text-sm">

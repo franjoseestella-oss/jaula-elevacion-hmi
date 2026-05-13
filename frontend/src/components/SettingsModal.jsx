@@ -12,6 +12,7 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
   const [testResult, setTestResult] = useState(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isSimulation, setIsSimulation] = useState(true);
+  const [cameraCoords, setCameraCoords] = useState(null);
 
   // Archivos 3D
   const [objFile, setObjFile] = useState(null);
@@ -77,7 +78,7 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-[150] flex items-center justify-center"
       style={{ background: 'rgba(5,10,14,0.85)', backdropFilter: 'blur(5px)' }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
@@ -149,6 +150,17 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
             >
               <Box size={14} />
               Visor 3D
+            </button>
+            <button
+              onClick={() => setActiveTab('camara')}
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                activeTab === 'camara'
+                  ? 'bg-logisnext-magenta/20 text-logisnext-magenta border border-logisnext-magenta/30'
+                  : 'text-logisnext-slate hover:bg-[#1d2930] hover:text-white border border-transparent'
+              }`}
+            >
+              <Lightbulb size={14} />
+              Cámara 3D
             </button>
           </div>
 
@@ -384,6 +396,53 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
 
                 <div className="flex-1 relative min-h-[450px]">
                   <ObjViewer objFile={objFile} mtlFile={mtlFile} />
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'camara' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-logisnext-magenta/50 pb-1 inline-block">
+                    Cámara Recreación (Debug)
+                  </h3>
+                </div>
+                <div className="bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-5 space-y-6">
+                  <p className="text-xs text-logisnext-lightslate font-medium">
+                    Mueve la cámara en el entorno 3D a la posición deseada, abre este menú y pulsa el botón para obtener las coordenadas exactas. Así podrás compartirlas para fijar la posición.
+                  </p>
+                  <button
+                    onClick={() => {
+                      if (window.__cameraPos && window.__cameraTarget) {
+                        setCameraCoords({
+                          pos: window.__cameraPos,
+                          target: window.__cameraTarget
+                        });
+                      } else {
+                        alert("Mueve un poco la cámara en la pantalla principal primero para registrar sus coordenadas.");
+                      }
+                    }}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors"
+                  >
+                    Obtener Posición Actual
+                  </button>
+
+                  {cameraCoords && (
+                    <div className="mt-4 p-4 bg-black/50 border border-blue-500/30 rounded-lg">
+                      <p className="text-xs text-blue-400 font-mono mb-2">/* Copia esto y mándaselo al asistente */</p>
+                      <pre className="text-xs text-white font-mono break-all whitespace-pre-wrap">
+{`Camera Position:
+X: ${cameraCoords.pos.x.toFixed(3)}
+Y: ${cameraCoords.pos.y.toFixed(3)}
+Z: ${cameraCoords.pos.z.toFixed(3)}
+
+Camera Target (Mira hacia):
+X: ${cameraCoords.target.x.toFixed(3)}
+Y: ${cameraCoords.target.y.toFixed(3)}
+Z: ${cameraCoords.target.z.toFixed(3)}`}
+                      </pre>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

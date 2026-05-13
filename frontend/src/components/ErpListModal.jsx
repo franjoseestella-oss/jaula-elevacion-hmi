@@ -57,7 +57,7 @@ const DetallePanel = ({ item, onClose, onVincular }) => {
   );
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center"
+    <div className="fixed inset-0 z-[160] flex items-center justify-center"
       style={{ background: 'rgba(5,10,14,0.75)', backdropFilter: 'blur(4px)' }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
@@ -231,7 +231,7 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
     <>
       {/* Overlay + Panel */}
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center"
+        className="fixed inset-0 z-[150] flex items-center justify-center"
         style={{ background: 'rgba(5,10,14,0.88)', backdropFilter: 'blur(6px)' }}
         onClick={(e) => e.target === e.currentTarget && onClose()}
       >

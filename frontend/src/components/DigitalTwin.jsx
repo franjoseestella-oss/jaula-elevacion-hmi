@@ -858,12 +858,22 @@ const CameraAnimator = ({ zoomToStickers, zoomOutMultiload, currentStep }) => {
   }, [gl]);
 
   useFrame((state, delta) => {
+    // Siempre guardar la posición actual para la pestaña Debug en Ajustes
+    if (state.controls) {
+      window.__cameraPos = { x: state.camera.position.x, y: state.camera.position.y, z: state.camera.position.z };
+      window.__cameraTarget = { x: state.controls.target.x, y: state.controls.target.y, z: state.controls.target.z };
+    }
+
     if (window.cancelCameraAnim) isAnimating.current = false;
     if (!isAnimating.current) return;
-    if (targetState.current.zoomOutMultiload && state.controls) {
-      // Alejar la cámara para ver la jaula y la carretilla (vista general para etapas 1 a 4)
-      state.camera.position.lerp(new THREE.Vector3(7, 4, 8), delta * 2);
-      state.controls.target.lerp(new THREE.Vector3(0, 2.5, 0), delta * 2);
+    if (targetState.current.zoomToStickers && state.controls) {
+      // Posición definida manualmente por el operador para encuadrar la pegatina en la etapa Multiload
+      state.camera.position.lerp(new THREE.Vector3(0.887, 2.960, -6.594), delta * 2);
+      state.controls.target.lerp(new THREE.Vector3(2.415, 2.101, 1.459), delta * 2);
+    } else if (targetState.current.zoomOutMultiload && state.controls) {
+      // Alejar la cámara para ver la jaula y la carretilla (vista general para etapas 2 a 4)
+      state.camera.position.lerp(new THREE.Vector3(9.986, 3.642, 0.957), delta * 2);
+      state.controls.target.lerp(new THREE.Vector3(-0.153, 3.121, 3.331), delta * 2);
     }
   });
   return null;
