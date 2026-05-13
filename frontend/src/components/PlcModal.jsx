@@ -33,6 +33,8 @@ const PROJECT_VARS = [
   "Ob_Dtec_Valla_1_trabajo_LH",
   "Ob_Dtec_Valla_2_trabajo_RH",
   "Ob_Estado_Automatico",
+  "OW_Tiempo_Elevacion",
+  "OW_Tiempo_Descenso",
 ];
 
 const PROJECT_VAR_LABELS = {
@@ -51,6 +53,8 @@ const PROJECT_VAR_LABELS = {
   Ob_Dtec_Valla_1_trabajo_LH: "Detector Valla 1 Trabajo (LH)",
   Ob_Dtec_Valla_2_trabajo_RH: "Detector Valla 2 Trabajo (RH)",
   Ob_Estado_Automatico: "Estado Automático (Auto/Manual)",
+  OW_Tiempo_Elevacion: "Tiempo Elevación",
+  OW_Tiempo_Descenso: "Tiempo Descenso",
 };
 
 const PROJECT_VAR_DEFAULT_DIR = {
@@ -71,6 +75,8 @@ const PROJECT_VAR_DEFAULT_DIR = {
   Ob_Estado_Automatico: "OUT",
   Ob_Subir_Vallas: "OUT",
   Ob_Bajar_Vallas: "OUT",
+  OW_Tiempo_Elevacion: "IN",
+  OW_Tiempo_Descenso: "IN",
 };
 
 const PlcModal = ({
@@ -409,7 +415,9 @@ const PlcModal = ({
 
     const isAnalog =
       appVar === "OR_Altura_Carretilla" ||
-      appVar === "OW_Numero_Pallets";
+      appVar === "OW_Numero_Pallets" ||
+      appVar === "OW_Tiempo_Elevacion" ||
+      appVar === "OW_Tiempo_Descenso";
 
     return (
       <tr

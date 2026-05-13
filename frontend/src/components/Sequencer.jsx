@@ -248,19 +248,37 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   const plcStateRef = useRef(plcState);
   useEffect(() => { plcStateRef.current = plcState; }, [plcState]);
 
+  const testLoopStateRef = useRef({
+    tStartElev: null,
+    tStartDesc: null,
+    lastH: null,
+    lastHChangeTime: null,
+    tTopReachTime: null,
+    hTopReach: null,
+    prevH: null
+  });
+
   // ── Temporizadores simulados y máquina de estados (válido para ambos modos) ──
   useEffect(() => {
-    if (cameraTestState === 'standby') {
-      setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
-      setWaitCountdown(null);
-      setTestAlarm(null);
-      return;
+    if (cameraTestState === 'standby' || cameraTestState === 'esperando_1500') {
+      if (cameraTestState === 'standby') {
+        setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+        setWaitCountdown(null);
+        setTestAlarm(null);
+      }
+      testLoopStateRef.current = {
+        tStartElev: null,
+        tStartDesc: null,
+        lastH: null,
+        lastHChangeTime: Date.now(),
+        tTopReachTime: null,
+        hTopReach: null,
+        prevH: null
+      };
+      if (cameraTestState === 'standby') return;
     }
 
     let reqId;
-    let tStartElev = null;
-    let tStartDesc = null;
-    let tDescentWaitStart = null;
 
     const getH = () => {
       // h siempre en metros para que sea consistente con cotaM
@@ -270,12 +288,13 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       return parseFloat(Number(raw).toFixed(3));
     };
 
-    let lastH = getH();
-    let lastHChangeTime = Date.now();
-    let tTopReachTime = null;
-    let hTopReach = null;
+    const s = testLoopStateRef.current;
+    if (s.lastH === null) {
+      s.lastH = getH();
+      s.prevH = getH();
+      s.lastHChangeTime = Date.now();
+    }
     const cotaM = cotaInicial / 1000;
-    let prevH = getH();
 
     // The target height difference
     let testDist = is1mTest ? 1.0 : 2.0;
@@ -288,29 +307,29 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       if (cameraTestState === 'esperando_1500') {
         if (h > cotaM) {
           setCameraTestState('ascenso');
-          prevH = h;
+          s.prevH = h;
           reqId = requestAnimationFrame(loop);
           return;
         }
-        prevH = h;
+        s.prevH = h;
         reqId = requestAnimationFrame(loop);
         return;
       }
 
       // Control de parada incompleta (2 segundos sin variación > 0.01m)
-      if (Math.abs(h - lastH) > 0.01) {
-        lastH = h;
-        lastHChangeTime = Date.now();
+      if (Math.abs(h - s.lastH) > 0.01) {
+        s.lastH = h;
+        s.lastHChangeTime = Date.now();
       }
 
       if (cameraTestState === 'ascenso') {
-        // In real mode AND sim mode, test finishes when h reaches target.
-        // Aumentamos tolerancia a 150mm (0.15) para absorber el desfase de lectura del PLC
-        const isAscentFinished = h >= cotaM + testDist - 0.15;
+        // La prueba finaliza cuando supera la altura configurada + 1m o 2m (testDist)
+        const isAscentFinished = h >= cotaM + testDist;
         
-        if (!isAscentFinished && h > 0.1 && h < cotaM + testDist) {
-          // Aumentamos el temporizador de parada incompleta a 5000ms para evitar falsos NOK por lag del OPC UA
-          if (Date.now() - lastHChangeTime > 5000) {
+        if (!isAscentFinished && h > cotaM) {
+          // Control de parada incompleta (2 segundos sin variación > 0.01m)
+          // Aumentamos el temporizador de parada incompleta a 5000ms
+          if (Date.now() - s.lastHChangeTime > 5000) {
             setTestAlarm('ascenso_incompleto');
             setCameraTestState('nok');
             return;
@@ -321,47 +340,47 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           setSimTimers(prev => ({ ...prev, finishedElev: true, elev: prev.elev }));
           setCameraTestState('espera_arriba');
           setWaitCountdown(3);
-          tTopReachTime = null;
+          s.tTopReachTime = null;
         } else {
           setSimTimers(prev => {
             if (prev.finishedElev) return prev;
-            if (!tStartElev) tStartElev = Date.now();
-            return { ...prev, elev: Math.floor((Date.now() - tStartElev) / 10) };
+            if (!s.tStartElev) s.tStartElev = Date.now();
+            return { ...prev, elev: Math.floor((Date.now() - s.tStartElev) / 10) };
           });
         }
       } else if (cameraTestState === 'espera_arriba') {
-        if (!tTopReachTime) {
-          tTopReachTime = Date.now();
-          hTopReach = h;
+        if (!s.tTopReachTime) {
+          s.tTopReachTime = Date.now();
+          s.hTopReach = h;
         }
 
-        const waited = Date.now() - tTopReachTime;
+        const waited = Date.now() - s.tTopReachTime;
 
         if (waited < 3000) {
           // Antes de los 3s: si la carretilla varía más de 10mm (+/- 0.01m), reiniciar el contador
-          if (Math.abs(h - hTopReach) > 0.01) {
-            tTopReachTime = Date.now();
-            hTopReach = h;
+          if (Math.abs(h - s.hTopReach) > 0.01) {
+            s.tTopReachTime = Date.now();
+            s.hTopReach = h;
           }
-          const remaining = Math.ceil((3000 - (Date.now() - tTopReachTime)) / 1000);
+          const remaining = Math.ceil((3000 - (Date.now() - s.tTopReachTime)) / 1000);
           setWaitCountdown(Math.max(1, remaining));
         } else {
           // 3 segundos completados — mostrar GO! hasta que el operario baje
           setWaitCountdown(0);
-          if (h < hTopReach - 0.15) {
+          // Arrancar descenso solo si notamos variación real de bajada > 10mm (0.01m)
+          if (h <= s.hTopReach - 0.01) {
             setWaitCountdown(null);
             setCameraTestState('descenso');
-            tStartDesc = null; // resetear para inicializar al entrar en descenso
-            tStartDesc = null; 
+            s.tStartDesc = null; // resetear para inicializar al entrar en descenso
           }
         }
       } else if (cameraTestState === 'descenso') {
-        // Aumentamos tolerancia a 150mm (0.15) para absorber el desfase de lectura del PLC
-        const isDescentFinished = h <= cotaM + 0.15;
+        // La prueba de descenso termina cuando rebase la distancia de test desde la cota más alta alcanzada
+        const isDescentFinished = h <= s.hTopReach - testDist;
 
-        if (!isDescentFinished && h < cotaM + testDist - 0.15 && h > cotaM + 0.15) {
-          // Aumentamos el temporizador de parada incompleta a 5000ms para evitar falsos NOK por lag
-          if (Date.now() - lastHChangeTime > 5000) {
+        if (!isDescentFinished && h < s.hTopReach - 0.01 && h > s.hTopReach - testDist) {
+          // Aumentamos el temporizador de parada incompleta a 5000ms
+          if (Date.now() - s.lastHChangeTime > 5000) {
             setTestAlarm('descenso_incompleto');
             setCameraTestState('nok');
             return;
@@ -369,15 +388,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
 
         if (isDescentFinished && !simTimers.finishedDesc) {
-          if (!tDescentWaitStart) tDescentWaitStart = Date.now();
-          
-          // Esperamos 1.5s tras detectar fin de bajada para asegurar que el PLC actualizó las variables OW_Tiempo_Elevacion y OW_Tiempo_Descenso vía OPC UA
-          if (Date.now() - tDescentWaitStart < 1500) {
-            reqId = requestAnimationFrame(loop);
-            return;
-          }
-
-          const elapsed = Math.floor((Date.now() - (tStartDesc || Date.now())) / 10);
+          const elapsed = Math.floor((Date.now() - (s.tStartDesc || Date.now())) / 10);
           
           const isSinCarga = currentStep === 2;
           const minElev = isSinCarga ? erpData?.tpo_elev_min_scarga : erpData?.tpo_elevac_min;
@@ -385,14 +396,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           const minDesc = isSinCarga ? erpData?.tpo_desc_min_scarga : erpData?.tpo_descenso_min;
           const maxDesc = isSinCarga ? erpData?.tpo_desc_max_scarga : erpData?.tpo_descenso_max;
 
-          let finalElev, finalDesc;
-          if (isSimulation) {
-            finalElev = simTimers.elev;
-            finalDesc = elapsed;
-          } else {
-            finalElev = plcStateRef.current?.OW_Tiempo_Elevacion || 0;
-            finalDesc = plcStateRef.current?.OW_Tiempo_Descenso || 0;
-          }
+          // USAR SIEMPRE LOS TIEMPOS INTERNOS DE LA APP
+          const finalElev = simTimers.elev;
+          const finalDesc = elapsed;
+
           setSimTimers(prev => ({ ...prev, finishedDesc: true, desc: elapsed }));
 
           const isElevOk = Number(finalElev) >= Number(minElev) && Number(finalElev) <= Number(maxElev);
@@ -407,10 +414,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           }
         } else if (!simTimers.finishedDesc) {
           // Timer de descenso: arranca en cuanto entramos en estado descenso (h bajando)
-          if (!tStartDesc) tStartDesc = Date.now();
+          if (!s.tStartDesc) s.tStartDesc = Date.now();
           setSimTimers(prev => ({
             ...prev,
-            desc: Math.floor((Date.now() - tStartDesc) / 10)
+            desc: Math.floor((Date.now() - s.tStartDesc) / 10)
           }));
         }
       }
@@ -1103,13 +1110,13 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     const simTimes = simTimersRef.current;
     if (idx === 2) { // Fin Etapa 3 (Sin Carga)
       stageDataRef.current[3] = {
-        elev: isSimulation ? simTimes.elev : pState?.OW_Tiempo_Elevacion,
-        desc: isSimulation ? simTimes.desc : pState?.OW_Tiempo_Descenso
+        elev: simTimes.elev,
+        desc: simTimes.desc
       };
     } else if (idx === 3) { // Fin Etapa 4 (Con Carga)
       stageDataRef.current[4] = {
-        elev: isSimulation ? simTimes.elev : pState?.OW_Tiempo_Elevacion,
-        desc: isSimulation ? simTimes.desc : pState?.OW_Tiempo_Descenso,
+        elev: simTimes.elev,
+        desc: simTimes.desc,
         cargaGet: pState?.OW_Numero_Pallets ? pState.OW_Numero_Pallets * 250 : null
       };
     } else if (idx === 4) { // Fin Etapa 5 (5 min)
@@ -1475,10 +1482,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         // Solo mostrar tiempos si el test ya está en marcha (no antes de condición inicial)
         const testIsRunning = ['ascenso', 'espera_arriba', 'descenso', 'ok', 'nok'].includes(cameraTestState);
         
-        // En modo real, durante el movimiento mostramos el temporizador visual (simTimers).
-        // Al finalizar el movimiento (finishedElev/Desc = true), mostramos el valor final reportado por el PLC.
-        const rawElev = isSimulation ? simTimers.elev : (simTimers.finishedElev && plcState?.OW_Tiempo_Elevacion ? plcState.OW_Tiempo_Elevacion : simTimers.elev);
-        const rawDesc = isSimulation ? simTimers.desc : (simTimers.finishedDesc && plcState?.OW_Tiempo_Descenso ? plcState.OW_Tiempo_Descenso : simTimers.desc);
+        // Usamos siempre los tiempos calculados internamente por la aplicación
+        const rawElev = simTimers.elev;
+        const rawDesc = simTimers.desc;
         
         const realElev = testIsRunning ? rawElev : null;
         const realDesc = testIsRunning ? rawDesc : null;
@@ -1516,7 +1522,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         setTestHUDOverlay(null);
       }
     }
-  }, [currentStep, stepStatus, erpData, cameraTestState, waitCountdown, plcState?.OW_Tiempo_Elevacion, plcState?.OW_Tiempo_Descenso, setTestHUDOverlay, isSimulation, simTimers, test5mState, testAlarm]);
+  }, [currentStep, stepStatus, erpData, cameraTestState, waitCountdown, setTestHUDOverlay, isSimulation, simTimers, test5mState, testAlarm]);
 
   // ── PASO 5: 5 minutos — decidir automáticamente al entrar ─────────────────
   useEffect(() => {
@@ -1968,8 +1974,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             const minDesc = erpData.tpo_desc_min_scarga;
             const maxDesc = erpData.tpo_desc_max_scarga;
 
-            const realElev = isSimulation ? simTimers.elev : plcState?.OW_Tiempo_Elevacion;
-            const realDesc = isSimulation ? simTimers.desc : plcState?.OW_Tiempo_Descenso;
+            const realElev = simTimers.elev;
+            const realDesc = simTimers.desc;
 
             // Derivación del estado del LED
             let ledState = 'standby';
@@ -2078,8 +2084,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             const minDesc = erpData.tpo_descenso_min;
             const maxDesc = erpData.tpo_descenso_max;
 
-            const realElev = isSimulation ? simTimers.elev : plcState?.OW_Tiempo_Elevacion;
-            const realDesc = isSimulation ? simTimers.desc : plcState?.OW_Tiempo_Descenso;
+            const realElev = simTimers.elev;
+            const realDesc = simTimers.desc;
 
             // Derivación del estado del LED
             let ledState = 'standby';
