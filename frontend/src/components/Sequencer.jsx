@@ -260,6 +260,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     let reqId;
     let tStartElev = null;
     let tStartDesc = null;
+    let tDescentWaitStart = null;
 
     const getH = () => {
       // h siempre en metros para que sea consistente con cotaM
@@ -368,6 +369,14 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
 
         if (isDescentFinished && !simTimers.finishedDesc) {
+          if (!tDescentWaitStart) tDescentWaitStart = Date.now();
+          
+          // Esperamos 1.5s tras detectar fin de bajada para asegurar que el PLC actualizó las variables OW_Tiempo_Elevacion y OW_Tiempo_Descenso vía OPC UA
+          if (Date.now() - tDescentWaitStart < 1500) {
+            reqId = requestAnimationFrame(loop);
+            return;
+          }
+
           const elapsed = Math.floor((Date.now() - (tStartDesc || Date.now())) / 10);
           
           const isSinCarga = currentStep === 2;
