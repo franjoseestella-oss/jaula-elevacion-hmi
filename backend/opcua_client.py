@@ -26,15 +26,21 @@ logger = logging.getLogger("opcua_client")
 class OpcUaConfig:
     ip: str        = "192.168.0.1"
     port: str      = "4840"
-    db_name: str   = "DB_App"
+    db_name_fast: str = "DB_Fast"
+    db_name_slow: str = "DB_Slow"
+    hz_fast: float = 100.0
+    hz_slow: float = 10.0
     namespace: str = "3"
 
     @property
     def url(self) -> str:
         return f"opc.tcp://{self.ip}:{self.port}"
 
-    def node_id(self, var_name: str) -> str:
-        return f'ns={self.namespace};s="{self.db_name}"."{var_name}"'
+    def node_id_fast(self, var_name: str) -> str:
+        return f'ns={self.namespace};s="{self.db_name_fast}"."{var_name}"'
+
+    def node_id_slow(self, var_name: str) -> str:
+        return f'ns={self.namespace};s="{self.db_name_slow}"."{var_name}"'
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -101,11 +107,14 @@ class OpcUaClientManager:
             self._write_queue.put_nowait, payload
         )
 
-    def update_config(self, ip: str, port: str, db_name: str, namespace: str):
+    def update_config(self, ip: str, port: str, db_name_fast: str, db_name_slow: str, hz_fast: float, hz_slow: float, namespace: str):
         """Actualiza la configuración y reinicia la conexión."""
         self.config.ip        = ip
         self.config.port      = port
-        self.config.db_name   = db_name
+        self.config.db_name_fast = db_name_fast
+        self.config.db_name_slow = db_name_slow
+        self.config.hz_fast   = float(hz_fast)
+        self.config.hz_slow   = float(hz_slow)
         self.config.namespace = namespace
         if self.active:
             # Reiniciar el loop con la nueva config
@@ -163,192 +172,167 @@ class OpcUaClientManager:
 
         try:
             from asyncua import ua
-            nodes = {}
+            fast_nodes = {}
+            slow_nodes = {}
 
-            async def discover_vars_in_node(node, depth=0):
-                """Recorre un nodo OPC UA buscando variables (máx. 4 niveles)."""
+            async def discover_vars_in_node(node, target_dict, depth=0):
                 if depth > 4:
                     return
                 try:
                     node_class = await node.read_node_class()
                     if node_class == ua.NodeClass.Variable:
                         bname = await node.read_browse_name()
-                        nodes[bname.Name] = node
-                        logger.debug("[OPC UA] Var: %s", bname.Name)
+                        target_dict[bname.Name] = node
                     elif node_class == ua.NodeClass.Object:
                         for child in await node.get_children():
-                            await discover_vars_in_node(child, depth + 1)
+                            await discover_vars_in_node(child, target_dict, depth + 1)
                 except Exception:
                     pass
 
             try:
-                logger.info("[OPC UA] Buscando DB '%s' en Objects...", self.config.db_name)
+                logger.info("[OPC UA] Buscando DBs '%s' y '%s' en Objects...", self.config.db_name_fast, self.config.db_name_slow)
                 all_objects = await client.nodes.objects.get_children()
 
-                # 1. Buscar el nodo con el nombre del DB configurado (ej. "DB_App")
-                db_node = None
+                db_fast_node = None
+                db_slow_node = None
                 server_interfaces_node = None
                 for child in all_objects:
                     try:
                         bname = (await child.read_browse_name()).Name
-                        logger.info("[OPC UA] Nodo raíz: %s", bname)
-                        if bname == self.config.db_name:
-                            db_node = child
+                        if bname == self.config.db_name_fast:
+                            db_fast_node = child
+                        elif bname == self.config.db_name_slow:
+                            db_slow_node = child
                         elif bname == "ServerInterfaces":
                             server_interfaces_node = child
                     except Exception:
                         pass
 
-                if db_node:
-                    logger.info("[OPC UA] DB '%s' encontrado — explorando variables...", self.config.db_name)
-                    await discover_vars_in_node(db_node, depth=0)
+                # Explorar Fast DB
+                if db_fast_node:
+                    logger.info("[OPC UA] DB Rápido encontrado.")
+                    await discover_vars_in_node(db_fast_node, fast_nodes, depth=0)
                 elif server_interfaces_node:
-                    logger.info("[OPC UA] DB no encontrado directamente — usando ServerInterfaces...")
-                    await discover_vars_in_node(server_interfaces_node, depth=0)
-                else:
-                    logger.warning("[OPC UA] Ni DB ni ServerInterfaces encontrados en Objects.")
+                    await discover_vars_in_node(server_interfaces_node, fast_nodes, depth=0) # Respaldo
 
-                logger.info("[OPC UA] Discovery: %d variables encontradas", len(nodes))
+                # Explorar Slow DB
+                if db_slow_node:
+                    logger.info("[OPC UA] DB Lento encontrado.")
+                    await discover_vars_in_node(db_slow_node, slow_nodes, depth=0)
+                elif server_interfaces_node:
+                    await discover_vars_in_node(server_interfaces_node, slow_nodes, depth=0) # Respaldo
+
+                logger.info("[OPC UA] Discovery: %d variables rápidas, %d variables lentas", len(fast_nodes), len(slow_nodes))
             except Exception as e:
                 logger.warning("[OPC UA] Error en discovery: %s", e)
 
-            # Fallback: construir nodos directamente por NodeId
-            if not nodes:
-                logger.warning("[OPC UA] Discovery vacía — construyendo NodeIds directos para '%s'", self.config.db_name)
+            if not fast_nodes and not slow_nodes:
+                logger.warning("[OPC UA] Discovery falló, usando fallback directo.")
                 for var in PLC_WRITE_VARS:
                     try:
-                        n = client.get_node(self.config.node_id(var))
+                        n = client.get_node(self.config.node_id_slow(var))
                         await n.read_value()
-                        nodes[var] = n
-                        logger.info("[OPC UA] NodeId directo OK: %s", var)
-                    except Exception as ex:
-                        logger.warning("[OPC UA] NodeId directo FAIL: %s → %s", var, ex)
+                        slow_nodes[var] = n
+                    except Exception:
+                        pass
 
-
-
-
-            write_nodes = {
-                var: nodes[var]
-                for var in PLC_WRITE_VARS
-                if var in nodes
-            }
+            # Generamos listas inmutables para el bucle
+            f_names = list(fast_nodes.keys())
+            f_nodelist = list(fast_nodes.values())
             
-            # ── Extraer variables críticas para polling ultra-rápido (tarea independiente) ──
-            FAST_VARS = ["OR_Altura_Carretilla"]
-            fast_nodes = {var: nodes.pop(var) for var in FAST_VARS if var in nodes}
-            
-            logger.info("[OPC UA] Monitorizando %d variables (lentas), %d (rápidas).", len(nodes), len(fast_nodes))
-
-            # ── Tarea independiente para polling rápido ──
-            fast_poll_task = None
-            if fast_nodes:
-                async def fast_poller():
-                    f_names = list(fast_nodes.keys())
-                    f_nodelist = list(fast_nodes.values())
-                    logger.info(f"[OPC UA] Iniciando tarea de lectura rápida para: {f_names}")
-                    while self.active:
-                        try:
-                            f_values = await client.get_values(f_nodelist)
-                            for i, val in enumerate(f_values):
-                                if isinstance(val, (int, float, bool, str)):
-                                    self.state[f_names[i]] = val
-                                else:
-                                    self.state[f_names[i]] = str(val)
-                            await asyncio.sleep(0.01) # 100 Hz
-                        except Exception as e:
-                            logger.debug("[OPC UA] Error en fast_poller: %s", e)
-                            await asyncio.sleep(0.1)
-
-                fast_poll_task = asyncio.create_task(fast_poller())
+            s_names = list(slow_nodes.keys())
+            s_nodelist = list(slow_nodes.values())
 
             last_vida_value = None
             last_heartbeat = time.time()
             last_app_heartbeat = time.time()
             app_heartbeat_state = False
+            
+            last_slow_read_time = 0.0
 
+            # ── BUCLE PRINCIPAL (ÚNICO HILO, DUAL RATE) ──
             while self.active:
                 cycle_start = time.time()
                 
-                # ── Leer todas las variables (Optimizado en bloque) ─────────
-                if nodes:
-                    var_names = list(nodes.keys())
-                    node_list = list(nodes.values())
-                    try:
-                        # get_values ejecuta 1 sola petición de red para todos los nodos (muy eficiente)
-                        values = await client.get_values(node_list)
-                        for i, val in enumerate(values):
-                            if isinstance(val, (int, float, bool, str)):
-                                self.state[var_names[i]] = val
-                            else:
-                                self.state[var_names[i]] = str(val)
-                    except Exception as e:
-                        logger.warning("[OPC UA] Error en lectura masiva: %s", e)
+                # Calcular si toca leer el DB Lento
+                time_since_slow_read = cycle_start - last_slow_read_time
+                read_slow = time_since_slow_read >= (1.0 / max(0.1, self.config.hz_slow))
                 
-                # ── Comprobar BIT VIDA (Heartbeat) PLC -> APP ───────────────
-                if "Ob_Bit_VIDA_PLC_APP" in nodes:
+                nodes_to_read = []
+                nodes_to_read.extend(f_nodelist)
+                if read_slow:
+                    nodes_to_read.extend(s_nodelist)
+                
+                if nodes_to_read:
+                    try:
+                        values = await client.get_values(nodes_to_read)
+                        
+                        num_fast = len(f_nodelist)
+                        f_values = values[:num_fast]
+                        
+                        # Actualizar estado de variables rápidas
+                        for i, val in enumerate(f_values):
+                            self.state[f_names[i]] = val if isinstance(val, (int, float, bool, str)) else str(val)
+                            
+                        # Actualizar estado de variables lentas si tocaba
+                        if read_slow:
+                            s_values = values[num_fast:]
+                            for i, val in enumerate(s_values):
+                                self.state[s_names[i]] = val if isinstance(val, (int, float, bool, str)) else str(val)
+                            last_slow_read_time = cycle_start
+                            
+                    except Exception as e:
+                        logger.warning("[OPC UA] Error en lectura: %s", e)
+                        
+                # ── Comprobar BIT VIDA (Heartbeat) PLC -> APP ────────────
+                if "Ob_Bit_VIDA_PLC_APP" in slow_nodes:
                     current_vida = self.state.get("Ob_Bit_VIDA_PLC_APP")
-                    # Actualizamos heartbeat si el bit cambia (toggle) o es la primera vez
                     if current_vida != last_vida_value:
                         last_heartbeat = time.time()
                         last_vida_value = current_vida
                     elif time.time() - last_heartbeat > 15.0:
                         raise Exception("Conexión perdida (BIT VIDA PLC estancado por 15s)")
 
-                # ── Generar BIT VIDA APP -> PLC (Toggle 1s) ─────────────────
+                # ── Generar BIT VIDA APP -> PLC (Toggle 1s) ──────────────
                 if time.time() - last_app_heartbeat >= 1.0:
                     app_heartbeat_state = not app_heartbeat_state
                     last_app_heartbeat = time.time()
-                    if "Ib_Bit_VIDA_APP_PLC" in write_nodes:
+                    if "Ib_Bit_VIDA_APP_PLC" in slow_nodes:
                         try:
-                            from asyncua import ua
-                            node_app = write_nodes["Ib_Bit_VIDA_APP_PLC"]
-                            await node_app.write_value(ua.DataValue(ua.Variant(app_heartbeat_state, ua.VariantType.Boolean)))
-                            self.state["Ib_Bit_VIDA_APP_PLC"] = app_heartbeat_state
+                            v = ua.DataValue(ua.Variant(app_heartbeat_state, ua.VariantType.Boolean))
+                            await slow_nodes["Ib_Bit_VIDA_APP_PLC"].write_value(v)
                         except Exception as e:
                             logger.warning("[OPC UA] Error escribiendo Ib_Bit_VIDA_APP_PLC: %s", e)
 
-                # ── Procesar cola de escrituras manuales ────────────────────
+                # ── PROCESAR ESCRITURAS MANUALES ─────────────────────────
                 while not self._write_queue.empty():
-                    payload = await self._write_queue.get()
-                    await self._do_write(client, nodes, payload)
+                    payload = self._write_queue.get_nowait()
+                    for k, v in payload.items():
+                        if k == "is_force":
+                            continue
+                        node = slow_nodes.get(k) or fast_nodes.get(k)
+                        if node:
+                            try:
+                                v_type = ua.VariantType.Boolean if isinstance(v, bool) else (ua.VariantType.Float if isinstance(v, float) else ua.VariantType.Int16)
+                                await node.write_value(ua.DataValue(ua.Variant(v, v_type)))
+                                logger.info("[OPC UA] Escrito %s = %s", k, v)
+                            except Exception as e:
+                                logger.error("[OPC UA] Error escribiendo %s: %s", k, e)
+                        else:
+                            logger.warning("[OPC UA] Intento de escritura en var no encontrada: %s", k)
+                    self._write_queue.task_done()
 
-                self.latency_ms = round((time.time() - cycle_start) * 1000, 1)
-
-                await asyncio.sleep(0.1)   # 10 Hz
+                # ── SLEEP para mantener ciclo RÁPIDO ─────────────────────
+                elapsed = time.time() - cycle_start
+                self.latency_ms = elapsed * 1000
+                sleep_time = max(0.001, (1.0 / max(0.1, self.config.hz_fast)) - elapsed)
+                await asyncio.sleep(sleep_time)
 
         finally:
-            if 'fast_poll_task' in locals() and fast_poll_task:
-                fast_poll_task.cancel()
+            self.active = False
             await client.disconnect()
             self.connected = False
             logger.info("[OPC UA] Desconectado de %s", self.config.url)
-
-    async def _do_write(self, client, nodes_dict: dict, payload: dict):
-        """Escribe los valores del payload en los nodos correspondientes."""
-        from asyncua import ua
-        for var, value in payload.items():
-            if var == 'is_force':
-                continue
-            
-            node = nodes_dict.get(var)
-            if not node:
-                try:
-                    node = client.get_node(self.config.node_id(var))
-                except Exception:
-                    continue
-            try:
-                if isinstance(value, bool):
-                    dv = ua.DataValue(ua.Variant(value, ua.VariantType.Boolean))
-                elif isinstance(value, float):
-                    dv = ua.DataValue(ua.Variant(value, ua.VariantType.Float))
-                elif isinstance(value, int):
-                    dv = ua.DataValue(ua.Variant(value, ua.VariantType.Int32))
-                else:
-                    dv = ua.DataValue(ua.Variant(value))
-                await node.write_value(dv)
-                logger.debug("[OPC UA] ← %s = %s", var, value)
-            except Exception as e:
-                logger.warning("[OPC UA] Error escribiendo %s: %s", var, e)
 
 
 # ── Instancia global (singleton) ───────────────────────────────────────────────

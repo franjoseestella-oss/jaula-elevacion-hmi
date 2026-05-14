@@ -101,6 +101,14 @@ function App() {
     if (savedConfigStr) {
       try {
         const savedConfig = JSON.parse(savedConfigStr);
+        // Inject defaults for old configs
+        if (savedConfig.dbNameFast === undefined) {
+           savedConfig.dbNameFast = "DB_Fast";
+           savedConfig.dbNameSlow = savedConfig.dbName || "DB_Slow";
+           savedConfig.hzFast = 100;
+           savedConfig.hzSlow = 10;
+        }
+
         // Only send connect request if we are in PLC mode
         const savedSim = localStorage.getItem('isSimulation');
         const isSim = savedSim !== null ? JSON.parse(savedSim) : false;
@@ -565,7 +573,7 @@ function App() {
            } catch(e) {}
         }
 
-        setTelemetry({ 
+        const newTelemetry = { 
           distance: data.distance, 
           timer: data.timer, 
           state: data.state,
@@ -573,7 +581,19 @@ function App() {
           mappedPlc: mappedPlc,
           opcua_connected: data.opcua_connected,
           opcua_error: data.opcua_error
-        });
+        };
+
+        // Guardamos el estado rápido globalmente para Sequencer (100 Hz)
+        window.__fastPlcState = mappedPlc;
+        window.__fastRawPlcState = data.plc || {};
+
+        // Limitamos el refresco del UI a 20 Hz (50 ms) para evitar lentitud
+        if (!window.__lastTelemetryTime) window.__lastTelemetryTime = 0;
+        const now = Date.now();
+        if (now - window.__lastTelemetryTime > 50) {
+          window.__lastTelemetryTime = now;
+          setTelemetry(newTelemetry);
+        }
       }
     };
     ws.onclose = () => setNetworkStatus(prev => ({ ...prev, opc: false, basler: false }));

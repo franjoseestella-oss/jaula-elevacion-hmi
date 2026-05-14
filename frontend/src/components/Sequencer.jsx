@@ -282,9 +282,15 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
     const getH = () => {
       // h siempre en metros para que sea consistente con cotaM
+      const fastPlc = isSimulation 
+        ? { ...(window.__fastRawPlcState || {}), Ob_Estado_Automatico: true }
+        : (window.__fastPlcState || {});
+      
+      const currentPlc = (Object.keys(fastPlc).length > 0) ? fastPlc : (plcStateRef.current || {});
+
       const raw = isSimulation
         ? (window.__carriageY || 0)                                 // ya está en metros
-        : (plcStateRef.current?.OR_Altura_Carretilla || 0) / 1000;  // PLC da mm → convertir a m
+        : (currentPlc.OR_Altura_Carretilla || 0) / 1000;            // PLC da mm → convertir a m
       return parseFloat(Number(raw).toFixed(3));
     };
 

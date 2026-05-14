@@ -130,13 +130,23 @@ const PlcModal = ({
     const saved = localStorage.getItem("plcConfig");
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (parsed.dbNameFast === undefined) {
+           parsed.dbNameFast = "DB_Fast";
+           parsed.dbNameSlow = parsed.dbName || "DB_Slow";
+           parsed.hzFast = 100;
+           parsed.hzSlow = 10;
+        }
+        return parsed;
       } catch (e) {}
     }
     return {
       ip: "192.168.1.1",
       port: "4840",
-      dbName: "DB_App",
+      dbNameFast: "DB_Fast",
+      dbNameSlow: "DB_Slow",
+      hzFast: 100,
+      hzSlow: 10,
       namespace: "4",
     };
   });
@@ -241,7 +251,7 @@ const PlcModal = ({
     setIsScanningIPs(false);
   };
 
-  const scanDBs = async () => {
+  const scanDBs = async (targetDb) => {
     setIsScanningDBs(true);
     try {
       const res = await fetch("http://localhost:8001/plc/browse_nodes", {
@@ -254,13 +264,13 @@ const PlcModal = ({
       const data = text ? JSON.parse(text) : { nodes: [] };
 
       if (data.error) {
-        setScanModal({ isOpen: true, type: "DB", data: [], error: data.error });
+        setScanModal({ isOpen: true, type: targetDb === "fast" ? "DB_FAST" : "DB_SLOW", data: [], error: data.error });
       } else {
-        setScanModal({ isOpen: true, type: "DB", data: data.nodes || [] });
+        setScanModal({ isOpen: true, type: targetDb === "fast" ? "DB_FAST" : "DB_SLOW", data: data.nodes || [] });
       }
     } catch (e) {
       console.error(e);
-      setScanModal({ isOpen: true, type: "DB", data: [], error: e.message });
+      setScanModal({ isOpen: true, type: targetDb === "fast" ? "DB_FAST" : "DB_SLOW", data: [], error: e.message });
     }
     setIsScanningDBs(false);
   };
@@ -598,7 +608,9 @@ const PlcModal = ({
                     onClick={() => {
                       if (scanModal.type === "IP")
                         setPlcConfig({ ...plcConfig, ip: item });
-                      else setPlcConfig({ ...plcConfig, dbName: item });
+                      else if (scanModal.type === "DB_FAST")
+                        setPlcConfig({ ...plcConfig, dbNameFast: item });
+                      else setPlcConfig({ ...plcConfig, dbNameSlow: item });
                       setScanModal({ isOpen: false, type: "", data: [] });
                     }}
                     className="bg-[#1d2930] hover:bg-blue-600/20 hover:border-blue-500/50 border border-[#2e404a] p-3 rounded-lg cursor-pointer transition-colors flex items-center gap-3 group"
@@ -732,33 +744,67 @@ const PlcModal = ({
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center justify-between">
                     <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
-                      Nombre Data Block (DB)
+                      Nombre DB Rápido
                     </label>
-                    <button
-                      onClick={scanDBs}
-                      disabled={isScanningDBs}
-                      className="text-[9px] text-blue-400 hover:text-blue-300 font-bold uppercase tracking-widest flex items-center gap-1"
-                    >
-                      <RefreshCw
-                        size={10}
-                        className={isScanningDBs ? "animate-spin" : ""}
-                      />{" "}
-                      {isScanningDBs ? "Consultando..." : "Buscar en PLC"}
+                    <button onClick={() => scanDBs("fast")} disabled={isScanningDBs} className="text-[9px] text-blue-400 hover:text-blue-300 font-bold uppercase tracking-widest flex items-center gap-1">
+                      <RefreshCw size={10} className={isScanningDBs ? "animate-spin" : ""} /> {isScanningDBs ? "Consultando..." : "Buscar en PLC"}
                     </button>
                   </div>
-                  <div className="relative">
-                    <Database
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
-                      size={14}
-                    />
-                    <input
-                      type="text"
-                      value={plcConfig.dbName}
-                      onChange={(e) =>
-                        setPlcConfig({ ...plcConfig, dbName: e.target.value })
-                      }
-                      className="w-full bg-[#1d2930] border border-[#2e404a] rounded-lg py-2 pl-9 pr-3 text-xs text-white focus:border-blue-500 outline-none"
-                    />
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Database className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
+                      <input
+                        type="text"
+                        value={plcConfig.dbNameFast}
+                        onChange={(e) => setPlcConfig({ ...plcConfig, dbNameFast: e.target.value })}
+                        className="w-full bg-[#1d2930] border border-[#2e404a] rounded-lg py-2 pl-9 pr-3 text-xs text-white focus:border-blue-500 outline-none"
+                      />
+                    </div>
+                    <div className="w-16">
+                      <input
+                        type="number"
+                        min="1"
+                        max="1000"
+                        value={plcConfig.hzFast}
+                        onChange={(e) => setPlcConfig({ ...plcConfig, hzFast: Number(e.target.value) })}
+                        title="Hz (Rápido)"
+                        className="w-full bg-[#1d2930] border border-[#2e404a] rounded-lg py-2 px-2 text-xs text-center text-blue-400 font-bold focus:border-blue-500 outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
+                      Nombre DB Lento
+                    </label>
+                    <button onClick={() => scanDBs("slow")} disabled={isScanningDBs} className="text-[9px] text-blue-400 hover:text-blue-300 font-bold uppercase tracking-widest flex items-center gap-1">
+                      <RefreshCw size={10} className={isScanningDBs ? "animate-spin" : ""} /> {isScanningDBs ? "Consultando..." : "Buscar en PLC"}
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Database className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
+                      <input
+                        type="text"
+                        value={plcConfig.dbNameSlow}
+                        onChange={(e) => setPlcConfig({ ...plcConfig, dbNameSlow: e.target.value })}
+                        className="w-full bg-[#1d2930] border border-[#2e404a] rounded-lg py-2 pl-9 pr-3 text-xs text-white focus:border-blue-500 outline-none"
+                      />
+                    </div>
+                    <div className="w-16">
+                      <input
+                        type="number"
+                        min="0.1"
+                        max="100"
+                        step="0.1"
+                        value={plcConfig.hzSlow}
+                        onChange={(e) => setPlcConfig({ ...plcConfig, hzSlow: Number(e.target.value) })}
+                        title="Hz (Lento)"
+                        className="w-full bg-[#1d2930] border border-[#2e404a] rounded-lg py-2 px-2 text-xs text-center text-green-400 font-bold focus:border-blue-500 outline-none"
+                      />
+                    </div>
                   </div>
                 </div>
 

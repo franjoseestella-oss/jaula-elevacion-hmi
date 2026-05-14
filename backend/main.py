@@ -471,7 +471,10 @@ class PlcWriteParams(BaseModel):
 class PlcConfigModel(BaseModel):
     ip: str
     port: str
-    dbName: str
+    dbNameFast: str
+    dbNameSlow: str
+    hzFast: float
+    hzSlow: float
     namespace: str
     isSimulation: bool
 
@@ -484,7 +487,10 @@ def update_plc_config(config: PlcConfigModel):
     opcua_manager.update_config(
         ip=config.ip, 
         port=config.port, 
-        db_name=config.dbName, 
+        db_name_fast=config.dbNameFast,
+        db_name_slow=config.dbNameSlow,
+        hz_fast=config.hzFast,
+        hz_slow=config.hzSlow,
         namespace=config.namespace
     )
     if config.isSimulation:
@@ -552,21 +558,41 @@ async def browse_nodes(params: BrowseNodesParams):
     client.secure_channel_timeout = 2000
     try:
         await asyncio.wait_for(client.connect(), timeout=3.0)
-        objects = client.nodes.objects
-        children = await objects.get_children()
         
-        db_names = []
-        for child in children:
+        db_names = set()
+        
+        async def browse_recursive(node, current_depth, max_depth=3):
+            if current_depth > max_depth:
+                return
             try:
-                bname = await child.read_browse_name()
-                name = bname.Name
-                if name != "Server": 
-                    db_names.append(name)
-            except:
+                children = await node.get_children()
+                for child in children:
+                    try:
+                        bname = await child.read_browse_name()
+                        name = bname.Name
+                        if name == "Server" and current_depth == 1:
+                            continue
+                        
+                        node_class = await child.read_node_class()
+                        # Si es un objeto, miramos si tiene variables o es un DB
+                        # Guardamos todos los nombres para que el usuario elija
+                        # En Siemens, los DBs suelen ser Objetos bajo ServerInterfaces o bajo el nombre del PLC
+                        if name not in ["DeviceSet", "ServerInterfaces", "PLC_1", "DataBlocksGlobal"]:
+                            # Ignore common root folders, add the actual meaningful ones
+                            db_names.add(name)
+                            
+                        # Recurse into the child
+                        await browse_recursive(child, current_depth + 1, max_depth)
+                    except Exception:
+                        pass
+            except Exception:
                 pass
+
+        objects = client.nodes.objects
+        await browse_recursive(objects, 1, 3)
                 
         await client.disconnect()
-        return {"nodes": db_names}
+        return {"nodes": sorted(list(db_names))}
     except Exception as e:
         return {"error": str(e)}
 
