@@ -102,9 +102,9 @@ function App() {
       try {
         const savedConfig = JSON.parse(savedConfigStr);
         // Inject defaults for old configs
-        if (savedConfig.dbNameFast === undefined) {
-           savedConfig.dbNameFast = "DB_Fast";
-           savedConfig.dbNameSlow = savedConfig.dbName || "DB_Slow";
+        if (savedConfig.dbNameFast === undefined || savedConfig.dbNameFast === "ServerInterfaces" || savedConfig.dbNameFast === "DB_Fast" || savedConfig.dbNameFast === "DB25_OPC_UA_SCAN_RAPIDO") {
+           savedConfig.dbNameFast = "DB26_OPC_UA_SCAN_RAPIDO";
+           savedConfig.dbNameSlow = "DB25_OPC_UA_SCAN_LENTO";
            savedConfig.hzFast = 100;
            savedConfig.hzSlow = 10;
         }

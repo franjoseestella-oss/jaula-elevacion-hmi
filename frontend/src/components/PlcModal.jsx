@@ -131,9 +131,9 @@ const PlcModal = ({
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.dbNameFast === undefined) {
-           parsed.dbNameFast = "DB_Fast";
-           parsed.dbNameSlow = parsed.dbName || "DB_Slow";
+        if (parsed.dbNameFast === undefined || parsed.dbNameFast === "ServerInterfaces" || parsed.dbNameFast === "DB_Fast" || parsed.dbNameFast === "DB25_OPC_UA_SCAN_RAPIDO") {
+           parsed.dbNameFast = "DB26_OPC_UA_SCAN_RAPIDO";
+           parsed.dbNameSlow = "DB25_OPC_UA_SCAN_LENTO";
            parsed.hzFast = 100;
            parsed.hzSlow = 10;
         }
@@ -143,8 +143,8 @@ const PlcModal = ({
     return {
       ip: "192.168.1.1",
       port: "4840",
-      dbNameFast: "DB_Fast",
-      dbNameSlow: "DB_Slow",
+      dbNameFast: "DB25_OPC_UA_SCAN_RAPIDO",
+      dbNameSlow: "DB25_OPC_UA_SCAN_LENTO",
       hzFast: 100,
       hzSlow: 10,
       namespace: "4",
