@@ -232,7 +232,34 @@ class OpcUaClientManager:
                 for var in PLC_WRITE_VARS
                 if var in nodes
             }
-            logger.info("[OPC UA] Monitorizando %d variables.", len(nodes))
+            
+            # ── Extraer variables críticas para polling ultra-rápido (tarea independiente) ──
+            FAST_VARS = ["OR_Altura_Carretilla"]
+            fast_nodes = {var: nodes.pop(var) for var in FAST_VARS if var in nodes}
+            
+            logger.info("[OPC UA] Monitorizando %d variables (lentas), %d (rápidas).", len(nodes), len(fast_nodes))
+
+            # ── Tarea independiente para polling rápido ──
+            fast_poll_task = None
+            if fast_nodes:
+                async def fast_poller():
+                    f_names = list(fast_nodes.keys())
+                    f_nodelist = list(fast_nodes.values())
+                    logger.info(f"[OPC UA] Iniciando tarea de lectura rápida para: {f_names}")
+                    while self.active:
+                        try:
+                            f_values = await client.get_values(f_nodelist)
+                            for i, val in enumerate(f_values):
+                                if isinstance(val, (int, float, bool, str)):
+                                    self.state[f_names[i]] = val
+                                else:
+                                    self.state[f_names[i]] = str(val)
+                            await asyncio.sleep(0.01) # 100 Hz
+                        except Exception as e:
+                            logger.debug("[OPC UA] Error en fast_poller: %s", e)
+                            await asyncio.sleep(0.1)
+
+                fast_poll_task = asyncio.create_task(fast_poller())
 
             last_vida_value = None
             last_heartbeat = time.time()
@@ -290,6 +317,8 @@ class OpcUaClientManager:
                 await asyncio.sleep(0.1)   # 10 Hz
 
         finally:
+            if 'fast_poll_task' in locals() and fast_poll_task:
+                fast_poll_task.cancel()
             await client.disconnect()
             self.connected = False
             logger.info("[OPC UA] Desconectado de %s", self.config.url)
