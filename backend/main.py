@@ -668,7 +668,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 "opcua_latency_ms": opcua_manager.latency_ms if opcua_manager.active else 0
             })
 
-            await asyncio.sleep(0.1)  # 10 Hz
+            await asyncio.sleep(0.01)  # 100 Hz (alineado con fast_poller)
 
     except WebSocketDisconnect:
         print("[WS] Cliente desconectado.")
