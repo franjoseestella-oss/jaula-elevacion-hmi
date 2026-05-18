@@ -335,12 +335,26 @@ function App() {
   }, [alarms]);
 
   // Cargar datos completos de un bastidor seleccionado (desde el modal o ErpSearch)
-  const handleBastidorSelect = useCallback(async (bastidor) => {
+  const handleBastidorSelect = useCallback(async (bastidorOrItem) => {
+    // Si recibimos el objeto completo del ErpListModal, lo pasamos al Preview
+    if (bastidorOrItem && typeof bastidorOrItem === 'object') {
+      if (sequencerRef.current?.setPreview) {
+        sequencerRef.current.setPreview(bastidorOrItem);
+      } else {
+        setErpData(bastidorOrItem);
+      }
+      return;
+    }
+    // Si recibimos un string (bastidor), hacemos fetch y lo pasamos al Preview
     try {
-      const res = await fetch(`${API_BASE}/erp/bastidor/${encodeURIComponent(bastidor)}`);
+      const res = await fetch(`${API_BASE}/erp/bastidor/${encodeURIComponent(bastidorOrItem)}`);
       if (res.ok) {
         const data = await res.json();
-        setErpData(data);
+        if (sequencerRef.current?.setPreview) {
+          sequencerRef.current.setPreview(data);
+        } else {
+          setErpData(data);
+        }
       }
     } catch (err) {
       console.error('Error cargando bastidor:', err);

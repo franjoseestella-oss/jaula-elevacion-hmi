@@ -1444,6 +1444,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     onIniciarSecuencia: handleIniciarSecuenciaDirecto,
     onPegatina: handlePegatinaDireto,
     onAbortar: handleAbort,
+    setPreview: (data) => setErpPreview(data)
   }));
 
 
