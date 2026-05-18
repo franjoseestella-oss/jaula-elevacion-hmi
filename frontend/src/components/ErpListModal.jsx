@@ -312,7 +312,7 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
               </span>
               <span className="text-[10px] text-logisnext-slate/50">·</span>
               <span className="text-[10px] text-logisnext-slate/50 font-mono">
-                Clic en fila para ver detalle completo
+                Clic en fila para previsualizar secuencia
               </span>
             </div>
             <button
@@ -325,14 +325,6 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
         </div>
       </div>
 
-      {/* Panel de detalle (sub-modal) */}
-      {detalle && (
-        <DetallePanel
-          item={detalle}
-          onClose={() => setDetalle(null)}
-          onVincular={handleVincular}
-        />
-      )}
     </>
   );
 };
