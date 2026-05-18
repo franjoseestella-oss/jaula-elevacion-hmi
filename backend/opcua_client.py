@@ -265,6 +265,7 @@ class OpcUaClientManager:
             # ── BUCLE PRINCIPAL (ÚNICO HILO CON TAREAS ASÍNCRONAS CONCURRENTES) ──
             
             async def fast_loop():
+                fail_count = 0
                 while self.active:
                     cycle_start = time.time()
                     try:
@@ -272,8 +273,12 @@ class OpcUaClientManager:
                             f_values = await client.get_values(f_nodelist)
                             for i, val in enumerate(f_values):
                                 self.state[f_names[i]] = val if isinstance(val, (int, float, bool, str)) else str(val)
+                            fail_count = 0
                     except Exception as e:
-                        logger.warning("[OPC UA FAST] Lectura en bloque falló, intentando individualmente... (%s)", e)
+                        fail_count += 1
+                        logger.warning("[OPC UA FAST] Lectura en bloque falló... (%s)", e)
+                        if fail_count > 5:
+                            raise Exception("Demasiados errores de lectura rápidos consecutivos. Forzando reconexión.")
                         for i, n in enumerate(f_nodelist):
                             try:
                                 val = await n.read_value()
@@ -291,6 +296,7 @@ class OpcUaClientManager:
                 last_heartbeat = time.time()
                 last_app_heartbeat = time.time()
                 app_heartbeat_state = False
+                fail_count = 0
                 
                 while self.active:
                     cycle_start = time.time()
@@ -301,8 +307,12 @@ class OpcUaClientManager:
                             s_values = await client.get_values(s_nodelist)
                             for i, val in enumerate(s_values):
                                 self.state[s_names[i]] = val if isinstance(val, (int, float, bool, str)) else str(val)
+                            fail_count = 0
                     except Exception as e:
-                        logger.warning("[OPC UA SLOW] Lectura en bloque falló, intentando individualmente... (%s)", e)
+                        fail_count += 1
+                        logger.warning("[OPC UA SLOW] Lectura en bloque falló... (%s)", e)
+                        if fail_count > 5:
+                            raise Exception("Demasiados errores de lectura lentos consecutivos. Forzando reconexión.")
                         for i, n in enumerate(s_nodelist):
                             try:
                                 val = await n.read_value()
@@ -317,13 +327,12 @@ class OpcUaClientManager:
                             if current_vida != last_vida_value:
                                 last_heartbeat = time.time()
                                 last_vida_value = current_vida
-                            elif time.time() - last_heartbeat > 15.0:
-                                raise Exception("Conexión perdida (BIT VIDA PLC estancado por 15s)")
+                            elif time.time() - last_heartbeat > 5.0:
+                                raise Exception("Conexión perdida (BIT VIDA PLC estancado por 5s)")
                     except Exception as e:
                         logger.error("[OPC UA SLOW] Error heartbeat lectura: %s", e)
                         if "Conexión perdida" in str(e):
-                            self.active = False
-                            break
+                            raise e
 
                     # ── Generar BIT VIDA APP -> PLC (Toggle 1s)
                     try:
@@ -358,12 +367,32 @@ class OpcUaClientManager:
                     sleep_time = max(0.001, (1.0 / max(0.1, self.config.hz_slow)) - elapsed)
                     await asyncio.sleep(sleep_time)
 
-            # Ejecutar ambos bucles de forma concurrente en el mismo hilo de eventos asyncio
-            await asyncio.gather(fast_loop(), slow_loop())
+            # Ejecutar ambos bucles de forma concurrente
+            t_fast = asyncio.create_task(fast_loop())
+            t_slow = asyncio.create_task(slow_loop())
+
+            done, pending = await asyncio.wait(
+                [t_fast, t_slow],
+                return_when=asyncio.FIRST_EXCEPTION
+            )
+
+            # Cancelar tareas pendientes si una falló
+            for t in pending:
+                t.cancel()
+
+            # Lanzar la excepción si alguna falló
+            for t in done:
+                exc = t.exception()
+                if exc:
+                    raise exc
 
         finally:
-            self.active = False
-            await client.disconnect()
+            # NO setear self.active = False aquí. self.active define la "intención" de estar conectado.
+            # Si self.active se apaga, el bucle de autoreconexión muere.
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
             self.connected = False
             logger.info("[OPC UA] Desconectado de %s", self.config.url)
 
