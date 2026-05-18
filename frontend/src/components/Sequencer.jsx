@@ -297,7 +297,7 @@ const CameraLED = ({ state, blinkTick }) => {
 
 // ─── Componente principal ────────────────────────────────────────────────────
 
-const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState, plcState, setStep2Overlay, setTestHUDOverlay, sequencerRef, onSequenceEnd, onStepChange, operario, isSimulation }) => {
+const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState, plcState, setStep2Overlay, setTestHUDOverlay, setWaitingForIniciar, sequencerRef, onSequenceEnd, onStepChange, operario, isSimulation }) => {
   const [stepStatus, setStepStatus] = useState([
     STEP_STATUS.ACTIVE,
     STEP_STATUS.PENDING,
@@ -870,6 +870,15 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     handleIniciarActionRef.current = () => {
       console.log('[INICIAR] Acción ejecutada. currentStep:', currentStep, 'stepStarted:', stepStarted);
 
+      // Permitir confirmación de secuencia (paso 1 / index 0)
+      if (currentStep === 0 && erpPreview) {
+        onErpData(erpPreview);
+        setErpPreview(null);
+        setInputMode('scanner');
+        markOk(0);
+        return;
+      }
+
       // Si el paso actual (1-4) aún no está iniciado → desbloquearlo
       if (currentStep >= 1 && currentStep <= 4 && !stepStarted[currentStep]) {
         // Bloquear el inicio de etapas 4 y 5 si las vallas no están en trabajo
@@ -971,8 +980,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
   useEffect(() => {
     let interval;
-    // La secuencia solo se inicia (y cuenta atrás) si estamos en las etapas 2 a la 5 (currentStep de 1 a 4)
-    if (plcState?.Ob_Iniciar_Secuencia === true && currentStep >= 1 && currentStep <= 4) {
+    const isWaitingPreview = currentStep === 0 && !!erpPreview;
+    // La secuencia solo se inicia (y cuenta atrás) si estamos confirmando preview (0) o en etapas 2 a la 5 (currentStep de 1 a 4)
+    if (plcState?.Ob_Iniciar_Secuencia === true && (isWaitingPreview || (currentStep >= 1 && currentStep <= 4))) {
       // Para etapas de test (sin carga, con carga, 5 min) bloquear si carretilla no está abajo
       const isTestStep = currentStep >= 2;
       const blockByHeight = isTestStep && 
@@ -1706,6 +1716,14 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       }
     }
   }, [currentStep, stepStatus, erpData, cameraTestState, waitCountdown, setTestHUDOverlay, isSimulation, simTimers, test5mState, testAlarm]);
+
+  // Notificar al LED parpadeante si estamos esperando que el usuario pulse INICIAR SECUENCIA
+  useEffect(() => {
+    if (!setWaitingForIniciar) return;
+    const isWaitingToStart = (currentStep === 0 && !!erpPreview) || 
+                             (currentStep >= 1 && currentStep <= 4 && stepStatus[currentStep] === STEP_STATUS.ACTIVE && !stepStarted[currentStep]);
+    setWaitingForIniciar(isWaitingToStart);
+  }, [currentStep, erpPreview, stepStatus, stepStarted, setWaitingForIniciar]);
 
   // ── PASO 5: 5 minutos — decidir automáticamente al entrar ─────────────────
   useEffect(() => {

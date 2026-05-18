@@ -36,6 +36,7 @@ function App() {
   const [simCarriageHeight, setSimCarriageHeight] = useState(0);
   const [step2Overlay, setStep2Overlay] = useState(null);
   const [testHUDOverlay, setTestHUDOverlay] = useState(null);
+  const [waitingForIniciar, setWaitingForIniciar] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [pulseActive, setPulseActive] = useState(null); // { varName: string, timeLeft: number }
 
@@ -579,16 +580,16 @@ function App() {
     };
   }, []);
 
-  // ── Parpadeo de luces en modal NOK ──
+  // ── Parpadeo de luces en modal NOK y Esperando Iniciar ──
   useEffect(() => {
     let intervalId = null;
     let lightState = false;
 
-    if (testHUDOverlay?.cameraTestState === 'nok') {
+    if (testHUDOverlay?.cameraTestState === 'nok' || waitingForIniciar) {
       const alarm = testHUDOverlay?.testAlarm;
       const isIncomplete = alarm === 'ascenso_incompleto' || alarm === 'descenso_incompleto';
       const isLoadError = typeof alarm === 'string' && alarm.startsWith('Carga incorrecta');
-      const onlyBtn1 = isIncomplete || isLoadError;
+      const onlyBtn1 = isIncomplete || isLoadError || waitingForIniciar;
 
       intervalId = setInterval(() => {
         lightState = !lightState;
@@ -597,7 +598,7 @@ function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             Ib_LUZ_Pulsador_1: lightState,
-            Ib_LUZ_Pulsador_2: onlyBtn1 ? false : lightState,
+            Ib_LUZ_Pulsador_2: (testHUDOverlay?.cameraTestState === 'nok' && !onlyBtn1) ? lightState : false,
             is_force: isSimulation
           })
         }).catch(err => console.error('Error parpadeo luces:', err));
@@ -618,7 +619,7 @@ function App() {
     return () => {
       if (intervalId) clearInterval(intervalId);
       // Solo lanzamos el fetch al desmontar si estábamos parpadeando
-      if (testHUDOverlay?.cameraTestState === 'nok') {
+      if (testHUDOverlay?.cameraTestState === 'nok' || waitingForIniciar) {
         fetch('http://localhost:8001/plc/write', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -630,7 +631,7 @@ function App() {
         }).catch(err => console.error('Error apagando luces al desmontar:', err));
       }
     };
-  }, [testHUDOverlay?.cameraTestState, isSimulation]);
+  }, [testHUDOverlay?.cameraTestState, waitingForIniciar, isSimulation]);
 
   useEffect(() => {
     const ws = new WebSocket('ws://localhost:8001/ws');
@@ -1625,6 +1626,7 @@ function App() {
             isSimulation={isSimulation}
             setStep2Overlay={setStep2Overlay}
             setTestHUDOverlay={setTestHUDOverlay}
+            setWaitingForIniciar={setWaitingForIniciar}
             onSequenceEnd={resetCycleTimer}
           />
         </div>
