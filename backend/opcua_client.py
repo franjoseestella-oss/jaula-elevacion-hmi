@@ -255,109 +255,72 @@ class OpcUaClientManager:
             s_names = list(slow_nodes.keys())
             s_nodelist = list(slow_nodes.values())
 
+            # Unificamos para lectura en bloque único (evita saturar el PLC con peticiones concurrentes)
+            all_names = f_names + s_names
+            all_nodes = f_nodelist + s_nodelist
+
             last_vida_value = None
             last_heartbeat = time.time()
             last_app_heartbeat = time.time()
             app_heartbeat_state = False
-            
+            first_fail_time = 0.0
+
             last_slow_read_time = 0.0
 
-            # ── BUCLE PRINCIPAL (ÚNICO HILO CON TAREAS ASÍNCRONAS CONCURRENTES) ──
-            
-            async def fast_loop():
-                fail_count = 0
-                while self.active:
-                    cycle_start = time.time()
-                    try:
-                        if f_nodelist:
-                            f_values = await client.get_values(f_nodelist)
-                            for i, val in enumerate(f_values):
-                                self.state[f_names[i]] = val if isinstance(val, (int, float, bool, str)) else str(val)
-                            fail_count = 0
-                    except Exception as e:
-                        logger.warning("[OPC UA FAST] Lectura en bloque falló... (%s)", e)
-                        success_reads = 0
-                        for i, n in enumerate(f_nodelist):
-                            try:
-                                val = await n.read_value()
-                                self.state[f_names[i]] = val if isinstance(val, (int, float, bool, str)) else str(val)
-                                success_reads += 1
-                            except Exception:
-                                pass
-                        
-                        if success_reads == 0 and len(f_nodelist) > 0:
-                            fail_count += 1
-                            if fail_count > 5:
-                                raise Exception("Demasiados errores de lectura rápidos consecutivos. Forzando reconexión.")
-                        else:
-                            fail_count = 0
-                        
-                    elapsed = time.time() - cycle_start
-                    self.latency_ms = elapsed * 1000
-                    sleep_time = max(0.001, (1.0 / max(0.1, self.config.hz_fast)) - elapsed)
-                    await asyncio.sleep(sleep_time)
-
-            async def slow_loop():
-                last_vida_value = None
-                last_heartbeat = time.time()
-                last_app_heartbeat = time.time()
-                app_heartbeat_state = False
-                fail_count = 0
+            async def main_loop():
+                nonlocal last_vida_value, last_heartbeat, last_app_heartbeat, app_heartbeat_state, first_fail_time
                 
                 while self.active:
                     cycle_start = time.time()
                     
-                    # ── Leer variables lentas
+                    # ── 1. Lectura UNIFICADA de TODO (máxima velocidad)
                     try:
-                        if s_nodelist:
-                            s_values = await client.get_values(s_nodelist)
-                            for i, val in enumerate(s_values):
-                                self.state[s_names[i]] = val if isinstance(val, (int, float, bool, str)) else str(val)
-                            fail_count = 0
+                        if all_nodes:
+                            values = await client.get_values(all_nodes)
+                            for i, val in enumerate(values):
+                                self.state[all_names[i]] = val if isinstance(val, (int, float, bool, str)) else str(val)
+                            first_fail_time = 0.0
                     except Exception as e:
-                        logger.warning("[OPC UA SLOW] Lectura en bloque falló... (%s)", e)
-                        success_reads = 0
-                        for i, n in enumerate(s_nodelist):
+                        if first_fail_time == 0.0:
+                            logger.warning("[OPC UA] Lectura unificada falló (%s).", e)
+                            first_fail_time = time.time()
+                        elif time.time() - first_fail_time > 5.0:
+                            raise Exception("Conexión perdida: >5s sin lecturas exitosas.")
+                        
+                        # Fallback individual
+                        for i, n in enumerate(all_nodes):
                             try:
                                 val = await n.read_value()
-                                self.state[s_names[i]] = val if isinstance(val, (int, float, bool, str)) else str(val)
-                                success_reads += 1
-                            except Exception:
+                                self.state[all_names[i]] = val if isinstance(val, (int, float, bool, str)) else str(val)
+                            except:
                                 pass
-                                
-                        if success_reads == 0 and len(s_nodelist) > 0:
-                            fail_count += 1
-                            if fail_count > 5:
-                                raise Exception("Demasiados errores de lectura lentos consecutivos. Forzando reconexión.")
-                        else:
-                            fail_count = 0
 
-                    # ── Comprobar BIT VIDA (Heartbeat) PLC -> APP
+                    # ── 2. Comprobar BIT VIDA PLC -> APP
                     try:
-                        if "Ob_Bit_VIDA_PLC_APP" in slow_nodes:
-                            current_vida = self.state.get("Ob_Bit_VIDA_PLC_APP")
-                            if current_vida != last_vida_value:
-                                last_heartbeat = time.time()
-                                last_vida_value = current_vida
-                            elif time.time() - last_heartbeat > 5.0:
-                                raise Exception("Conexión perdida (BIT VIDA PLC estancado por 5s)")
+                        current_vida = self.state.get("Ob_Bit_VIDA_PLC_APP")
+                        if current_vida != last_vida_value:
+                            last_heartbeat = time.time()
+                            last_vida_value = current_vida
+                        elif time.time() - last_heartbeat > 10.0:
+                            raise Exception("Conexión perdida (BIT VIDA PLC estancado por >10s)")
                     except Exception as e:
-                        logger.error("[OPC UA SLOW] Error heartbeat lectura: %s", e)
+                        logger.error("[OPC UA] Error heartbeat lectura: %s", e)
                         if "Conexión perdida" in str(e):
                             raise e
 
-                    # ── Generar BIT VIDA APP -> PLC (Toggle 1s)
+                    # ── 3. Generar BIT VIDA APP -> PLC (Toggle 1s)
                     try:
                         if time.time() - last_app_heartbeat >= 1.0:
                             app_heartbeat_state = not app_heartbeat_state
                             last_app_heartbeat = time.time()
-                            if "Ib_Bit_VIDA_APP_PLC" in slow_nodes:
+                            node_vida = slow_nodes.get("Ib_Bit_VIDA_APP_PLC") or fast_nodes.get("Ib_Bit_VIDA_APP_PLC")
+                            if node_vida:
                                 v = ua.DataValue(ua.Variant(app_heartbeat_state, ua.VariantType.Boolean))
-                                await slow_nodes["Ib_Bit_VIDA_APP_PLC"].write_value(v)
+                                await node_vida.write_value(v)
                     except Exception as e:
-                        logger.warning("[OPC UA SLOW] Error escribiendo heartbeat: %s", e)
+                        logger.warning("[OPC UA] Error escribiendo heartbeat: %s", e)
 
-                    # ── PROCESAR ESCRITURAS MANUALES
+                    # ── 4. PROCESAR ESCRITURAS MANUALES
                     try:
                         while not self._write_queue.empty():
                             payload = self._write_queue.get_nowait()
@@ -373,30 +336,14 @@ class OpcUaClientManager:
                                         logger.error("[OPC UA] Error escribiendo %s = %s: %s", k, v, write_err)
                             self._write_queue.task_done()
                     except Exception as e:
-                        logger.warning("[OPC UA SLOW] Error procesando escrituras: %s", e)
+                        logger.warning("[OPC UA] Error procesando escrituras: %s", e)
                             
                     elapsed = time.time() - cycle_start
-                    sleep_time = max(0.001, (1.0 / max(0.1, self.config.hz_slow)) - elapsed)
-                    await asyncio.sleep(sleep_time)
+                    self.latency_ms = elapsed * 1000
+                    # Sin límite artificial, leer tan rápido como el PLC y la red lo permitan
+                    await asyncio.sleep(0.001)
 
-            # Ejecutar ambos bucles de forma concurrente
-            t_fast = asyncio.create_task(fast_loop())
-            t_slow = asyncio.create_task(slow_loop())
-
-            done, pending = await asyncio.wait(
-                [t_fast, t_slow],
-                return_when=asyncio.FIRST_EXCEPTION
-            )
-
-            # Cancelar tareas pendientes si una falló
-            for t in pending:
-                t.cancel()
-
-            # Lanzar la excepción si alguna falló
-            for t in done:
-                exc = t.exception()
-                if exc:
-                    raise exc
+            await main_loop()
 
         finally:
             # NO setear self.active = False aquí. self.active define la "intención" de estar conectado.

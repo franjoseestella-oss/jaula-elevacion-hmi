@@ -853,6 +853,7 @@ async def websocket_endpoint(websocket: WebSocket):
     
     try:
         while True:
+            cycle_start = time.time()
             global plc_sim_state
             
             elapsed = time.time() - start_time
@@ -871,8 +872,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 "opcua_error": opcua_manager.error_msg,
                 "opcua_latency_ms": opcua_manager.latency_ms if opcua_manager.active else 0
             })
-
-            await asyncio.sleep(0.01)  # 100 Hz (alineado con fast_poller)
+            
+            # El sleep(0.01) en Windows suele durar 15-16ms (aprox 60Hz).
+            # Para ir a 100Hz reales (10ms), usamos sleep(0) y control de tiempo manual.
+            await asyncio.sleep(0) 
+            while time.time() - cycle_start < 0.010:
+                await asyncio.sleep(0)
 
     except WebSocketDisconnect:
         print("[WS] Cliente desconectado.")

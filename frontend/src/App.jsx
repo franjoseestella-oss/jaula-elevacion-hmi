@@ -666,13 +666,15 @@ function App() {
         window.__fastPlcState = mappedPlc;
         window.__fastRawPlcState = data.plc || {};
 
-        // Limitamos el refresco del UI a 20 Hz (50 ms) para evitar lentitud
-        if (!window.__lastTelemetryTime) window.__lastTelemetryTime = 0;
-        const now = Date.now();
-        if (now - window.__lastTelemetryTime > 50) {
-          window.__lastTelemetryTime = now;
-          setTelemetry(newTelemetry);
+        // 1. ACTUALIZACIÓN GRÁFICA DIRECTA (Bypass de React para el Láser) a 500 Hz
+        const laserSpan = document.getElementById('laser-distance-display');
+        if (laserSpan && mappedPlc.OR_Altura_Carretilla !== undefined) {
+          laserSpan.innerText = Number(mappedPlc.OR_Altura_Carretilla).toFixed(2);
         }
+
+        // Actualización directa al estado sin límites para máxima velocidad en toda la UI
+        window.__lastTelemetryTime = Date.now();
+        setTelemetry(newTelemetry);
       }
     };
     ws.onclose = () => setNetworkStatus(prev => ({ ...prev, opc: false, basler: false }));

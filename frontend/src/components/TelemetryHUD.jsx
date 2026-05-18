@@ -28,7 +28,7 @@ const TelemetryHUD = ({ telemetry, cycleTimer = 0, isSimulation, distance = 0 })
         </div>
 
         <div className="flex items-baseline gap-2">
-          <span className="text-5xl font-mono font-black text-white tracking-tighter drop-shadow-md">
+          <span id="laser-distance-display" className="text-5xl font-mono font-black text-white tracking-tighter drop-shadow-md">
             {distance.toFixed(2)}
           </span>
           <span className="text-logisnext-magenta font-bold text-lg">mm</span>

@@ -134,26 +134,13 @@ const STitle = ({ icon, label }) => (
 );
 
 const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime }) => {
-  const [localTime, setLocalTime] = React.useState(null);
-
-  React.useEffect(() => {
-    let timer;
-    if (localTime !== null && localTime > 0) {
-      timer = setTimeout(() => setLocalTime(t => t - 1), 1000);
-    } else if (localTime === 0) {
-      setLocalTime(null);
-      onConfirm();
-    }
-    return () => clearTimeout(timer);
-  }, [localTime, onConfirm]);
-
   const handleTrigger = () => {
-    if (iniciarPlcTime === null && localTime === null) {
-      setLocalTime(3);
+    if (iniciarPlcTime === null) {
+      onConfirm();
     }
   };
 
-  const displayTime = iniciarPlcTime !== null ? iniciarPlcTime : localTime;
+  const displayTime = iniciarPlcTime;
 
   return createPortal(
   <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
@@ -255,8 +242,6 @@ const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime }) => {
           Cancelar
         </button>
         <button
-          onMouseDown={handleTrigger}
-          onTouchStart={handleTrigger}
           onClick={handleTrigger}
           disabled={displayTime !== null && displayTime > 0}
           className={`flex items-center justify-center gap-4 px-16 py-6 rounded-2xl text-white font-black text-3xl uppercase tracking-widest transition-all shadow-[0_0_50px_rgba(221,40,118,0.5)] border-2 min-w-[400px]
@@ -1134,6 +1119,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     let luzAzul = false;
     let luzVerde = false;
     let luzRoja = false;
+    let luzPulsador1 = false;
+    let luzPulsador2 = false;
 
     if (!plcState?.Ob_Estado_Automatico) {
       // Condiciones iniciales generales NO cumplidas -> Rojo parpadeante
@@ -1141,11 +1128,15 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     } else if (!erpData) {
       // Sin iniciar prueba -> Azul
       luzAzul = true;
+      if (currentStep === 0 && erpPreview) {
+        luzPulsador1 = blinkTick;
+      }
     } else {
       if (currentStep >= 1 && currentStep <= 4) {
         if (!stepStarted[currentStep]) {
           // Etapa no iniciada explícitamente -> Azul
           luzAzul = true;
+          luzPulsador1 = blinkTick; // Parpadeo LED Iniciar Secuencia
         } else {
           // Etapa iniciada
           if (currentStep === 1) { // Paso 2: Multiload
@@ -1155,6 +1146,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
             if (posOk) {
               luzVerde = blinkTick;
+              luzPulsador2 = blinkTick; // Parpadeo LED Colocar Pegatina
             } else {
               luzRoja = blinkTick;
             }
@@ -1193,27 +1185,38 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
       } else if (currentStep === 0) {
         luzAzul = true;
+        if (erpPreview) {
+          luzPulsador1 = blinkTick;
+        }
       } else if (isSequenceFinished || currentStep === -1) {
         luzRoja = blinkTick;
       }
     }
 
     const updateLed = async () => {
+      const currentLedState = {
+        Ib_LUZ_AZUL: luzAzul,
+        Ib_LUZ_VERDE: luzVerde,
+        Ib_LUZ_ROJA: luzRoja,
+        Ib_LUZ_Pulsador_1: luzPulsador1,
+        Ib_LUZ_Pulsador_2: luzPulsador2
+      };
+      
+      const stateKey = JSON.stringify(currentLedState);
+      if (window.__lastLedState === stateKey) return;
+      window.__lastLedState = stateKey;
+
       try {
         await fetch(`${API_BASE}/plc/write`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            Ib_LUZ_AZUL: luzAzul,
-            Ib_LUZ_VERDE: luzVerde,
-            Ib_LUZ_ROJA: luzRoja
-          })
+          body: stateKey
         });
       } catch (e) { console.error("Error setting LEDs:", e); }
     };
 
     updateLed();
-  }, [currentStep, stepStarted, erpData, plcState?.OR_Altura_Carretilla, tolerancias, blinkTick, cameraTestState, isSimulation]);
+  }, [currentStep, stepStarted, erpData, erpPreview, plcState?.OR_Altura_Carretilla, plcState?.Ob_Estado_Automatico, tolerancias, blinkTick, cameraTestState, test5mState, isSimulation, isSequenceFinished]);
 
   // Auto-avanzar después de 3s en OK
   useEffect(() => {
