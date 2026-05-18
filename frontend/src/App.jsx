@@ -1628,6 +1628,7 @@ function App() {
             setTestHUDOverlay={setTestHUDOverlay}
             setWaitingForIniciar={setWaitingForIniciar}
             onSequenceEnd={resetCycleTimer}
+            isAnyModalOpen={erpModalOpen || settingsOpen || plcModalOpen}
           />
         </div>
       </div>

@@ -297,7 +297,7 @@ const CameraLED = ({ state, blinkTick }) => {
 
 // ─── Componente principal ────────────────────────────────────────────────────
 
-const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState, plcState, setStep2Overlay, setTestHUDOverlay, setWaitingForIniciar, sequencerRef, onSequenceEnd, onStepChange, operario, isSimulation }) => {
+const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState, plcState, setStep2Overlay, setTestHUDOverlay, setWaitingForIniciar, sequencerRef, onSequenceEnd, onStepChange, operario, isSimulation, isAnyModalOpen }) => {
   const [stepStatus, setStepStatus] = useState([
     STEP_STATUS.ACTIVE,
     STEP_STATUS.PENDING,
@@ -1490,7 +1490,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
   // Mantener el focus del escáner activo agresivamente (hack para HMIs industriales)
   useEffect(() => {
-    if (inputMode === 'scanner' && stepStatus[0] === STEP_STATUS.ACTIVE && !erpPreview && !seqLoading) {
+    if (inputMode === 'scanner' && stepStatus[0] === STEP_STATUS.ACTIVE && !erpPreview && !seqLoading && !isAnyModalOpen) {
       inputRef.current?.focus();
       const focusInterval = setInterval(() => {
         if (document.activeElement !== inputRef.current) {
@@ -1499,7 +1499,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       }, 300);
       return () => clearInterval(focusInterval);
     }
-  }, [inputMode, stepStatus, erpPreview, seqLoading]);
+  }, [inputMode, stepStatus, erpPreview, seqLoading, isAnyModalOpen]);
 
   // ── PASO 1B: Confirmar preview → cargar en ERP data y avanzar
   const handleConfirmPreview = () => {
