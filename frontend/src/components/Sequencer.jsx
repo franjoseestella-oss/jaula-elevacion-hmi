@@ -133,7 +133,29 @@ const STitle = ({ icon, label }) => (
   </div>
 );
 
-const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime }) => createPortal(
+const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime }) => {
+  const [localTime, setLocalTime] = React.useState(null);
+
+  React.useEffect(() => {
+    let timer;
+    if (localTime !== null && localTime > 0) {
+      timer = setTimeout(() => setLocalTime(t => t - 1), 1000);
+    } else if (localTime === 0) {
+      setLocalTime(null);
+      onConfirm();
+    }
+    return () => clearTimeout(timer);
+  }, [localTime, onConfirm]);
+
+  const handleTrigger = () => {
+    if (iniciarPlcTime === null && localTime === null) {
+      setLocalTime(3);
+    }
+  };
+
+  const displayTime = iniciarPlcTime !== null ? iniciarPlcTime : localTime;
+
+  return createPortal(
   <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
     <div className="w-[98vw] h-[92vh] max-w-none bg-[#0a0f12] rounded-3xl border-2 border-[#2e404a] shadow-[0_0_120px_rgba(0,0,0,1)] flex flex-col overflow-hidden">
 
@@ -233,11 +255,23 @@ const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime }) => create
           Cancelar
         </button>
         <button
-          onClick={onConfirm}
-          className="flex items-center justify-center gap-4 px-16 py-6 rounded-2xl bg-logisnext-magenta hover:bg-logisnext-magenta/80 text-white font-black text-3xl uppercase tracking-widest transition-all shadow-[0_0_50px_rgba(221,40,118,0.5)] active:scale-95 border-2 border-pink-400/50 min-w-[400px]"
+          onMouseDown={handleTrigger}
+          onTouchStart={handleTrigger}
+          onClick={handleTrigger}
+          disabled={displayTime !== null && displayTime > 0}
+          className={`flex items-center justify-center gap-4 px-16 py-6 rounded-2xl text-white font-black text-3xl uppercase tracking-widest transition-all shadow-[0_0_50px_rgba(221,40,118,0.5)] border-2 min-w-[400px]
+            ${displayTime !== null && displayTime > 0 
+              ? 'bg-logisnext-magenta/50 border-logisnext-magenta/30 cursor-wait'
+              : 'bg-logisnext-magenta hover:bg-logisnext-magenta/80 active:scale-95 border-pink-400/50'
+            }`}
         >
-          {iniciarPlcTime !== null ? `MANTÉN PULSADO (${iniciarPlcTime})` : (
-            <>Cargar Secuencia <span className="text-4xl translate-y-[-2px]">›</span></>
+          {displayTime !== null && displayTime > 0 ? (
+            <>
+              <Timer size={32} className="animate-pulse" />
+              CARGAR SECUENCIA ({displayTime}s)
+            </>
+          ) : (
+            <>Cargar Secuencia <span className="text-4xl translate-y-[-2px]">&gt;</span></>
           )}
         </button>
       </div>
@@ -245,6 +279,7 @@ const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime }) => create
   </div>,
   document.body
 );
+};
 
 
 

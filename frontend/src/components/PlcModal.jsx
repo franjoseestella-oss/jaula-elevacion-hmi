@@ -368,6 +368,7 @@ const PlcModal = ({
   const handleToggleMode = () => {
     const nextSim = !isSimulation;
     setIsSimulation(nextSim);
+    localStorage.setItem('isSimulation', JSON.stringify(nextSim));
     saveConfig(nextSim);
   };
 
@@ -834,6 +835,7 @@ const PlcModal = ({
                     <button
                       onClick={() => {
                         setIsSimulation(false);
+                        localStorage.setItem('isSimulation', JSON.stringify(false));
                         saveConfig(false);
                       }}
                       className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-[0_0_15px_rgba(37,99,235,0.4)] mt-2"
@@ -844,6 +846,7 @@ const PlcModal = ({
                     <button
                       onClick={() => {
                         setIsSimulation(true);
+                        localStorage.setItem('isSimulation', JSON.stringify(true));
                         saveConfig(true);
                       }}
                       className="w-full py-3 bg-red-600/80 hover:bg-red-500 text-white rounded-lg text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors mt-2"
