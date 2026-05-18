@@ -873,10 +873,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 "opcua_latency_ms": opcua_manager.latency_ms if opcua_manager.active else 0
             })
             
-            # El sleep(0.01) en Windows suele durar 15-16ms (aprox 60Hz).
-            # Para ir a 100Hz reales (10ms), usamos sleep(0) y control de tiempo manual.
+            # El sleep(0.0033) en Windows suele durar 15-16ms (aprox 60Hz).
+            # Para ir a 300Hz reales (3.3ms), usamos sleep(0) y control de tiempo manual.
             await asyncio.sleep(0) 
-            while time.time() - cycle_start < 0.010:
+            while time.time() - cycle_start < 0.0033:
                 await asyncio.sleep(0)
 
     except WebSocketDisconnect:
