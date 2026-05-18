@@ -1,18 +1,25 @@
 import React, { useState } from 'react';
-import { X, Settings, Network, Usb, Save, TestTube, Cpu, Activity, Lightbulb, Box, Upload } from 'lucide-react';
+import { X, Settings, Network, Usb, Save, TestTube, Cpu, Activity, Lightbulb, Box, Upload, QrCode } from 'lucide-react';
 import ObjViewer from './ObjViewer';
 
 const SettingsModal = ({ open, onClose, telemetry }) => {
-  const [activeTab, setActiveTab] = useState('datalogic');
-  const [connType, setConnType] = useState('tcp');
-  const [ip, setIp] = useState('192.168.0.50');
-  const [port, setPort] = useState('5025');
-  const [comPort, setComPort] = useState('COM3');
-  const [baudRate, setBaudRate] = useState('115200');
+  const [activeTab, setActiveTab] = useState('lectorqr');
   const [testResult, setTestResult] = useState(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isSimulation, setIsSimulation] = useState(true);
   const [cameraCoords, setCameraCoords] = useState(null);
+
+  // Estados Lector QR
+  const [qrConnType, setQrConnType] = useState('usb');
+  const [qrIp, setQrIp] = useState('192.168.0.60');
+  const [qrPort, setQrPort] = useState('5026');
+  const [qrComPort, setQrComPort] = useState('COM4');
+  const [qrBaudRate, setQrBaudRate] = useState('115200');
+  const [qrTestResult, setQrTestResult] = useState(null);
+  const [isQrTesting, setIsQrTesting] = useState(false);
+  const [isReadingQr, setIsReadingQr] = useState(false);
+  const [qrReadResult, setQrReadResult] = useState(null);
+  const [availableComPorts, setAvailableComPorts] = useState([]);
 
   // Archivos 3D
   const [objFile, setObjFile] = useState(null);
@@ -42,37 +49,72 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
     }
   }, [telemetry?.mappedPlc, telemetry?.plc]);
 
+  React.useEffect(() => {
+    if (open) {
+      fetch('http://localhost:8001/api/com_ports')
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === 'ok') {
+            setAvailableComPorts(data.ports);
+          }
+        })
+        .catch(err => console.error("Error fetching com ports", err));
+    }
+  }, [open]);
+
   if (!open) return null;
 
   const handleSave = () => {
-    // Aquí se enviaría la configuración al backend
-    console.log("Guardando config Datalogic:", { connType, ip, port, comPort, baudRate });
+    // Guardar config Lector QR
+    const qrConfig = { qrConnType, qrIp, qrPort, qrComPort, qrBaudRate };
+    localStorage.setItem('qrConfig', JSON.stringify(qrConfig));
+
     localStorage.setItem('toleranciaPositiva', toleranciaPositiva);
     localStorage.setItem('toleranciaNegativa', toleranciaNegativa);
     localStorage.setItem('test5mDuration', test5mDuration);
     localStorage.setItem('test5mTolerancia', test5mTolerancia);
     localStorage.setItem('cotaInicialPruebas', cotaInicial);
-    // Notificar al sistema para actualizar tolerancias si es necesario
+    
+    // Notificar al sistema
     window.dispatchEvent(new Event('toleranciaChanged'));
     window.dispatchEvent(new Event('test5mConfigChanged'));
+    window.dispatchEvent(new Event('qrConfigChanged'));
     onClose();
   };
 
-  const handleTestConnection = async () => {
-    setIsTesting(true);
-    setTestResult(null);
+  const handleTestQrConnection = async () => {
+    setIsQrTesting(true);
+    setQrTestResult(null);
     try {
-      const res = await fetch('http://localhost:8001/config/datalogic/test', {
+      const res = await fetch('http://localhost:8001/config/qr/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ connType, ip, port, comPort, baudRate })
+        body: JSON.stringify({ connType: qrConnType, ip: qrIp, port: qrPort, comPort: qrComPort, baudRate: qrBaudRate })
       });
       const data = await res.json();
-      setTestResult(data);
+      setQrTestResult(data);
     } catch (err) {
-      setTestResult({ status: 'error', message: err.message });
+      setQrTestResult({ status: 'error', message: err.message });
     } finally {
-      setIsTesting(false);
+      setIsQrTesting(false);
+    }
+  };
+
+  const handleReadQr = async () => {
+    setIsReadingQr(true);
+    setQrReadResult(null);
+    try {
+      const res = await fetch('http://localhost:8001/config/qr/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connType: 'serial', ip: qrIp, port: qrPort, comPort: qrComPort, baudRate: qrBaudRate })
+      });
+      const data = await res.json();
+      setQrReadResult(data);
+    } catch (err) {
+      setQrReadResult({ status: 'error', message: err.message });
+    } finally {
+      setIsReadingQr(false);
     }
   };
 
@@ -108,15 +150,15 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
           {/* Sidebar Tabs */}
           <div className="w-48 border-r border-[#2e404a] bg-[#0a0f12]/50 p-4 flex flex-col gap-2">
             <button
-              onClick={() => setActiveTab('datalogic')}
+              onClick={() => setActiveTab('lectorqr')}
               className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
-                activeTab === 'datalogic'
+                activeTab === 'lectorqr'
                   ? 'bg-logisnext-magenta/20 text-logisnext-magenta border border-logisnext-magenta/30'
                   : 'text-logisnext-slate hover:bg-[#1d2930] hover:text-white border border-transparent'
               }`}
             >
-              <Network size={14} />
-              Datalogic
+              <QrCode size={14} />
+              Lector QR
             </button>
             <button
               onClick={() => setActiveTab('tolerancia')}
@@ -166,12 +208,32 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
 
           {/* Tab Content */}
           <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">
-            {activeTab === 'datalogic' && (
+
+            {activeTab === 'lectorqr' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-logisnext-magenta/50 pb-1 inline-block">
-                    Escáner Datalogic
+                    Configurar Lector QR
                   </h3>
+                  {qrConnType === 'serial' && (
+                    <button 
+                      onClick={() => {
+                        fetch('http://localhost:8001/api/com_ports')
+                          .then(res => res.json())
+                          .then(data => {
+                            if (data.status === 'ok') {
+                              setAvailableComPorts(data.ports);
+                              if (data.ports.length > 0 && !data.ports.includes(qrComPort)) {
+                                setQrComPort(data.ports[0]);
+                              }
+                            }
+                          });
+                      }}
+                      className="text-[10px] text-logisnext-magenta font-bold uppercase tracking-widest hover:text-white transition-colors"
+                    >
+                      Actualizar Puertos
+                    </button>
+                  )}
                 </div>
 
                 {/* Tipo de Conexión */}
@@ -181,91 +243,117 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
                   </label>
                   <div className="flex gap-4">
                     <label className={`flex-1 flex items-center justify-center gap-2 py-3 border rounded-lg cursor-pointer transition-all ${
-                      connType === 'tcp' ? 'bg-[#1d2930] border-logisnext-magenta text-white shadow-[0_0_15px_rgba(221,40,118,0.2)]' : 'border-[#2e404a] text-logisnext-slate hover:border-[#5d7a8a]'
+                      qrConnType === 'usb' ? 'bg-[#1d2930] border-logisnext-magenta text-white shadow-[0_0_15px_rgba(221,40,118,0.2)]' : 'border-[#2e404a] text-logisnext-slate hover:border-[#5d7a8a]'
                     }`}>
-                      <input type="radio" name="connType" value="tcp" checked={connType === 'tcp'} onChange={() => setConnType('tcp')} className="hidden" />
-                      <Network size={16} />
-                      <span className="text-xs font-bold uppercase tracking-wider">TCP / IP</span>
+                      <input type="radio" name="qrConnType" value="usb" checked={qrConnType === 'usb'} onChange={() => setQrConnType('usb')} className="hidden" />
+                      <span className="text-xs font-bold uppercase tracking-wider">USB (Teclado)</span>
                     </label>
                     <label className={`flex-1 flex items-center justify-center gap-2 py-3 border rounded-lg cursor-pointer transition-all ${
-                      connType === 'serial' ? 'bg-[#1d2930] border-logisnext-magenta text-white shadow-[0_0_15px_rgba(221,40,118,0.2)]' : 'border-[#2e404a] text-logisnext-slate hover:border-[#5d7a8a]'
+                      qrConnType === 'serial' ? 'bg-[#1d2930] border-logisnext-magenta text-white shadow-[0_0_15px_rgba(221,40,118,0.2)]' : 'border-[#2e404a] text-logisnext-slate hover:border-[#5d7a8a]'
                     }`}>
-                      <input type="radio" name="connType" value="serial" checked={connType === 'serial'} onChange={() => setConnType('serial')} className="hidden" />
+                      <input type="radio" name="qrConnType" value="serial" checked={qrConnType === 'serial'} onChange={() => setQrConnType('serial')} className="hidden" />
                       <Usb size={16} />
                       <span className="text-xs font-bold uppercase tracking-wider">Serial (COM)</span>
                     </label>
                   </div>
                 </div>
 
-                {/* Parámetros Dinámicos */}
-                <div className="bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-5 space-y-4">
-                  {connType === 'tcp' ? (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Dirección IP</label>
-                        <input
-                          type="text"
-                          value={ip}
-                          onChange={(e) => setIp(e.target.value)}
-                          className="bg-[#0a0f12] border border-[#2e404a] rounded-lg px-3 py-2 text-white text-xs font-mono outline-none focus:border-logisnext-magenta transition-colors"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Puerto TCP</label>
-                        <input
-                          type="text"
-                          value={port}
-                          onChange={(e) => setPort(e.target.value)}
-                          className="bg-[#0a0f12] border border-[#2e404a] rounded-lg px-3 py-2 text-white text-xs font-mono outline-none focus:border-logisnext-magenta transition-colors"
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Puerto COM</label>
-                        <input
-                          type="text"
-                          value={comPort}
-                          onChange={(e) => setComPort(e.target.value)}
-                          className="bg-[#0a0f12] border border-[#2e404a] rounded-lg px-3 py-2 text-white text-xs font-mono outline-none focus:border-logisnext-magenta transition-colors"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Baud Rate</label>
-                        <select
-                          value={baudRate}
-                          onChange={(e) => setBaudRate(e.target.value)}
-                          className="bg-[#0a0f12] border border-[#2e404a] rounded-lg px-3 py-2 text-white text-xs font-mono outline-none focus:border-logisnext-magenta transition-colors"
-                        >
-                          <option value="9600">9600</option>
-                          <option value="19200">19200</option>
-                          <option value="38400">38400</option>
-                          <option value="57600">57600</option>
-                          <option value="115200">115200</option>
-                        </select>
+                {qrConnType === 'serial' ? (
+                  <>
+                    <div className="bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-5 space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Puerto COM</label>
+                          <select
+                            value={qrComPort}
+                            onChange={(e) => setQrComPort(e.target.value)}
+                            className="bg-[#0a0f12] border border-[#2e404a] rounded-lg px-3 py-2 text-white text-xs font-mono outline-none focus:border-logisnext-magenta transition-colors"
+                          >
+                            {availableComPorts.length === 0 && <option value={qrComPort}>{qrComPort} (No detectado)</option>}
+                            {availableComPorts.map(port => (
+                              <option key={port} value={port}>{port}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Baud Rate</label>
+                          <select
+                            value={qrBaudRate}
+                            onChange={(e) => setQrBaudRate(e.target.value)}
+                            className="bg-[#0a0f12] border border-[#2e404a] rounded-lg px-3 py-2 text-white text-xs font-mono outline-none focus:border-logisnext-magenta transition-colors"
+                          >
+                            <option value="9600">9600</option>
+                            <option value="19200">19200</option>
+                            <option value="38400">38400</option>
+                            <option value="57600">57600</option>
+                            <option value="115200">115200</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
-                  )}
-                </div>
 
-                <div className="pt-2 flex flex-col items-end gap-2">
-                  <button
-                    onClick={handleTestConnection}
-                    disabled={isTesting}
-                    className="flex items-center gap-2 px-4 py-2 border border-[#2e404a] hover:bg-[#2e404a] text-logisnext-lightslate hover:text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
-                  >
-                    <TestTube size={14} className={isTesting ? "animate-spin" : ""} />
-                    {isTesting ? "Probando..." : "Test Conexión"}
-                  </button>
-                  {testResult && (
-                    <div className={`text-xs px-3 py-1.5 rounded bg-[#1d2930]/80 border ${
-                      testResult.status === 'ok' ? 'text-green-400 border-green-500/30' : 'text-red-400 border-red-500/30'
-                    }`}>
-                      {testResult.message}
+                    <div className="pt-2 flex flex-col gap-4">
+                      <div className="flex items-center justify-end gap-2">
+                        {qrTestResult && (
+                          <div className={`text-xs px-3 py-1.5 rounded bg-[#1d2930]/80 border ${
+                            qrTestResult.status === 'ok' ? 'text-green-400 border-green-500/30' : 'text-red-400 border-red-500/30'
+                          } flex-1 overflow-hidden text-ellipsis whitespace-nowrap`} title={qrTestResult.message}>
+                            {qrTestResult.message}
+                          </div>
+                        )}
+                        <button
+                          onClick={handleTestQrConnection}
+                          disabled={isQrTesting}
+                          className="flex items-center gap-2 px-4 py-2 border border-[#2e404a] hover:bg-[#2e404a] text-logisnext-lightslate hover:text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
+                        >
+                          <TestTube size={14} className={isQrTesting ? "animate-spin" : ""} />
+                          {isQrTesting ? "Probando..." : "Test Conexión"}
+                        </button>
+                        <button
+                          onClick={handleReadQr}
+                          disabled={isReadingQr}
+                          className="flex items-center gap-2 px-4 py-2 border border-logisnext-magenta text-logisnext-magenta hover:bg-logisnext-magenta hover:text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
+                        >
+                          <QrCode size={14} className={isReadingQr ? "animate-spin" : ""} />
+                          {isReadingQr ? "Leyendo..." : "Leer Datos"}
+                        </button>
+                      </div>
                     </div>
-                  )}
-                </div>
+                  </>
+                ) : (
+                  <div className="bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-5 space-y-4">
+                     <p className="text-xs text-logisnext-lightslate">
+                        Tu lector QR está conectado por USB y actuando como un teclado convencional (emulación de teclado). Haz clic en el recuadro de abajo y escanea un código para probarlo:
+                     </p>
+                     <textarea 
+                       autoFocus
+                       placeholder="Haz clic aquí y escanea un código..." 
+                       className="w-full bg-[#0a0f12] border border-[#2e404a] rounded-lg px-4 py-3 text-white text-sm font-mono outline-none focus:border-logisnext-magenta transition-colors min-h-[100px] resize-none custom-scrollbar"
+                       onChange={(e) => {
+                         const val = e.target.value;
+                         if (window.qrTimeout) clearTimeout(window.qrTimeout);
+                         window.qrTimeout = setTimeout(() => {
+                           if (val.trim() !== '') {
+                             setQrReadResult({ status: 'ok', data: val });
+                             e.target.value = '';
+                           }
+                         }, 300);
+                       }}
+                     />
+                  </div>
+                )}
+                
+                {/* Resultado de lectura */}
+                {qrReadResult && (
+                  <div className="bg-[#1d2930]/60 border border-[#2e404a] rounded-xl p-4 mt-4">
+                    <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest block mb-2">
+                      Resultado de Lectura
+                    </label>
+                    <div className={`font-mono text-sm whitespace-pre-wrap break-all ${qrReadResult.status === 'ok' ? 'text-green-400' : 'text-red-400'}`}>
+                      {qrReadResult.status === 'ok' ? (qrReadResult.data || 'Lectura vacía') : qrReadResult.message}
+                    </div>
+                  </div>
+                )}
 
               </div>
             )}

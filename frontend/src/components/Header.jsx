@@ -1,5 +1,5 @@
 import React from 'react';
-import { Activity, Database, Camera, Server, Settings, Zap, History, AlertTriangle } from 'lucide-react';
+import { Activity, Database, Camera, Server, Settings, Zap, History, AlertTriangle, QrCode } from 'lucide-react';
 
 const StatusLED = ({ active, label, icon: Icon, onClick }) => (
   <div
@@ -51,6 +51,7 @@ const Header = ({ status, isAuto, onErpClick, onSettingsClick, onLogsClick, onPl
           <StatusLED active={status.basler} label="BASLER" icon={Camera} />
           <StatusLED active={status.db} label="SQL DB" icon={Database} />
           <StatusLED active={status.erp} label="ERP" icon={Server} onClick={onErpClick} />
+          <StatusLED active={status.lectorqr} label="LECTOR QR" icon={QrCode} />
           <StatusLED active={true} label="LOG" icon={History} onClick={onLogsClick} />
           <StatusLED active={hasAlarms} label="LOG. ALARMAS" icon={AlertTriangle} onClick={onAlarmsClick} />
         </div>

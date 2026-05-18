@@ -238,6 +238,43 @@ def buscar_secuencia(secuencia: str, db: Session = Depends(get_db)):
     )
 
 
+@app.get("/erp/qr/{qr_raw}")
+def buscar_por_qr(qr_raw: str, db: Session = Depends(get_db)):
+    """
+    Busca una carretilla a partir del contenido bruto de un código QR.
+    El formato esperado es DDMMYY + NNNN  (ej. '260501' + '0138' → fecha 26/05 y secuencia 0138).
+    Si el raw tiene 8+ dígitos: los últimos 4 son la secuencia y los anteriores la fecha.
+    Si tiene 4 dígitos: se interpreta directamente como secuencia.
+    Siempre intenta primero con fecha+secuencia (más preciso) y cae en solo secuencia si falla.
+    """
+    digits = qr_raw.strip().replace("/", "").replace("-", "").replace(" ", "")
+    digits_only = ''.join(c for c in digits if c.isdigit())
+
+    seq_q = digits_only[-4:].zfill(4) if len(digits_only) >= 4 else digits_only.zfill(4)
+    fecha_q = digits_only[:-4] if len(digits_only) > 4 else None
+
+    # Intento 1: fecha + secuencia (si tenemos ambos)
+    if fecha_q:
+        erp = db.query(ErpCarretilla).filter(
+            ErpCarretilla.secuencia.ilike(f"%{seq_q}%"),
+            ErpCarretilla.fecha_montaje.ilike(f"%{fecha_q}%")
+        ).first()
+        if erp:
+            return _erp_row_to_dict(erp)
+
+    # Intento 2: solo secuencia
+    erp = db.query(ErpCarretilla).filter(
+        ErpCarretilla.secuencia.ilike(f"%{seq_q}%")
+    ).first()
+    if erp:
+        return _erp_row_to_dict(erp)
+
+    raise HTTPException(
+        status_code=404,
+        detail=f"QR '{qr_raw}' no encontrado en ERP (secuencia buscada: {seq_q}). Verifica o sincroniza el DAT."
+    )
+
+
 
 @app.get("/erp/operarios/{query}")
 def buscar_operario(query: str):
@@ -422,6 +459,121 @@ def test_datalogic_connection(config: DatalogicConfig):
             return {"status": "error", "message": "Falta la librería pyserial. Ejecuta: pip install pyserial"}
         except Exception as e:
             return {"status": "error", "message": f"Fallo Serial ({config.comPort}): {str(e)}"}
+    return {"status": "error", "message": "Tipo de conexión inválido."}
+
+@app.post("/config/datalogic/read")
+def read_datalogic_connection(config: DatalogicConfig):
+    """Intenta leer un dato del Datalogic por TCP o Serial (timeout 5s)."""
+    if config.connType == "tcp":
+        try:
+            port_int = int(config.port)
+            s = socket.create_connection((config.ip, port_int), timeout=5)
+            data = s.recv(1024)
+            s.close()
+            if data:
+                return {"status": "ok", "data": data.decode('utf-8', errors='ignore').strip()}
+            else:
+                return {"status": "error", "message": "Timeout: No se leyó nada en 5 segundos."}
+        except Exception as e:
+            return {"status": "error", "message": f"Fallo TCP: {str(e)}"}
+    elif config.connType == "serial":
+        try:
+            import serial
+            baud_int = int(config.baudRate)
+            ser = serial.Serial(config.comPort, baud_int, timeout=5)
+            data = ser.read_until(b'\r')
+            ser.close()
+            if data:
+                return {"status": "ok", "data": data.decode('utf-8', errors='ignore').strip()}
+            else:
+                return {"status": "error", "message": "Timeout: No se leyó nada en 5 segundos."}
+        except Exception as e:
+            return {"status": "error", "message": f"Fallo Serial: {str(e)}"}
+    return {"status": "error", "message": "Tipo de conexión inválido."}
+
+@app.post("/config/qr/test")
+def test_qr_connection(config: DatalogicConfig):
+    """Prueba la conexión al Lector QR por TCP, Serial o USB."""
+    if config.connType == "tcp":
+        try:
+            port_int = int(config.port)
+            s = socket.create_connection((config.ip, port_int), timeout=2)
+            s.close()
+            return {"status": "ok", "message": f"Conexión TCP exitosa a {config.ip}:{port_int}"}
+        except Exception as e:
+            return {"status": "error", "message": f"Fallo TCP ({config.ip}:{config.port}): {str(e)}"}
+    elif config.connType == "serial":
+        try:
+            import serial
+            baud_int = int(config.baudRate)
+            ser = serial.Serial(config.comPort, baud_int, timeout=2)
+            ser.close()
+            return {"status": "ok", "message": f"Conexión Serial exitosa en {config.comPort}"}
+        except ImportError:
+            return {"status": "error", "message": "Falta la librería pyserial. Ejecuta: pip install pyserial"}
+        except Exception as e:
+            return {"status": "error", "message": f"Fallo Serial ({config.comPort}): {str(e)}"}
+    elif config.connType == "usb":
+        try:
+            import subprocess
+            out = subprocess.check_output(
+                ['powershell', '-Command', 'Get-PnpDevice -PresentOnly | Select-Object InstanceId, FriendlyName'], 
+                creationflags=subprocess.CREATE_NO_WINDOW
+            ).decode('cp850', errors='ignore')
+            
+            for line in out.splitlines():
+                line_upper = line.upper()
+                if 'VID_05F9' in line_upper or 'DATALOGIC' in line_upper:
+                    return {"status": "ok", "message": "Lector USB Datalogic detectado correctamente."}
+            
+            return {"status": "error", "message": "No se detectó ningún Lector USB conectado."}
+        except Exception as e:
+            # Fallback en caso de error con powershell (asumir conectado si no podemos comprobar)
+            return {"status": "ok", "message": "Lector USB configurado (sin verificación de hardware)."}
+            
+    return {"status": "error", "message": "Tipo de conexión inválido."}
+
+@app.get("/api/com_ports")
+def get_com_ports():
+    try:
+        import serial.tools.list_ports
+        ports = serial.tools.list_ports.comports()
+        return {"status": "ok", "ports": [port.device for port in ports]}
+    except ImportError:
+        return {"status": "error", "message": "Falta la librería pyserial. Ejecuta: pip install pyserial"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.post("/config/qr/read")
+def read_qr_connection(config: DatalogicConfig):
+    """Intenta leer un dato del Lector QR por TCP o Serial (timeout 5s)."""
+    if config.connType == "tcp":
+        try:
+            port_int = int(config.port)
+            s = socket.create_connection((config.ip, port_int), timeout=5)
+            data = s.recv(1024)
+            s.close()
+            if data:
+                return {"status": "ok", "data": data.decode('utf-8', errors='ignore').strip()}
+            else:
+                return {"status": "error", "message": "Timeout: No se leyó nada en 5 segundos."}
+        except Exception as e:
+            return {"status": "error", "message": f"Fallo TCP: {str(e)}"}
+    elif config.connType == "serial":
+        try:
+            import serial
+            baud_int = int(config.baudRate)
+            ser = serial.Serial(config.comPort, baud_int, timeout=5)
+            data = ser.readline()
+            ser.close()
+            if data:
+                return {"status": "ok", "data": data.decode('utf-8', errors='ignore').strip()}
+            else:
+                return {"status": "error", "message": "Timeout: No se leyó nada en 5 segundos."}
+        except ImportError:
+            return {"status": "error", "message": "Falta la librería pyserial."}
+        except Exception as e:
+            return {"status": "error", "message": f"Fallo Serial: {str(e)}"}
     return {"status": "error", "message": "Tipo de conexión inválido."}
 
 # ─────────────────────────────────────────────────────────────

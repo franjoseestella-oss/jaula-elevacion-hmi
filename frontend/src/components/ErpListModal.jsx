@@ -221,7 +221,7 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
   const ColHeader = ({ label, field }) => (
     <button
       onClick={() => toggleSort(field)}
-      className="flex items-center gap-1 text-[9px] text-logisnext-slate font-black uppercase tracking-[0.15em] hover:text-white transition-colors"
+      className="flex items-center gap-1 text-xs text-logisnext-slate font-black uppercase tracking-[0.15em] hover:text-white transition-colors"
     >
       {label} <SortIcon field={field} />
     </button>
@@ -235,7 +235,7 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
         style={{ background: 'rgba(5,10,14,0.88)', backdropFilter: 'blur(6px)' }}
         onClick={(e) => e.target === e.currentTarget && onClose()}
       >
-        <div className="relative w-[1100px] max-h-[90vh] flex flex-col bg-gradient-to-b from-[#151f25] to-[#0d1a20] border border-[#2e404a] rounded-2xl shadow-[0_0_80px_rgba(221,40,118,0.15)] overflow-hidden">
+        <div className="relative w-[95vw] max-w-[1600px] max-h-[90vh] flex flex-col bg-gradient-to-b from-[#151f25] to-[#0d1a20] border border-[#2e404a] rounded-2xl shadow-[0_0_80px_rgba(221,40,118,0.15)] overflow-hidden">
 
           {/* ── Header ── */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-[#2e404a] bg-[#1d2930]/60 shrink-0">
@@ -301,20 +301,20 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
           {/* ── Tabla completa ── */}
           <div className="flex-1 overflow-auto custom-scrollbar">
             {/* Cabecera */}
-            <div className="sticky top-0 z-10 grid gap-0 px-4 py-2 bg-[#0a0f12] border-b border-[#2e404a]"
-              style={{ gridTemplateColumns: '1.6fr 0.7fr 1.2fr 0.9fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 40px' }}>
+            <div className="sticky top-0 z-10 grid gap-4 px-6 py-4 bg-[#0a0f12] border-b border-[#2e404a] items-center"
+              style={{ gridTemplateColumns: '1.6fr 0.8fr 0.7fr 1.2fr 0.9fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 40px' }}>
               <ColHeader label="Bastidor" field="bastidor" />
+              <ColHeader label="F.montaje" field="fecha_montaje" />
               <ColHeader label="Sec." field="secuencia" />
               <ColHeader label="Modelo" field="descripcion" />
               <ColHeader label="Mástil" field="referencia" />
-              <span className="text-[9px] text-logisnext-slate font-black uppercase tracking-[0.15em]">Alt.máx mm</span>
-              <span className="text-[9px] text-logisnext-slate font-black uppercase tracking-[0.15em]">C1 kg</span>
-              <span className="text-[9px] text-logisnext-slate font-black uppercase tracking-[0.15em]">C2 kg</span>
-              <span className="text-[9px] text-logisnext-slate font-black uppercase tracking-[0.15em]">↑min c</span>
-              <span className="text-[9px] text-logisnext-slate font-black uppercase tracking-[0.15em]">↑max c</span>
-              <span className="text-[9px] text-logisnext-slate font-black uppercase tracking-[0.15em]">↓min c</span>
-              <span className="text-[9px] text-logisnext-slate font-black uppercase tracking-[0.15em]">↓max c</span>
-              <ColHeader label="F.montaje" field="fecha_montaje" />
+              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">Alt.máx mm</span>
+              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">C1 kg</span>
+              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">C2 kg</span>
+              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">↑min c</span>
+              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">↑max c</span>
+              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">↓min c</span>
+              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">↓max c</span>
               <span />
             </div>
 
@@ -336,65 +336,65 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
                 <div
                   key={idx}
                   onClick={() => setDetalle(item)}
-                  className={`grid gap-0 px-4 py-2.5 border-b cursor-pointer transition-all group ${item.estado_prueba === 'FINALIZADO_OK'
+                  className={`grid gap-4 items-center px-6 py-4 border-b cursor-pointer transition-all group ${item.estado_prueba === 'FINALIZADO_OK'
                       ? 'bg-green-600/30 border-green-500/80 hover:bg-green-500/50 shadow-[inset_4px_0_0_rgba(34,197,94,1)]'
                       : item.estado_prueba === 'ERROR'
                         ? 'bg-red-600/30 border-red-500/80 hover:bg-red-500/50 shadow-[inset_4px_0_0_rgba(239,68,68,1)]'
                         : 'border-[#1a262d]/60 hover:bg-logisnext-magenta/5 hover:border-logisnext-magenta/20'
                     }`}
-                  style={{ gridTemplateColumns: '1.6fr 0.7fr 1.2fr 0.9fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 40px' }}
+                  style={{ gridTemplateColumns: '1.6fr 0.8fr 0.7fr 1.2fr 0.9fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 40px' }}
                 >
                   {/* Bastidor */}
-                  <span className="font-mono text-xs text-logisnext-magenta font-bold tracking-wide group-hover:text-white transition-colors truncate">
+                  <span className="font-mono text-sm text-logisnext-magenta font-bold tracking-wide group-hover:text-white transition-colors truncate">
                     {item.bastidor?.trim() || '—'}
                   </span>
+                  {/* Fecha montaje */}
+                  <span className="font-mono text-sm text-white font-bold">
+                    {fmtDate(item.fecha_montaje)}
+                  </span>
                   {/* Secuencia */}
-                  <span className="font-mono text-xs text-logisnext-lightslate">
+                  <span className="font-mono text-sm text-logisnext-lightslate">
                     {item.secuencia?.trim() || '—'}
                   </span>
                   {/* Modelo */}
-                  <span className="text-xs text-white/80 truncate">
+                  <span className="text-sm text-white/80 truncate">
                     {item.descripcion?.trim() || '—'}
                   </span>
                   {/* Mástil */}
-                  <span className="font-mono text-xs text-logisnext-slate truncate">
+                  <span className="font-mono text-sm text-logisnext-slate truncate">
                     {item.referencia?.trim() || '—'}
                   </span>
                   {/* Altura max */}
-                  <span className="font-mono text-xs text-cyan-400/80">
+                  <span className="font-mono text-sm text-cyan-400/80">
                     {item.altura_max_interm != null ? Math.round(item.altura_max_interm) : '—'}
                   </span>
                   {/* Capac 1 */}
-                  <span className="font-mono text-xs text-amber-400/80">
+                  <span className="font-mono text-sm text-amber-400/80">
                     {item.capac_interm_1 != null ? Math.round(item.capac_interm_1) : '—'}
                   </span>
                   {/* Capac 2 */}
-                  <span className="font-mono text-xs text-amber-400/60">
+                  <span className="font-mono text-sm text-amber-400/60">
                     {item.capac_interm_2 != null ? Math.round(item.capac_interm_2) : '—'}
                   </span>
                   {/* Tpo elevac min c/carga */}
-                  <span className="font-mono text-xs text-emerald-400/80">
+                  <span className="font-mono text-sm text-emerald-400/80">
                     {cs2s(item.tpo_elevac_min)}
                   </span>
                   {/* Tpo elevac max c/carga */}
-                  <span className="font-mono text-xs text-emerald-400/60">
+                  <span className="font-mono text-sm text-emerald-400/60">
                     {cs2s(item.tpo_elevac_max)}
                   </span>
                   {/* Tpo descenso min c/carga */}
-                  <span className="font-mono text-xs text-violet-400/80">
+                  <span className="font-mono text-sm text-violet-400/80">
                     {cs2s(item.tpo_descenso_min)}
                   </span>
                   {/* Tpo descenso max c/carga */}
-                  <span className="font-mono text-xs text-violet-400/60">
+                  <span className="font-mono text-sm text-violet-400/60">
                     {cs2s(item.tpo_descenso_max)}
-                  </span>
-                  {/* Fecha montaje */}
-                  <span className="font-mono text-[10px] text-logisnext-slate/70">
-                    {fmtDate(item.fecha_montaje)}
                   </span>
                   {/* Detalle */}
                   <div className="flex items-center justify-end">
-                    <ChevronDown size={12} className="text-logisnext-magenta/0 group-hover:text-logisnext-magenta transition-all" />
+                    <ChevronDown size={14} className="text-logisnext-magenta/0 group-hover:text-logisnext-magenta transition-all" />
                   </div>
                 </div>
               ))

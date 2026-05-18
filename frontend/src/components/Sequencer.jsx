@@ -110,6 +110,141 @@ const DataLine = ({ label, value, highlight = false }) => (
   </div>
 );
 
+// ─── Modal de previsualización ERP (pantalla completa horizontal) ────────────
+const ds2sP = (v) => v != null ? `${(v / 100).toFixed(3).replace('.', ',')} s` : '—';
+
+const MF = ({ label, value, unit, highlight, size = 'xl' }) => (
+  <div className="flex flex-col gap-1">
+    <span className="text-xs font-bold text-[#6b8fa3] uppercase tracking-widest leading-none">{label}</span>
+    <div className="flex items-baseline gap-1.5">
+      <span className={`font-black leading-tight ${size === 'lg' ? 'text-3xl' : 'text-2xl'} ${highlight ? 'text-logisnext-magenta' : 'text-white'}`}>
+        {value ?? '—'}
+      </span>
+      {unit && <span className="text-sm text-[#6b8fa3] font-semibold">{unit}</span>}
+    </div>
+  </div>
+);
+
+const STitle = ({ icon, label }) => (
+  <div className="flex items-center gap-2 mb-4">
+    <span className="text-logisnext-magenta">{icon}</span>
+    <span className="text-sm font-black text-logisnext-magenta uppercase tracking-[0.15em]">{label}</span>
+    <div className="flex-1 h-px bg-[#2e404a]" />
+  </div>
+);
+
+const ErpPreviewCard = ({ data, onConfirm, onCancel }) => createPortal(
+  <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+    <div className="w-full max-w-[95vw] bg-[#111c24] rounded-2xl border border-[#2e404a] shadow-[0_0_80px_rgba(0,0,0,0.9)] flex flex-col">
+
+      {/* ── Header ── */}
+      <div className="px-8 pt-6 pb-5 border-b border-[#2e404a] flex items-center justify-between">
+        <div>
+          <div className="text-5xl font-black text-logisnext-magenta tracking-widest leading-none mb-1">
+            {data.bastidor}
+          </div>
+          <div className="text-lg text-[#6b8fa3] font-semibold tracking-wide">
+            {data.modelo} &nbsp;·&nbsp; {data.mastil}
+          </div>
+        </div>
+        <button onClick={onCancel} className="text-[#6b8fa3] hover:text-white transition-colors p-2 rounded-lg hover:bg-white/5">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      {/* ── Body: 3 columnas ── */}
+      <div className="px-8 py-6 grid grid-cols-3 gap-8 divide-x divide-[#2e404a]">
+
+        {/* COL 1: Identificación */}
+        <div className="pr-4">
+          <STitle icon="⊟" label="Identificación" />
+          <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+            <MF label="Bastidor" value={data.bastidor} highlight size="lg" />
+            <MF label="Secuencia" value={data.secuencia} size="lg" />
+            <MF label="Modelo" value={data.modelo} size="lg" />
+            <MF label="Mástil REF" value={data.mastil} size="lg" />
+            <MF label="Fec. Montaje" value={data.fecha_montaje} />
+            {data.fecha_importacion
+              ? <MF label="Fec. Importación" value={data.fecha_importacion} />
+              : <div />}
+          </div>
+        </div>
+
+        {/* COL 2: Geometría + Capacidades */}
+        <div className="px-8 flex flex-col gap-6">
+          {data.altura_max_interm != null && (
+            <div>
+              <STitle icon="⟋" label="Geometría" />
+              <MF label="Altura máx. intermedia" value={data.altura_max_interm} unit="mm" size="lg" />
+            </div>
+          )}
+          {(data.capac_interm_1 != null || data.capac_interm_2 != null) && (
+            <div>
+              <STitle icon="⚖" label="Capacidades intermedias" />
+              <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+                <MF label="Capac. Interm. 1" value={data.capac_interm_1 ?? 0} unit="kg" size="lg" />
+                <MF label="Capac. Interm. 2" value={data.capac_interm_2 ?? 0} unit="kg" size="lg" />
+                {data.capac_interm_3 != null && (
+                  <MF label="Capac. Interm. 3" value={data.capac_interm_3} unit="kg" />
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* COL 3: Tiempos */}
+        <div className="pl-8 flex flex-col gap-6">
+          {data.tpo_elevac_min != null && (
+            <div>
+              <STitle icon="⏱" label="Tiempos con carga" />
+              <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+                <MF label="Elevación mín" value={ds2sP(data.tpo_elevac_min)} size="lg" />
+                <MF label="Elevación máx" value={ds2sP(data.tpo_elevac_max)} size="lg" />
+                <MF label="Descenso mín" value={ds2sP(data.tpo_descenso_min)} size="lg" />
+                <MF label="Descenso máx" value={ds2sP(data.tpo_descenso_max)} size="lg" />
+              </div>
+            </div>
+          )}
+          {data.tpo_elev_min_scarga != null && (
+            <div>
+              <STitle icon="↺" label="Tiempos sin carga" />
+              <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+                <MF label="Elevación mín" value={ds2sP(data.tpo_elev_min_scarga)} size="lg" />
+                <MF label="Elevación máx" value={ds2sP(data.tpo_elev_max_scarga)} size="lg" />
+                <MF label="Descenso mín" value={ds2sP(data.tpo_desc_min_scarga)} size="lg" />
+                <MF label="Descenso máx" value={ds2sP(data.tpo_desc_max_scarga)} size="lg" />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Footer ── */}
+      <div className="px-8 py-5 border-t border-[#2e404a] flex items-center justify-between">
+        <button
+          onClick={onCancel}
+          className="text-sm font-black uppercase tracking-widest text-[#6b8fa3] hover:text-white transition-colors px-4 py-2 rounded-lg hover:bg-white/5"
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={onConfirm}
+          className="flex items-center gap-3 px-10 py-4 rounded-xl bg-logisnext-magenta hover:bg-logisnext-magenta/80 text-white font-black text-lg uppercase tracking-widest transition-all shadow-[0_0_30px_rgba(221,40,118,0.5)] active:scale-95"
+        >
+          Cargar Secuencia <span className="text-2xl">›</span>
+        </button>
+      </div>
+    </div>
+  </div>,
+  document.body
+);
+
+
+
+
+
 const ActionBtn = ({ onClick, children, disabled = false, variant = 'primary', className = '' }) => {
   const base = 'w-full py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5';
   const variants = {
@@ -216,7 +351,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   const [seqError, setSeqError] = useState('');
   const [scannedSeq, setScannedSeq] = useState(null);
   const [inputMode, setInputMode] = useState('scanner'); // 'scanner' | 'manual'
-  const [manualDigits, setManualDigits] = useState('');    // dígitos teclados a mano
+  const [manualDigits, setManualDigits] = useState('');
+  const [manualBastidor, setManualBastidor] = useState('');
+  const [erpPreview, setErpPreview] = useState(null); // ERP data pending user confirmation
+  const previewConfirmedRef = useRef(null); // bastidor del último preview confirmado
   const [timer5min, setTimer5min] = useState(null);
   const [test5mState, setTest5mState] = useState('idle'); // 'idle' | 'stabilizing' | 'running' | 'ok' | 'nok'
   const [test5mConfig, setTest5mConfig] = useState({
@@ -599,6 +737,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     if (setStep2Overlay) setStep2Overlay(null);
     if (setPalletState) setPalletState('idle');
     if (onErpData) onErpData(null);
+    setErpPreview(null);
+    previewConfirmedRef.current = null;
   };
 
   const handleAbort = () => {
@@ -620,17 +760,24 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
   // ── Auto-Avanzar PASO 1 si se carga desde ERP Modal ───────────────
   useEffect(() => {
-    const initErpSequence = async () => {
-      if (erpData && stepStatus[0] === STEP_STATUS.ACTIVE && !repeatModal.show) {
+    if (!erpData || stepStatus[0] !== STEP_STATUS.ACTIVE || repeatModal.show) return;
+
+    // Mostrar preview si aún no se ha confirmado para este bastidor
+    if (!erpPreview && previewConfirmedRef.current !== erpData.bastidor) {
+      setErpPreview(erpData);
+      return;
+    }
+
+    // Preview confirmado: avanzar secuencia
+    if (!erpPreview && previewConfirmedRef.current === erpData.bastidor) {
+      const advance = async () => {
         setScannedSeq(null);
         setSeqError('');
-
         try {
           const res = await fetch(`${API_BASE}/api/logs/bastidor/${encodeURIComponent(erpData.bastidor)}`);
           if (res.ok) {
             const log = await res.json();
             if (log) {
-              // Mostrar modal para seleccionar qué repetir
               setRepeatModal({
                 show: true,
                 log: log,
@@ -641,26 +788,23 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                   log.ESTADO_CARGA_5_MIN !== 'OK' && log.ESTADO_CARGA_5_MIN !== 'NO APLICA'
                 ]
               });
-              return; // Detenemos aquí, el usuario debe confirmar el modal
+              return;
             }
           }
         } catch (e) {
-          console.error("Error fetching previous log", e);
+          console.error('Error fetching previous log', e);
         }
-
-        // Si no hay log anterior, avanzamos normalmente
         setStepStatus(prev => {
           const next = [...prev];
           next[0] = STEP_STATUS.OK;
           next[1] = STEP_STATUS.ACTIVE;
           return next;
         });
-      }
-    };
-
-    initErpSequence();
+      };
+      advance();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [erpData, stepStatus, repeatModal.show]);
+  }, [erpData, stepStatus, repeatModal.show, erpPreview]);
 
   const handleRepeatConfirm = () => {
     setStepStatus(prev => {
@@ -1076,21 +1220,29 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     }
   }, [plcState?.Ob_Repetir_Secuencia, repetirCountdown]);
 
-  // ── Teclado numérico manual ───────────────────────────────────────────────
-  const handleNumpadPress = (key) => {
+  // ── Teclado manual de bastidor (por teclado físico) ─────────────────────────
+  const manualBastidorRef = useRef(null);
+
+  const handleConfirmarBastidor = async () => {
+    const bastidor = manualBastidor.trim();
+    if (!bastidor) return;
+    setSeqLoading(true);
     setSeqError('');
-    if (key === 'DEL') {
-      setManualDigits(prev => prev.slice(0, -1));
-    } else if (key === 'OK') {
-      if (manualDigits.length > 0) {
-        const digits = manualDigits.padStart(4, '0');
-        setScannedSeq({ raw: manualDigits, digits });
-        setManualDigits('');
+    try {
+      const res = await fetch(`${API_BASE}/erp/bastidor/${encodeURIComponent(bastidor)}`);
+      const data = await res.json();
+      if (res.ok) {
+        setErpPreview(data); // Mostrar preview, no cargar directamente
+      } else {
+        setSeqError(data.detail || `Bastidor '${bastidor}' no encontrado en ERP.`);
       }
-    } else if (manualDigits.length < 4) {
-      setManualDigits(prev => prev + key);
+    } catch {
+      setSeqError('Sin conexión con el servidor.');
+    } finally {
+      setSeqLoading(false);
     }
   };
+
 
   // ── Avanzar paso ──────────────────────────────────────────────────────────
   const recalculateActive = (statuses) => {
@@ -1295,61 +1447,66 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   }));
 
 
-  // ── PASO 1A: El lector envía el código → extraer dígitos → mostrar confirmación
-  const handleLeerSecuencia = () => {
+  // ── PASO 1A: El lector envía el código → buscar en ERP → mostrar preview
+  const handleLeerSecuencia = async () => {
     const raw = seqInput.trim();
-    const digits = raw.replace(/\D/g, '').slice(-4).padStart(4, '0');
-    if (!digits || digits === '0000') return;
-    setScannedSeq({ raw, digits });
+    if (!raw) return;
     setSeqInput('');
-  };
-
-  // ── PASO 1B: Operario pulsa "Cargar" → consulta ERP y avanza
-  const handleConfirmarCarga = async () => {
-    if (!scannedSeq) return;
-
     setSeqLoading(true);
     setSeqError('');
     try {
-      const res = await fetch(`${API_BASE}/erp/secuencia/${encodeURIComponent(scannedSeq.digits)}`);
+      const res = await fetch(`${API_BASE}/erp/qr/${encodeURIComponent(raw)}`);
       const data = await res.json();
       if (res.ok) {
-        onErpData(data);
-        setScannedSeq(null);
-        // El useEffect de arriba se encargará de llamar a markOk(0) cuando las vallas estén abajo.
+        setErpPreview(data);
       } else {
-        setSeqError(data.detail || `Secuencia '${scannedSeq.digits}' no encontrada.`);
-        setScannedSeq(null);
+        setSeqError(data.detail || `QR '${raw}' no encontrado en ERP.`);
         setTimeout(() => inputRef.current?.focus(), 100);
       }
     } catch {
       setSeqError('Sin conexión con el servidor.');
-      setScannedSeq(null);
       setTimeout(() => inputRef.current?.focus(), 100);
     } finally {
       setSeqLoading(false);
     }
   };
 
-  // Cancelar confirmación → volver a esperar lectura
+  // ── PASO 1B: Confirmar preview → cargar en ERP data y avanzar
+  const handleConfirmPreview = () => {
+    if (!erpPreview) return;
+    const data = erpPreview;
+    previewConfirmedRef.current = data.bastidor; // marcar como confirmado ANTES de limpiar
+    setErpPreview(null);
+    setManualBastidor('');
+    setSeqError('');
+    onErpData(data);
+    // El useEffect comprobará previewConfirmedRef y avanzará el paso
+  };
+
+
+  // Cancelar preview → volver al modo de entrada
   const handleCancelarLectura = () => {
+    setErpPreview(null);
     setScannedSeq(null);
     setSeqInput('');
     setSeqError('');
+    setManualBastidor('');
+    if (erpData) onErpData(null); // Limpiar si venía del modal ERP
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
-  // Foco automático — siempre que el paso 1 esté activo y no haya confirmación pendiente
+  // Foco automático — siempre que el paso 1 esté activo y no haya preview pendiente
   useEffect(() => {
-    if (currentStep === 0 && stepStatus[0] === STEP_STATUS.ACTIVE && !scannedSeq) {
+    if (currentStep === 0 && stepStatus[0] === STEP_STATUS.ACTIVE && !scannedSeq && !erpPreview) {
       inputRef.current?.focus();
     }
-  }, [currentStep, stepStatus, scannedSeq]);
+  }, [currentStep, stepStatus, scannedSeq, erpPreview]);
 
   // Re-foco si el usuario hace clic fuera
   const handleStepClick = () => {
-    if (stepStatus[0] === STEP_STATUS.ACTIVE && !scannedSeq) inputRef.current?.focus();
+    if (stepStatus[0] === STEP_STATUS.ACTIVE && !scannedSeq && !erpPreview) inputRef.current?.focus();
   };
+
 
   // ── PASO 2: Multiload — decidir automáticamente al entrar ─────────────────
   useEffect(() => {
@@ -1713,182 +1870,151 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         <StepCard num={1} icon={Barcode} title="Identificar carretilla" status={stepStatus[0]}>
           {stepStatus[0] === STEP_STATUS.ACTIVE && (
             <>
-              {/* ── Selector de modo ── */}
-              {!scannedSeq && !seqLoading && (
-                <div className="flex rounded-lg overflow-hidden border border-[#2e404a] mb-2">
-                  <button
-                    onClick={() => { setInputMode('scanner'); setManualDigits(''); setSeqError(''); setTimeout(() => inputRef.current?.focus(), 50); }}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${inputMode === 'scanner'
-                      ? 'bg-logisnext-magenta/20 text-logisnext-magenta border-r border-logisnext-magenta/30'
-                      : 'bg-transparent text-logisnext-slate hover:text-white border-r border-[#2e404a]'
-                      }`}
-                  >
-                    <Barcode size={10} /> Escáner
-                  </button>
-                  <button
-                    onClick={() => { setInputMode('manual'); setSeqInput(''); setSeqError(''); }}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${inputMode === 'manual'
-                      ? 'bg-logisnext-magenta/20 text-logisnext-magenta border-r border-logisnext-magenta/30'
-                      : 'bg-transparent text-logisnext-slate hover:text-white border-r border-[#2e404a]'
-                      }`}
-                  >
-                    <Hash size={10} /> Manual
-                  </button>
-                  <button
-                    onClick={() => { if (onOpenErp) onOpenErp(); }}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all bg-transparent text-logisnext-slate hover:text-white"
-                  >
-                    <Database size={10} /> ERP
-                  </button>
-                </div>
-              )}
-
-              {/* Input oculto — solo activo en modo escáner */}
-              {inputMode === 'scanner' && (
-                <form
-                  onSubmit={(e) => { e.preventDefault(); handleLeerSecuencia(); }}
-                  onClick={handleStepClick}
-                >
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={seqInput}
-                    onChange={(e) => { setSeqInput(e.target.value); setSeqError(''); }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') { e.preventDefault(); handleLeerSecuencia(); }
-                    }}
-                    className="sr-only"
-                    autoFocus
-                    tabIndex={0}
-                  />
-                </form>
-              )}
-
-              {/* ── Estado: esperando lectura (Modo Escáner) ── */}
-              {!scannedSeq && inputMode === 'scanner' && (
-                <div
-                  onClick={handleStepClick}
-                  className={`relative flex flex-col items-center justify-center gap-3 py-5 px-4 rounded-xl border-2 border-dashed cursor-text transition-all ${seqError
-                    ? 'border-red-500/50 bg-red-900/10'
-                    : 'border-[#2e404a] hover:border-logisnext-magenta/40 bg-[#0a0f12]'
-                    }`}
-                >
-                  <div className="relative">
-                    <Barcode size={36} className={`transition-all ${seqError ? 'text-red-400' : 'text-logisnext-slate'}`} />
-                    {!seqError && (
-                      <div className="absolute inset-0 rounded-full bg-logisnext-magenta opacity-10 blur-xl animate-pulse" />
-                    )}
-                  </div>
-
-                  {seqError ? (
-                    <div className="flex items-center gap-1.5 text-red-400">
-                      <AlertTriangle size={12} />
-                      <span className="text-[10px] font-medium text-center leading-snug">{seqError}</span>
-                    </div>
-                  ) : (
-                    <span className="text-[10px] text-logisnext-slate font-bold uppercase tracking-widest">
-                      Esperando lectura…
-                    </span>
-                  )}
-
-                  {seqInput && (
-                    <div className="font-mono text-2xl font-black text-logisnext-magenta tracking-[0.4em]">
-                      {seqInput.replace(/\D/g, '').padEnd(4, '·')}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ── Estado: teclado manual (Modo Manual) ── */}
-              {!scannedSeq && inputMode === 'manual' && (
-                <div className="flex flex-col gap-3">
-                  <div className={`p-3 rounded-lg border flex items-center justify-center bg-[#0a0f12] shadow-inner ${seqError ? 'border-red-500/50' : 'border-[#2e404a]'}`}>
-                    <div className="font-mono text-3xl font-black text-white tracking-[0.4em] h-9">
-                      {manualDigits.padEnd(4, '·')}
-                    </div>
-                  </div>
-                  {seqError && (
-                    <div className="flex items-center justify-center gap-1 text-red-400 mt-[-4px]">
-                      <AlertTriangle size={10} />
-                      <span className="text-[9px] font-medium">{seqError}</span>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-3 gap-2">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
-                      <button key={n} onClick={() => handleNumpadPress(n.toString())} className="h-10 bg-[#1d2930] hover:bg-[#2e404a] text-white font-mono text-lg rounded-lg transition-colors border border-[#2e404a]">
-                        {n}
+              {/* ── PREVIEW: datos ERP encontrados → confirmar ── */}
+              {erpPreview ? (
+                <ErpPreviewCard
+                  data={erpPreview}
+                  onConfirm={handleConfirmPreview}
+                  onCancel={handleCancelarLectura}
+                />
+              ) : (
+                <>
+                  {/* ── Selector de modo ── */}
+                  {!seqLoading && (
+                    <div className="flex rounded-lg overflow-hidden border border-[#2e404a] mb-2">
+                      <button
+                        onClick={() => { setInputMode('scanner'); setManualDigits(''); setSeqError(''); setTimeout(() => inputRef.current?.focus(), 50); }}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${inputMode === 'scanner'
+                          ? 'bg-logisnext-magenta/20 text-logisnext-magenta border-r border-logisnext-magenta/30'
+                          : 'bg-transparent text-logisnext-slate hover:text-white border-r border-[#2e404a]'
+                          }`}
+                      >
+                        <Barcode size={10} /> Escáner
                       </button>
-                    ))}
-                    <button onClick={() => handleNumpadPress('DEL')} className="h-10 bg-[#1d2930] hover:bg-red-900/40 text-red-400 font-bold text-xs rounded-lg transition-colors border border-[#2e404a]">
-                      DEL
-                    </button>
-                    <button onClick={() => handleNumpadPress('0')} className="h-10 bg-[#1d2930] hover:bg-[#2e404a] text-white font-mono text-lg rounded-lg transition-colors border border-[#2e404a]">
-                      0
-                    </button>
-                    <button
-                      onClick={() => handleNumpadPress('OK')}
-                      disabled={manualDigits.length === 0}
-                      className="h-10 bg-logisnext-magenta hover:bg-logisnext-magenta/80 text-white font-bold text-xs rounded-lg transition-colors disabled:opacity-30 disabled:hover:bg-logisnext-magenta border border-logisnext-magenta/50"
-                    >
-                      OK
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Estado: código leído → confirmación ── */}
-              {scannedSeq && !seqLoading && (
-                <div className="flex flex-col items-center gap-4 py-4 px-3 rounded-xl border-2 border-logisnext-magenta/60 bg-logisnext-magenta/5">
-                  {/* Icono check */}
-                  <div className="w-10 h-10 rounded-full bg-logisnext-magenta/20 border border-logisnext-magenta/50 flex items-center justify-center">
-                    <Barcode size={20} className="text-logisnext-magenta" />
-                  </div>
-
-                  {/* Secuencia leída */}
-                  <div className="text-center">
-                    <p className="text-[9px] text-logisnext-slate uppercase tracking-widest mb-1">
-                      Secuencia detectada
-                    </p>
-                    <div className="font-mono text-4xl font-black text-white tracking-[0.3em]">
-                      {scannedSeq.digits}
+                      <button
+                        onClick={() => { setInputMode('manual'); setSeqInput(''); setSeqError(''); }}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${inputMode === 'manual'
+                          ? 'bg-logisnext-magenta/20 text-logisnext-magenta border-r border-logisnext-magenta/30'
+                          : 'bg-transparent text-logisnext-slate hover:text-white border-r border-[#2e404a]'
+                          }`}
+                      >
+                        <Hash size={10} /> Manual
+                      </button>
+                      <button
+                        onClick={() => { if (onOpenErp) onOpenErp(); }}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all bg-transparent text-logisnext-slate hover:text-white"
+                      >
+                        <Database size={10} /> ERP
+                      </button>
                     </div>
-                    {scannedSeq.raw !== scannedSeq.digits && (
-                      <p className="text-[8px] text-logisnext-slate/50 font-mono mt-1 break-all">
-                        raw: {scannedSeq.raw}
+                  )}
+
+                  {/* Input oculto — solo activo en modo escáner */}
+                  {inputMode === 'scanner' && (
+                    <form
+                      onSubmit={(e) => { e.preventDefault(); handleLeerSecuencia(); }}
+                      onClick={handleStepClick}
+                    >
+                      <input
+                        ref={inputRef}
+                        type="text"
+                        value={seqInput}
+                        onChange={(e) => { setSeqInput(e.target.value); setSeqError(''); }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') { e.preventDefault(); handleLeerSecuencia(); }
+                        }}
+                        className="sr-only"
+                        autoFocus
+                        tabIndex={0}
+                      />
+                    </form>
+                  )}
+
+                  {/* ── Modo Escáner: esperando lectura ── */}
+                  {inputMode === 'scanner' && !seqLoading && (
+                    <div
+                      onClick={handleStepClick}
+                      className={`relative flex flex-col items-center justify-center gap-3 py-5 px-4 rounded-xl border-2 border-dashed cursor-text transition-all ${seqError
+                        ? 'border-red-500/50 bg-red-900/10'
+                        : 'border-[#2e404a] hover:border-logisnext-magenta/40 bg-[#0a0f12]'
+                        }`}
+                    >
+                      <div className="relative">
+                        <Barcode size={36} className={`transition-all ${seqError ? 'text-red-400' : 'text-logisnext-slate'}`} />
+                        {!seqError && (
+                          <div className="absolute inset-0 rounded-full bg-logisnext-magenta opacity-10 blur-xl animate-pulse" />
+                        )}
+                      </div>
+                      {seqError ? (
+                        <div className="flex items-center gap-1.5 text-red-400">
+                          <AlertTriangle size={12} />
+                          <span className="text-[10px] font-medium text-center leading-snug">{seqError}</span>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-logisnext-slate font-bold uppercase tracking-widest">
+                          Esperando lectura…
+                        </span>
+                      )}
+                      {seqInput && (
+                        <div className="font-mono text-2xl font-black text-logisnext-magenta tracking-[0.4em]">
+                          {seqInput}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Modo Manual: campo de bastidor ── */}
+                  {inputMode === 'manual' && !seqLoading && (
+                    <div className="flex flex-col gap-3">
+                      <div className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border bg-[#0a0f12] shadow-inner ${seqError ? 'border-red-500/50' : 'border-logisnext-magenta/40'}`}>
+                        <Hash size={14} className="text-logisnext-slate shrink-0" />
+                        <input
+                          ref={manualBastidorRef}
+                          type="text"
+                          value={manualBastidor}
+                          onChange={e => { setManualBastidor(e.target.value.toUpperCase()); setSeqError(''); }}
+                          onKeyDown={e => { if (e.key === 'Enter') handleConfirmarBastidor(); }}
+                          placeholder="Escribe el bastidor…"
+                          autoFocus
+                          className="flex-1 bg-transparent text-white font-mono text-lg font-bold placeholder-[#3a5060] outline-none tracking-widest uppercase"
+                        />
+                        {manualBastidor && (
+                          <button onClick={() => setManualBastidor('')} className="text-logisnext-slate hover:text-white transition-colors">
+                            <X size={13} />
+                          </button>
+                        )}
+                      </div>
+                      {seqError && (
+                        <div className="flex items-center gap-1.5 text-red-400 px-1">
+                          <AlertTriangle size={11} />
+                          <span className="text-[10px] font-medium">{seqError}</span>
+                        </div>
+                      )}
+                      <button
+                        onClick={handleConfirmarBastidor}
+                        disabled={!manualBastidor.trim()}
+                        className="w-full py-2.5 rounded-xl bg-logisnext-magenta hover:bg-logisnext-magenta/80 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-sm uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(221,40,118,0.3)] active:scale-95"
+                      >
+                        Buscar en ERP
+                      </button>
+                      <p className="text-[9px] text-logisnext-slate/60 text-center">
+                        Escribe el número de bastidor y pulsa Enter
                       </p>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
-                  {/* Botón Cargar */}
-                  <button
-                    onClick={handleConfirmarCarga}
-                    className="w-full py-2.5 rounded-xl bg-logisnext-magenta hover:bg-logisnext-magenta/80 text-white font-black text-sm uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(221,40,118,0.4)] active:scale-95"
-                  >
-                    Cargar
-                  </button>
-
-                  {/* Volver a escanear */}
-                  <button
-                    onClick={handleCancelarLectura}
-                    className="text-[9px] text-logisnext-slate hover:text-white uppercase tracking-widest transition-colors"
-                  >
-                    ↩ Volver a leer
-                  </button>
-                </div>
-              )}
-
-              {/* Buscando... */}
-              {seqLoading && (
-                <div className="flex flex-col items-center gap-3 py-6">
-                  <Loader2 size={28} className="animate-spin text-logisnext-magenta" />
-                  <span className="text-[10px] text-logisnext-magenta font-bold uppercase tracking-widest">
-                    Cargando secuencia {scannedSeq?.digits}…
-                  </span>
-                </div>
+                  {/* Buscando... */}
+                  {seqLoading && (
+                    <div className="flex flex-col items-center gap-3 py-6">
+                      <Loader2 size={28} className="animate-spin text-logisnext-magenta" />
+                      <span className="text-[10px] text-logisnext-magenta font-bold uppercase tracking-widest">
+                        Buscando en ERP…
+                      </span>
+                    </div>
+                  )}
+                </>
               )}
             </>
-
           )}
           {stepStatus[0] === STEP_STATUS.OK && erpData && (
             <>
@@ -1899,6 +2025,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             </>
           )}
         </StepCard>
+
 
 
         {/* ── PASO 2: Multiload — poner mástil en posición ────────────────── */}

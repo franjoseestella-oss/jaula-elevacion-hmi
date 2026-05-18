@@ -22,7 +22,7 @@ function App() {
   const [plcModalOpen, setPlcModalOpen] = useState(false);
   const [logsOpen, setLogsOpen]         = useState(false);
   const [telemetry, setTelemetry]       = useState({ distance: 0, timer: 0.0, state: 'IDLE' });
-  const [networkStatus, setNetworkStatus] = useState({ opc: false, basler: false, db: false, erp: true });
+  const [networkStatus, setNetworkStatus] = useState({ opc: false, basler: false, db: false, erp: true, lectorqr: null });
   const [operario, setOperario]         = useState(null);
   const [isSimulation, setIsSimulation] = useState(() => {
     const saved = localStorage.getItem('isSimulation');
@@ -154,6 +154,10 @@ function App() {
       currentActive.push('SYS_PLC_DISCONNECTED');
     }
 
+    if (networkStatus.lectorqr === false) {
+      currentActive.push('SYS_QR_DISCONNECTED');
+    }
+
     if (telemetry?.plc && alarmConfig?.in) {
       const plcActive = alarmConfig.in.filter(a => telemetry.plc[a.plcVar]).map(a => a.plcVar);
       currentActive.push(...plcActive);
@@ -176,6 +180,18 @@ function App() {
             id: `SYS_PLC_DISCONNECTED-${now.getTime()}`,
             plcVar: 'SYS_PLC_DISCONNECTED',
             description: '[ALARMA CRÍTICA] Sin conexión con PLC (OPC UA).',
+            type: 'Alarma',
+            timestamp: now.toLocaleTimeString(),
+            startTime: now.getTime(),
+            endTime: null,
+            duration: 'Activa'
+          };
+        }
+        if (id === 'SYS_QR_DISCONNECTED') {
+          return {
+            id: `SYS_QR_DISCONNECTED-${now.getTime()}`,
+            plcVar: 'SYS_QR_DISCONNECTED',
+            description: '[ALARMA CRÍTICA] Lector QR Datalogic desconectado.',
             type: 'Alarma',
             timestamp: now.toLocaleTimeString(),
             startTime: now.getTime(),
@@ -236,7 +252,7 @@ function App() {
     }
     
     activePlcAlarmsRef.current = currentActive;
-  }, [telemetry?.plc, telemetry?.opcua_connected, alarmConfig?.in, networkStatus.opc, isSimulation, telemetry?.mappedPlc]);
+  }, [telemetry?.plc, telemetry?.opcua_connected, alarmConfig?.in, networkStatus.opc, networkStatus.lectorqr, isSimulation, telemetry?.mappedPlc]);
 
   const activeAlarmsList = React.useMemo(() => {
     const list = [];
@@ -245,6 +261,14 @@ function App() {
       list.push({
         id: 'SYS_PLC_DISCONNECTED',
         description: '[ALARMA CRÍTICA] Sin conexión con PLC (OPC UA).',
+        type: 'Alarma'
+      });
+    }
+
+    if (networkStatus.lectorqr === false) {
+      list.push({
+        id: 'SYS_QR_DISCONNECTED',
+        description: '[ALARMA CRÍTICA] Lector QR Datalogic desconectado.',
         type: 'Alarma'
       });
     }
@@ -269,21 +293,21 @@ function App() {
     }
 
     return list;
-  }, [telemetry?.plc, telemetry?.mappedPlc, telemetry?.opcua_connected, alarmConfig?.in, networkStatus.opc, isSimulation]);
+  }, [telemetry?.plc, telemetry?.mappedPlc, telemetry?.opcua_connected, alarmConfig?.in, networkStatus.opc, networkStatus.lectorqr, isSimulation]);
 
   useEffect(() => {
-    if (!networkStatus.opc || telemetry?.opcua_connected === false) {
+    if (!networkStatus.opc || telemetry?.opcua_connected === false || networkStatus.lectorqr === false) {
       setShowActiveAlarms(true);
     }
-  }, [networkStatus.opc, telemetry?.opcua_connected]);
+  }, [networkStatus.opc, telemetry?.opcua_connected, networkStatus.lectorqr]);
 
   // Reset de alarmas: solo pulso al PLC, se conserva el histórico
   const handleResetAlarms = useCallback(() => {
     pulsePlc('Ob_Reset_Alarmas', 0.5);
     setHasUnreadAlarms(false);
 
-    // Si la alarma es persistente (no se limpia tras el reset), 
-    // tras 1.5 segundos forzamos que se vuelva a detectar como "nueva" 
+    // Si la alarma es persistente (no se limpia tras el reset),
+    // tras 1.5 segundos forzamos que se vuelva a detectar como "nueva"
     // para que vuelva a "sacar el alarmero".
     setTimeout(() => {
       activePlcAlarmsRef.current = activePlcAlarmsRef.current.filter(id => id.startsWith('SYS_'));
@@ -485,7 +509,7 @@ function App() {
     }
   };
 
-  // ── Polling estado BD (cada 10 s) ──────────────────────────────────────────
+  // ── Polling estado BD y Lector QR (cada 10 s) ──────────────────────────────────────────
   useEffect(() => {
     const checkDb = async () => {
       try {
@@ -496,9 +520,48 @@ function App() {
         setNetworkStatus(prev => ({ ...prev, db: false }));
       }
     };
-    checkDb();                              // comprobación inmediata al arrancar
-    const interval = setInterval(checkDb, 10_000);
-    return () => clearInterval(interval);
+
+    const checkQr = async () => {
+      const qrConfigStr = localStorage.getItem('qrConfig');
+      if (qrConfigStr) {
+        try {
+          const config = JSON.parse(qrConfigStr);
+          const res = await fetch(`${API_BASE}/config/qr/test`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              connType: config.qrConnType,
+              comPort: config.qrComPort,
+              baudRate: config.qrBaudRate,
+              ip: config.qrIp || '',
+              port: config.qrPort || ''
+            })
+          });
+          const data = await res.json();
+          setNetworkStatus(prev => ({ ...prev, lectorqr: data.status === 'ok' }));
+        } catch {
+          setNetworkStatus(prev => ({ ...prev, lectorqr: false }));
+        }
+      } else {
+        setNetworkStatus(prev => ({ ...prev, lectorqr: false }));
+      }
+    };
+
+    checkDb();
+    checkQr();
+
+    const handleQrChange = () => checkQr();
+    window.addEventListener('qrConfigChanged', handleQrChange);
+
+    const interval = setInterval(() => {
+      checkDb();
+      checkQr();
+    }, 10_000);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('qrConfigChanged', handleQrChange);
+    };
   }, []);
 
   // ── Parpadeo de luces en modal NOK ──
