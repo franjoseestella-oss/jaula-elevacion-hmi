@@ -1227,7 +1227,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   const manualBastidorRef = useRef(null);
 
   const handleConfirmarBastidor = async () => {
-    const bastidor = manualBastidor.trim();
+    // Leer del DOM directamente para evitar problemas de race condition si se escribe muy rápido y se pulsa Enter
+    const bastidor = (manualBastidorRef.current?.value || manualBastidor).trim();
     if (!bastidor) return;
     setSeqLoading(true);
     setSeqError('');
@@ -1453,7 +1454,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
   // ── PASO 1A: El lector envía el código → buscar en ERP → mostrar preview
   const handleLeerSecuencia = async () => {
-    const raw = seqInput.trim();
+    // Leer del DOM directamente para evitar problemas de race condition con escáneres rápidos
+    const raw = (inputRef.current?.value || seqInput).trim();
     if (!raw) return;
     setSeqInput('');
     setSeqLoading(true);
@@ -2016,8 +2018,6 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                       </span>
                     </div>
                   )}
-                </>
-              )}
             </>
           )}
           {stepStatus[0] === STEP_STATUS.OK && erpData && (
