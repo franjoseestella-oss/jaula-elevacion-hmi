@@ -275,16 +275,22 @@ class OpcUaClientManager:
                                 self.state[f_names[i]] = val if isinstance(val, (int, float, bool, str)) else str(val)
                             fail_count = 0
                     except Exception as e:
-                        fail_count += 1
                         logger.warning("[OPC UA FAST] Lectura en bloque falló... (%s)", e)
-                        if fail_count > 5:
-                            raise Exception("Demasiados errores de lectura rápidos consecutivos. Forzando reconexión.")
+                        success_reads = 0
                         for i, n in enumerate(f_nodelist):
                             try:
                                 val = await n.read_value()
                                 self.state[f_names[i]] = val if isinstance(val, (int, float, bool, str)) else str(val)
+                                success_reads += 1
                             except Exception:
                                 pass
+                        
+                        if success_reads == 0 and len(f_nodelist) > 0:
+                            fail_count += 1
+                            if fail_count > 5:
+                                raise Exception("Demasiados errores de lectura rápidos consecutivos. Forzando reconexión.")
+                        else:
+                            fail_count = 0
                         
                     elapsed = time.time() - cycle_start
                     self.latency_ms = elapsed * 1000
@@ -309,16 +315,22 @@ class OpcUaClientManager:
                                 self.state[s_names[i]] = val if isinstance(val, (int, float, bool, str)) else str(val)
                             fail_count = 0
                     except Exception as e:
-                        fail_count += 1
                         logger.warning("[OPC UA SLOW] Lectura en bloque falló... (%s)", e)
-                        if fail_count > 5:
-                            raise Exception("Demasiados errores de lectura lentos consecutivos. Forzando reconexión.")
+                        success_reads = 0
                         for i, n in enumerate(s_nodelist):
                             try:
                                 val = await n.read_value()
                                 self.state[s_names[i]] = val if isinstance(val, (int, float, bool, str)) else str(val)
+                                success_reads += 1
                             except Exception:
                                 pass
+                                
+                        if success_reads == 0 and len(s_nodelist) > 0:
+                            fail_count += 1
+                            if fail_count > 5:
+                                raise Exception("Demasiados errores de lectura lentos consecutivos. Forzando reconexión.")
+                        else:
+                            fail_count = 0
 
                     # ── Comprobar BIT VIDA (Heartbeat) PLC -> APP
                     try:
