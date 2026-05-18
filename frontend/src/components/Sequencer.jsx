@@ -1458,6 +1458,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     const raw = (inputRef.current?.value || seqInput).trim();
     if (!raw) return;
     setSeqInput('');
+    if (inputRef.current) inputRef.current.value = '';
     setSeqLoading(true);
     setSeqError('');
     try {
@@ -1476,6 +1477,19 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       setSeqLoading(false);
     }
   };
+
+  // Mantener el focus del escáner activo agresivamente (hack para HMIs industriales)
+  useEffect(() => {
+    if (inputMode === 'scanner' && stepStatus[0] === STEP_STATUS.ACTIVE && !erpPreview && !seqLoading) {
+      inputRef.current?.focus();
+      const focusInterval = setInterval(() => {
+        if (document.activeElement !== inputRef.current) {
+          inputRef.current?.focus();
+        }
+      }, 300);
+      return () => clearInterval(focusInterval);
+    }
+  }, [inputMode, stepStatus, erpPreview, seqLoading]);
 
   // ── PASO 1B: Confirmar preview → cargar en ERP data y avanzar
   const handleConfirmPreview = () => {
@@ -1924,7 +1938,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                       <input
                         ref={inputRef}
                         type="text"
-                        value={seqInput}
+                        defaultValue=""
                         onChange={(e) => { setSeqInput(e.target.value); setSeqError(''); }}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') { e.preventDefault(); handleLeerSecuencia(); }
