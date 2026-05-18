@@ -114,92 +114,91 @@ const DataLine = ({ label, value, highlight = false }) => (
 const ds2sP = (v) => v != null ? `${(v / 100).toFixed(3).replace('.', ',')} s` : '—';
 
 const MF = ({ label, value, unit, highlight, size = 'xl' }) => (
-  <div className="flex flex-col gap-1">
-    <span className="text-xs font-bold text-[#6b8fa3] uppercase tracking-widest leading-none">{label}</span>
-    <div className="flex items-baseline gap-1.5">
-      <span className={`font-black leading-tight ${size === 'lg' ? 'text-3xl' : 'text-2xl'} ${highlight ? 'text-logisnext-magenta' : 'text-white'}`}>
+  <div className="flex flex-col gap-1.5">
+    <span className="text-[13px] font-black text-[#6b8fa3] uppercase tracking-[0.2em] leading-none">{label}</span>
+    <div className="flex items-baseline gap-2">
+      <span className={`font-black leading-none ${size === 'lg' ? 'text-[42px]' : 'text-3xl'} ${highlight ? 'text-logisnext-magenta' : 'text-white'}`}>
         {value ?? '—'}
       </span>
-      {unit && <span className="text-sm text-[#6b8fa3] font-semibold">{unit}</span>}
+      {unit && <span className="text-xl text-[#6b8fa3] font-bold">{unit}</span>}
     </div>
   </div>
 );
 
 const STitle = ({ icon, label }) => (
-  <div className="flex items-center gap-2 mb-4">
-    <span className="text-logisnext-magenta">{icon}</span>
-    <span className="text-sm font-black text-logisnext-magenta uppercase tracking-[0.15em]">{label}</span>
-    <div className="flex-1 h-px bg-[#2e404a]" />
+  <div className="flex items-center gap-3 mb-6">
+    <span className="text-logisnext-magenta text-2xl">{icon}</span>
+    <span className="text-lg font-black text-logisnext-magenta uppercase tracking-[0.2em]">{label}</span>
+    <div className="flex-1 h-[2px] bg-[#2e404a]" />
   </div>
 );
 
 const ErpPreviewCard = ({ data, onConfirm, onCancel }) => createPortal(
-  <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-    <div className="w-full max-w-[95vw] bg-[#111c24] rounded-2xl border border-[#2e404a] shadow-[0_0_80px_rgba(0,0,0,0.9)] flex flex-col">
+  <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+    <div className="w-[98vw] h-[92vh] max-w-none bg-[#0a0f12] rounded-3xl border-2 border-[#2e404a] shadow-[0_0_120px_rgba(0,0,0,1)] flex flex-col overflow-hidden">
 
       {/* ── Header ── */}
-      <div className="px-8 pt-6 pb-5 border-b border-[#2e404a] flex items-center justify-between">
+      <div className="px-10 pt-8 pb-6 border-b-2 border-[#2e404a] bg-[#111c24] flex items-center justify-between shrink-0">
         <div>
-          <div className="text-5xl font-black text-logisnext-magenta tracking-widest leading-none mb-1">
+          <div className="text-7xl font-black text-logisnext-magenta tracking-widest leading-none mb-3">
             {data.bastidor}
           </div>
-          <div className="text-lg text-[#6b8fa3] font-semibold tracking-wide">
-            {data.modelo} &nbsp;·&nbsp; {data.mastil}
+          <div className="text-3xl text-[#8ba8b8] font-bold tracking-widest uppercase">
+            {data.modelo} &nbsp;<span className="text-[#4a6b7c]">|</span>&nbsp; MÁSTIL {data.mastil}
           </div>
         </div>
-        <button onClick={onCancel} className="text-[#6b8fa3] hover:text-white transition-colors p-2 rounded-lg hover:bg-white/5">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+        <button onClick={onCancel} className="text-[#6b8fa3] hover:text-white transition-all p-4 rounded-xl hover:bg-white/10 active:scale-95 bg-black/20">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
             <path d="M18 6L6 18M6 6l12 12"/>
           </svg>
         </button>
       </div>
 
-      {/* ── Body: 3 columnas ── */}
-      <div className="px-8 py-6 grid grid-cols-3 gap-8 divide-x divide-[#2e404a]">
+      {/* ── Body: 4 columnas (más horizontal) ── */}
+      <div className="p-10 grid grid-cols-4 gap-12 divide-x-2 divide-[#2e404a] flex-1 overflow-y-auto">
 
         {/* COL 1: Identificación */}
-        <div className="pr-4">
+        <div className="pr-6 flex flex-col gap-8">
           <STitle icon="⊟" label="Identificación" />
-          <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+          <div className="flex flex-col gap-7">
             <MF label="Bastidor" value={data.bastidor} highlight size="lg" />
             <MF label="Secuencia" value={data.secuencia} size="lg" />
             <MF label="Modelo" value={data.modelo} size="lg" />
             <MF label="Mástil REF" value={data.mastil} size="lg" />
-            <MF label="Fec. Montaje" value={data.fecha_montaje} />
-            {data.fecha_importacion
-              ? <MF label="Fec. Importación" value={data.fecha_importacion} />
-              : <div />}
+            <MF label="Fec. Montaje" value={data.fecha_montaje} size="lg" />
           </div>
         </div>
 
         {/* COL 2: Geometría + Capacidades */}
-        <div className="px-8 flex flex-col gap-6">
+        <div className="px-8 flex flex-col gap-10">
           {data.altura_max_interm != null && (
             <div>
               <STitle icon="⟋" label="Geometría" />
-              <MF label="Altura máx. intermedia" value={data.altura_max_interm} unit="mm" size="lg" />
+              <div className="mb-4">
+                <MF label="Altura máx. intermedia" value={data.altura_max_interm} unit="mm" size="lg" />
+              </div>
             </div>
           )}
           {(data.capac_interm_1 != null || data.capac_interm_2 != null) && (
             <div>
-              <STitle icon="⚖" label="Capacidades intermedias" />
-              <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+              <STitle icon="⚖" label="Capacidades" />
+              <div className="flex flex-col gap-7">
                 <MF label="Capac. Interm. 1" value={data.capac_interm_1 ?? 0} unit="kg" size="lg" />
                 <MF label="Capac. Interm. 2" value={data.capac_interm_2 ?? 0} unit="kg" size="lg" />
                 {data.capac_interm_3 != null && (
-                  <MF label="Capac. Interm. 3" value={data.capac_interm_3} unit="kg" />
+                  <MF label="Capac. Interm. 3" value={data.capac_interm_3} unit="kg" size="lg" />
                 )}
               </div>
             </div>
           )}
         </div>
 
-        {/* COL 3: Tiempos */}
-        <div className="pl-8 flex flex-col gap-6">
+        {/* COL 3: Tiempos Con Carga */}
+        <div className="px-8 flex flex-col gap-8">
           {data.tpo_elevac_min != null && (
             <div>
-              <STitle icon="⏱" label="Tiempos con carga" />
-              <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+              <STitle icon="⏱" label="Tpo Con Carga" />
+              <div className="flex flex-col gap-7">
                 <MF label="Elevación mín" value={ds2sP(data.tpo_elevac_min)} size="lg" />
                 <MF label="Elevación máx" value={ds2sP(data.tpo_elevac_max)} size="lg" />
                 <MF label="Descenso mín" value={ds2sP(data.tpo_descenso_min)} size="lg" />
@@ -207,10 +206,14 @@ const ErpPreviewCard = ({ data, onConfirm, onCancel }) => createPortal(
               </div>
             </div>
           )}
+        </div>
+
+        {/* COL 4: Tiempos Sin Carga */}
+        <div className="pl-8 flex flex-col gap-8">
           {data.tpo_elev_min_scarga != null && (
             <div>
-              <STitle icon="↺" label="Tiempos sin carga" />
-              <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+              <STitle icon="↺" label="Tpo Sin Carga" />
+              <div className="flex flex-col gap-7">
                 <MF label="Elevación mín" value={ds2sP(data.tpo_elev_min_scarga)} size="lg" />
                 <MF label="Elevación máx" value={ds2sP(data.tpo_elev_max_scarga)} size="lg" />
                 <MF label="Descenso mín" value={ds2sP(data.tpo_desc_min_scarga)} size="lg" />
@@ -222,18 +225,18 @@ const ErpPreviewCard = ({ data, onConfirm, onCancel }) => createPortal(
       </div>
 
       {/* ── Footer ── */}
-      <div className="px-8 py-5 border-t border-[#2e404a] flex items-center justify-between">
+      <div className="px-10 py-6 border-t-2 border-[#2e404a] bg-[#111c24] flex items-center justify-between shrink-0">
         <button
           onClick={onCancel}
-          className="text-sm font-black uppercase tracking-widest text-[#6b8fa3] hover:text-white transition-colors px-4 py-2 rounded-lg hover:bg-white/5"
+          className="text-2xl font-black uppercase tracking-[0.2em] text-[#6b8fa3] hover:text-white transition-all px-8 py-4 rounded-xl hover:bg-white/10 active:scale-95"
         >
           Cancelar
         </button>
         <button
           onClick={onConfirm}
-          className="flex items-center gap-3 px-10 py-4 rounded-xl bg-logisnext-magenta hover:bg-logisnext-magenta/80 text-white font-black text-lg uppercase tracking-widest transition-all shadow-[0_0_30px_rgba(221,40,118,0.5)] active:scale-95"
+          className="flex items-center gap-4 px-16 py-6 rounded-2xl bg-logisnext-magenta hover:bg-logisnext-magenta/80 text-white font-black text-3xl uppercase tracking-widest transition-all shadow-[0_0_50px_rgba(221,40,118,0.5)] active:scale-95 border-2 border-pink-400/50"
         >
-          Cargar Secuencia <span className="text-2xl">›</span>
+          Cargar Secuencia <span className="text-4xl translate-y-[-2px]">›</span>
         </button>
       </div>
     </div>
@@ -1867,34 +1870,34 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           </div>
         )}
 
+        {/* ── PREVIEW: datos ERP encontrados → confirmar ── */}
+        {erpPreview && (
+          <ErpPreviewCard
+            data={erpPreview}
+            onConfirm={handleConfirmPreview}
+            onCancel={handleCancelarLectura}
+          />
+        )}
+
         {/* ── PASO 1: Leer código de barras / secuencia ────────────────────── */}
         <StepCard num={1} icon={Barcode} title="Identificar carretilla" status={stepStatus[0]}>
-          {stepStatus[0] === STEP_STATUS.ACTIVE && (
+          {stepStatus[0] === STEP_STATUS.ACTIVE && !erpPreview && (
             <>
-              {/* ── PREVIEW: datos ERP encontrados → confirmar ── */}
-              {erpPreview ? (
-                <ErpPreviewCard
-                  data={erpPreview}
-                  onConfirm={handleConfirmPreview}
-                  onCancel={handleCancelarLectura}
-                />
-              ) : (
-                <>
-                  {/* ── Selector de modo ── */}
-                  {!seqLoading && (
-                    <div className="flex rounded-lg overflow-hidden border border-[#2e404a] mb-2">
-                      <button
-                        onClick={() => { setInputMode('scanner'); setManualDigits(''); setSeqError(''); setTimeout(() => inputRef.current?.focus(), 50); }}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${inputMode === 'scanner'
-                          ? 'bg-logisnext-magenta/20 text-logisnext-magenta border-r border-logisnext-magenta/30'
-                          : 'bg-transparent text-logisnext-slate hover:text-white border-r border-[#2e404a]'
-                          }`}
-                      >
-                        <Barcode size={10} /> Escáner
-                      </button>
-                      <button
-                        onClick={() => { setInputMode('manual'); setSeqInput(''); setSeqError(''); }}
-                        className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${inputMode === 'manual'
+              {/* ── Selector de modo ── */}
+              {!seqLoading && (
+                <div className="flex rounded-lg overflow-hidden border border-[#2e404a] mb-2">
+                  <button
+                    onClick={() => { setInputMode('scanner'); setManualDigits(''); setSeqError(''); setTimeout(() => inputRef.current?.focus(), 50); }}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${inputMode === 'scanner'
+                      ? 'bg-logisnext-magenta/20 text-logisnext-magenta border-r border-logisnext-magenta/30'
+                      : 'bg-transparent text-logisnext-slate hover:text-white border-r border-[#2e404a]'
+                      }`}
+                  >
+                    <Barcode size={10} /> Escáner
+                  </button>
+                  <button
+                    onClick={() => { setInputMode('manual'); setSeqInput(''); setSeqError(''); }}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[9px] font-black uppercase tracking-widest transition-all ${inputMode === 'manual'
                           ? 'bg-logisnext-magenta/20 text-logisnext-magenta border-r border-logisnext-magenta/30'
                           : 'bg-transparent text-logisnext-slate hover:text-white border-r border-[#2e404a]'
                           }`}

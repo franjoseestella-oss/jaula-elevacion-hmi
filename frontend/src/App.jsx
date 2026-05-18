@@ -16,14 +16,14 @@ import LogViewer from './components/LogViewer';
 const API_BASE = 'http://localhost:8001';
 
 function App() {
-  const [erpData, setErpData]           = useState(null);
+  const [erpData, setErpData] = useState(null);
   const [erpModalOpen, setErpModalOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [plcModalOpen, setPlcModalOpen] = useState(false);
-  const [logsOpen, setLogsOpen]         = useState(false);
-  const [telemetry, setTelemetry]       = useState({ distance: 0, timer: 0.0, state: 'IDLE' });
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [telemetry, setTelemetry] = useState({ distance: 0, timer: 0.0, state: 'IDLE' });
   const [networkStatus, setNetworkStatus] = useState({ opc: false, basler: false, db: false, erp: true, lectorqr: null });
-  const [operario, setOperario]         = useState(null);
+  const [operario, setOperario] = useState(null);
   const [isSimulation, setIsSimulation] = useState(() => {
     const saved = localStorage.getItem('isSimulation');
     return saved !== null ? JSON.parse(saved) : false;
@@ -32,7 +32,7 @@ function App() {
   useEffect(() => {
     localStorage.setItem('isSimulation', JSON.stringify(isSimulation));
   }, [isSimulation]);
-  const [palletState, setPalletState]   = useState('idle'); // idle | animating | picked_up
+  const [palletState, setPalletState] = useState('idle'); // idle | animating | picked_up
   const [simCarriageHeight, setSimCarriageHeight] = useState(0);
   const [step2Overlay, setStep2Overlay] = useState(null);
   const [testHUDOverlay, setTestHUDOverlay] = useState(null);
@@ -43,7 +43,7 @@ function App() {
   const [showAlarmsHistory, setShowAlarmsHistory] = useState(false);
   const [showActiveAlarms, setShowActiveAlarms] = useState(false);
   const [hasUnreadAlarms, setHasUnreadAlarms] = useState(false);
-  
+
   const [alarmConfig, setAlarmConfig] = useState(() => {
     const saved = localStorage.getItem("plcAlarmConfig");
     return saved ? JSON.parse(saved) : { in: [], out: [] };
@@ -59,7 +59,7 @@ function App() {
   }, []);
 
   const hasActiveCriticalAlarm = alarmConfig?.in?.some(a => a.type === 'Alarma' && telemetry?.plc?.[a.plcVar]) || false;
-  
+
   // Ref para llamar funciones del Sequencer directamente (sin pasar por WebSocket)
   const sequencerRef = useRef(null);
 
@@ -103,16 +103,16 @@ function App() {
         const savedConfig = JSON.parse(savedConfigStr);
         // Inject defaults for old configs
         if (savedConfig.dbNameFast === undefined || savedConfig.dbNameFast === "ServerInterfaces" || savedConfig.dbNameFast === "DB_Fast" || savedConfig.dbNameFast === "DB25_OPC_UA_SCAN_RAPIDO") {
-           savedConfig.dbNameFast = "DB26_OPC_UA_SCAN_RAPIDO";
-           savedConfig.dbNameSlow = "DB25_OPC_UA_SCAN_LENTO";
-           savedConfig.hzFast = 100;
-           savedConfig.hzSlow = 10;
+          savedConfig.dbNameFast = "DB26_OPC_UA_SCAN_RAPIDO";
+          savedConfig.dbNameSlow = "DB25_OPC_UA_SCAN_LENTO";
+          savedConfig.hzFast = 100;
+          savedConfig.hzSlow = 10;
         }
 
         // Only send connect request if we are in PLC mode
         const savedSim = localStorage.getItem('isSimulation');
         const isSim = savedSim !== null ? JSON.parse(savedSim) : false;
-        
+
         fetch('http://localhost:8001/config/plc', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -121,7 +121,7 @@ function App() {
             isSimulation: isSim
           })
         }).catch(e => console.error("Error auto-connecting to PLC:", e));
-      } catch(e) {}
+      } catch (e) { }
     }
   }, []);
 
@@ -129,23 +129,23 @@ function App() {
   useEffect(() => {
     let newAlarmDesc = null;
     if (telemetry?.opcua_error && telemetry?.opcua_error !== "None") {
-       newAlarmDesc = 'Error conexión OPC UA: ' + telemetry.opcua_error;
+      newAlarmDesc = 'Error conexión OPC UA: ' + telemetry.opcua_error;
     }
     if (telemetry?.plc?.Ob_Abortar_Secuencia) {
-       newAlarmDesc = 'Secuencia abortada por PLC';
+      newAlarmDesc = 'Secuencia abortada por PLC';
     }
-    
+
     if (newAlarmDesc) {
       setAlarms(prev => {
-         if (prev.length > 0 && prev[0].description === newAlarmDesc && (Date.now() - prev[0].id) < 5000) return prev;
-         setHasUnreadAlarms(true);
-         return [{ id: Date.now(), timestamp: new Date().toLocaleString(), description: newAlarmDesc, type: 'Alarma' }, ...prev].slice(0, 5000);
+        if (prev.length > 0 && prev[0].description === newAlarmDesc && (Date.now() - prev[0].id) < 5000) return prev;
+        setHasUnreadAlarms(true);
+        return [{ id: Date.now(), timestamp: new Date().toLocaleString(), description: newAlarmDesc, type: 'Alarma' }, ...prev].slice(0, 5000);
       });
     }
   }, [telemetry?.opcua_error, telemetry?.plc?.Ob_Abortar_Secuencia]);
 
   const activePlcAlarmsRef = useRef([]);
-  
+
   // Procesar flancos de subida de las alarmas configuradas (IN ALARMAS)
   useEffect(() => {
     const currentActive = [];
@@ -169,11 +169,11 @@ function App() {
     }
 
     const newAlarms = currentActive.filter(id => !activePlcAlarmsRef.current.includes(id));
-    
+
     if (newAlarms.length > 0) {
       setHasUnreadAlarms(true);
       const now = new Date();
-      
+
       const newAlarmObjects = newAlarms.map(id => {
         if (id === 'SYS_PLC_DISCONNECTED') {
           return {
@@ -216,7 +216,7 @@ function App() {
         let desc = `[${id}]`;
         if (config && config.desc) desc += ` ${config.desc}`;
         if (config && config.remedy) desc += ` (Remedio: ${config.remedy})`;
-        
+
         return {
           id: `${id}-${now.getTime()}`,
           plcVar: id,
@@ -250,7 +250,7 @@ function App() {
         return alarm;
       }));
     }
-    
+
     activePlcAlarmsRef.current = currentActive;
   }, [telemetry?.plc, telemetry?.opcua_connected, alarmConfig?.in, networkStatus.opc, networkStatus.lectorqr, isSimulation, telemetry?.mappedPlc]);
 
@@ -285,10 +285,10 @@ function App() {
     }
 
     if (!isSimulation && telemetry?.opcua_connected && !telemetry.mappedPlc?.Ob_Estado_Automatico && !telemetry.plc?.Ob_Estado_Automatico) {
-      list.push({ 
-        id: 'SYS_MODO_MANUAL', 
-        description: '[ADVERTENCIA] Máquina en estado manual, no cumples condiciones iniciales', 
-        type: 'Advertencia' 
+      list.push({
+        id: 'SYS_MODO_MANUAL',
+        description: '[ADVERTENCIA] Máquina en estado manual, no cumples condiciones iniciales',
+        type: 'Advertencia'
       });
     }
 
@@ -361,10 +361,11 @@ function App() {
     }
   }, []);
 
+
   const usePlcCountdown = (varValue, onComplete) => {
     const [timeLeft, setTimeLeft] = useState(null);
     const onCompleteRef = useRef(onComplete);
-    
+
     useEffect(() => {
       onCompleteRef.current = onComplete;
     }, [onComplete]);
@@ -378,13 +379,13 @@ function App() {
         interval = setInterval(() => {
           currentLeft -= 1;
           if (currentLeft <= 0) {
-             setTimeLeft(0);
-             if (!triggered) {
-               triggered = true;
-               if (onCompleteRef.current) onCompleteRef.current();
-             }
+            setTimeLeft(0);
+            if (!triggered) {
+              triggered = true;
+              if (onCompleteRef.current) onCompleteRef.current();
+            }
           } else {
-             setTimeLeft(currentLeft);
+            setTimeLeft(currentLeft);
           }
         }, 1000);
       } else {
@@ -406,12 +407,12 @@ function App() {
     if (!isSimulation) {
       const mappingStr = localStorage.getItem('plcVarMapping');
       if (mappingStr) {
-         try {
-            const mapping = JSON.parse(mappingStr);
-            const found = Object.entries(mapping).find(([k, v]) => v.appVar === varName);
-            if (found) targetVar = found[0];
-            else return;
-         } catch(e) {}
+        try {
+          const mapping = JSON.parse(mappingStr);
+          const found = Object.entries(mapping).find(([k, v]) => v.appVar === varName);
+          if (found) targetVar = found[0];
+          else return;
+        } catch (e) { }
       } else return;
     }
     fetch('http://localhost:8001/plc/write', {
@@ -426,12 +427,12 @@ function App() {
     if (!isSimulation) {
       const mappingStr = localStorage.getItem('plcVarMapping');
       if (mappingStr) {
-         try {
-            const mapping = JSON.parse(mappingStr);
-            const found = Object.entries(mapping).find(([k, v]) => v.appVar === varName);
-            if (found) targetVar = found[0];
-            else return;
-         } catch(e) {}
+        try {
+          const mapping = JSON.parse(mappingStr);
+          const found = Object.entries(mapping).find(([k, v]) => v.appVar === varName);
+          if (found) targetVar = found[0];
+          else return;
+        } catch (e) { }
       } else return;
     }
     fetch('http://localhost:8001/plc/write', {
@@ -462,22 +463,22 @@ function App() {
     }
 
     let targetVar = varName;
-    
+
     if (!isSimulation) {
       const mappingStr = localStorage.getItem('plcVarMapping');
       if (mappingStr) {
-         try {
-            const mapping = JSON.parse(mappingStr);
-            const found = Object.entries(mapping).find(([k, v]) => v.appVar === varName);
-            if (found) {
-                targetVar = found[0];
-            } else {
-                console.log(`[pulsePlc] ${varName} no está mapeada al PLC. Ignorando.`);
-                return;
-            }
-         } catch(e) {}
+        try {
+          const mapping = JSON.parse(mappingStr);
+          const found = Object.entries(mapping).find(([k, v]) => v.appVar === varName);
+          if (found) {
+            targetVar = found[0];
+          } else {
+            console.log(`[pulsePlc] ${varName} no está mapeada al PLC. Ignorando.`);
+            return;
+          }
+        } catch (e) { }
       } else {
-         return;
+        return;
       }
     }
 
@@ -487,7 +488,7 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [targetVar]: true, is_force: isSimulation })
       });
-      
+
       // If duration is less than 1, we don't show the visual countdown, just timeout
       if (durationSecs < 1) {
         setTimeout(async () => {
@@ -501,20 +502,20 @@ function App() {
       }
 
       setPulseActive({ varName, timeLeft: durationSecs });
-      
+
       let secondsLeft = durationSecs;
       const interval = setInterval(() => {
         secondsLeft -= 1;
         if (secondsLeft <= 0) {
-           clearInterval(interval);
-           setPulseActive(null);
-           fetch('http://localhost:8001/plc/write', {
-             method: 'POST',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ [targetVar]: false, is_force: isSimulation })
-           }).catch(e => console.error(e));
+          clearInterval(interval);
+          setPulseActive(null);
+          fetch('http://localhost:8001/plc/write', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [targetVar]: false, is_force: isSimulation })
+          }).catch(e => console.error(e));
         } else {
-           setPulseActive({ varName, timeLeft: secondsLeft });
+          setPulseActive({ varName, timeLeft: secondsLeft });
         }
       }, 1000);
     } catch (error) {
@@ -527,7 +528,7 @@ function App() {
   useEffect(() => {
     const checkDb = async () => {
       try {
-        const res  = await fetch(`${API_BASE}/health/db`);
+        const res = await fetch(`${API_BASE}/health/db`);
         const data = await res.json();
         setNetworkStatus(prev => ({ ...prev, db: data.connected === true }));
       } catch {
@@ -594,10 +595,10 @@ function App() {
         fetch('http://localhost:8001/plc/write', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             Ib_LUZ_Pulsador_1: lightState,
             Ib_LUZ_Pulsador_2: onlyBtn1 ? false : lightState,
-            is_force: isSimulation 
+            is_force: isSimulation
           })
         }).catch(err => console.error('Error parpadeo luces:', err));
       }, 1000); // 1000ms on, 1000ms off
@@ -606,10 +607,10 @@ function App() {
       fetch('http://localhost:8001/plc/write', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           Ib_LUZ_Pulsador_1: false,
           Ib_LUZ_Pulsador_2: false,
-          is_force: isSimulation 
+          is_force: isSimulation
         })
       }).catch(err => console.error('Error apagando luces:', err));
     }
@@ -621,10 +622,10 @@ function App() {
         fetch('http://localhost:8001/plc/write', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             Ib_LUZ_Pulsador_1: false,
             Ib_LUZ_Pulsador_2: false,
-            is_force: isSimulation 
+            is_force: isSimulation
           })
         }).catch(err => console.error('Error apagando luces al desmontar:', err));
       }
@@ -640,19 +641,19 @@ function App() {
         const mappingStr = localStorage.getItem('plcVarMapping');
         let mappedPlc = {};
         if (mappingStr && data.plc) {
-           try {
-              const mapping = JSON.parse(mappingStr);
-              Object.entries(mapping).forEach(([plcKey, mapData]) => {
-                  if (mapData.appVar && data.plc[plcKey] !== undefined) {
-                      mappedPlc[mapData.appVar] = data.plc[plcKey];
-                  }
-              });
-           } catch(e) {}
+          try {
+            const mapping = JSON.parse(mappingStr);
+            Object.entries(mapping).forEach(([plcKey, mapData]) => {
+              if (mapData.appVar && data.plc[plcKey] !== undefined) {
+                mappedPlc[mapData.appVar] = data.plc[plcKey];
+              }
+            });
+          } catch (e) { }
         }
 
-        const newTelemetry = { 
-          distance: data.distance, 
-          timer: data.timer, 
+        const newTelemetry = {
+          distance: data.distance,
+          timer: data.timer,
           state: data.state,
           plc: data.plc || {},
           mappedPlc: mappedPlc,
@@ -678,7 +679,7 @@ function App() {
   }, []);
 
   const appPlc = isSimulation ? { ...(telemetry?.plc || {}), Ob_Estado_Automatico: true } : (telemetry?.mappedPlc || {});
-  
+
   const iniciarPlcTime = usePlcCountdown(appPlc?.Ob_Iniciar_Secuencia, () => {
     if (sequencerRef.current?.onIniciarSecuencia) sequencerRef.current.onIniciarSecuencia();
   });
@@ -688,7 +689,7 @@ function App() {
   const abortarPlcTime = usePlcCountdown(appPlc?.Ob_Abortar_Secuencia, () => {
     if (sequencerRef.current?.onAbortar) sequencerRef.current.onAbortar();
   });
-  
+
   const isMainScreen = !erpModalOpen && !settingsOpen && !plcModalOpen && !logsOpen && !showAlarmsHistory;
 
   return (
@@ -713,14 +714,13 @@ function App() {
         <div className="flex-1 relative flex items-center justify-center bg-black overflow-hidden scanlines">
           {/* OVERLAYS GLOBALES DE ESTADO PARA LAS ETAPAS */}
           {step2Overlay && step2Overlay.active && (
-            <div className={`absolute top-[45%] left-10 z-[70] px-8 py-6 rounded-2xl border-4 backdrop-blur-md shadow-2xl transition-colors duration-300 ${
-              (!step2Overlay.mode && step2Overlay.isOk) || 
-              (step2Overlay.mode === 'test_elev' && step2Overlay.isAbove) || 
+            <div className={`absolute top-[45%] left-10 z-[70] px-8 py-6 rounded-2xl border-4 backdrop-blur-md shadow-2xl transition-colors duration-300 ${(!step2Overlay.mode && step2Overlay.isOk) ||
+              (step2Overlay.mode === 'test_elev' && step2Overlay.isAbove) ||
               (step2Overlay.mode === 'test_5m' && step2Overlay.isAbove)
-                ? 'bg-green-600/90 border-green-500 shadow-[0_0_50px_rgba(34,197,94,0.6)]' 
-                : 'bg-[#0a0f12]/90 border-[#2e404a] shadow-[0_0_30px_rgba(0,0,0,0.8)]'
-            }`}>
-              
+              ? 'bg-green-600/90 border-green-500 shadow-[0_0_50px_rgba(34,197,94,0.6)]'
+              : 'bg-[#0a0f12]/90 border-[#2e404a] shadow-[0_0_30px_rgba(0,0,0,0.8)]'
+              }`}>
+
               {!step2Overlay.mode ? (
                 // --- MODO MULTILOAD (ETAPA 1) ---
                 <div className="flex flex-col items-start gap-4">
@@ -763,18 +763,18 @@ function App() {
                         &lt; {step2Overlay.cotaInicial} mm
                       </span>
                     </div>
-                    
+
                     {/* Mensaje de advertencia si la carretilla está demasiado alta ANTES de empezar */}
                     {step2Overlay.cameraTestState === 'standby' && step2Overlay.isAbove && (
                       <div className="mt-2 bg-red-900/40 border border-red-500 p-3 rounded-xl flex items-center gap-3">
                         <AlertTriangle size={32} className="text-red-400" />
                         <span className="text-lg font-black text-red-300 tracking-wider">
-                          ¡CARRETILLA DEMASIADO ALTA!<br/>
+                          ¡CARRETILLA DEMASIADO ALTA!<br />
                           <span className="text-sm font-bold opacity-80">Baje por debajo de {step2Overlay.cotaInicial} mm para poder iniciar.</span>
                         </span>
                       </div>
                     )}
-                    
+
                     {/* Estados de la prueba en curso */}
                     {step2Overlay.cameraTestState !== 'standby' && (
                       <div className="mt-2 p-3 bg-blue-900/20 border border-blue-500/40 rounded-xl">
@@ -786,16 +786,16 @@ function App() {
                           {step2Overlay.cameraTestState === 'ok' && <span className="text-green-400">PRUEBA COMPLETADA</span>}
                           {step2Overlay.cameraTestState === 'nok' && <span className="text-red-400">PRUEBA FALLIDA</span>}
                         </span>
-                        
+
                         {testHUDOverlay && (
                           <div className="flex justify-around items-center w-full mt-3">
                             <div className={`flex flex-col items-center px-6 py-2 rounded-lg border-2 ${step2Overlay.cameraTestState === 'ascenso' ? 'border-blue-400 bg-blue-900/40 animate-pulse shadow-[0_0_20px_rgba(59,130,246,0.3)]' : 'border-gray-600 bg-gray-800/50 opacity-80'}`}>
                               <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">↑ Ascenso</span>
                               <span className={`text-4xl font-mono font-black ${step2Overlay.cameraTestState === 'ascenso' ? 'text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]' : 'text-gray-300'}`}>{testHUDOverlay.realElev ?? '0.00'}s</span>
                             </div>
-                            
+
                             <div className="text-blue-500/50 mx-2 text-3xl font-black">|</div>
-                            
+
                             {/* ESTABILIZANDO */}
                             {step2Overlay.cameraTestState === 'espera_arriba' && (
                               <>
@@ -840,7 +840,7 @@ function App() {
                       <div className="mt-2 bg-red-900/40 border border-red-500 p-3 rounded-xl flex items-center gap-3">
                         <AlertTriangle size={32} className="text-red-400" />
                         <span className="text-lg font-black text-red-300 tracking-wider">
-                          ¡CARRETILLA DEMASIADO ALTA!<br/>
+                          ¡CARRETILLA DEMASIADO ALTA!<br />
                           <span className="text-sm font-bold opacity-80">Baje por debajo de {step2Overlay.cotaInicial} mm para poder iniciar.</span>
                         </span>
                       </div>
@@ -851,7 +851,7 @@ function App() {
                       <div className="mt-2 bg-amber-900/40 border border-amber-500 p-3 rounded-xl flex items-center gap-3">
                         <AlertTriangle size={32} className="text-amber-400" />
                         <span className="text-lg font-black text-amber-300 tracking-wider">
-                          ¡CARRETILLA DEMASIADO BAJA!<br/>
+                          ¡CARRETILLA DEMASIADO BAJA!<br />
                           <span className="text-sm font-bold opacity-80">Eleve por encima de {step2Overlay.cotaInicial} mm para comenzar a estabilizar.</span>
                         </span>
                       </div>
@@ -860,21 +860,19 @@ function App() {
                     {/* Estados de la prueba */}
                     {(step2Overlay.test5mState !== 'idle' && step2Overlay.test5mState !== 'esperando_elevacion') && (
                       <div className="mt-2 p-3 bg-[#1d2930] border border-[#2e404a] rounded-xl flex items-center justify-between gap-6">
-                        <span className={`text-xl font-black tracking-widest uppercase ${
-                          step2Overlay.test5mState === 'nok' ? 'text-red-400' : 'text-blue-300'
-                        }`}>
+                        <span className={`text-xl font-black tracking-widest uppercase ${step2Overlay.test5mState === 'nok' ? 'text-red-400' : 'text-blue-300'
+                          }`}>
                           {step2Overlay.test5mState === 'stabilizing' && 'ESTABILIZANDO...'}
                           {step2Overlay.test5mState === 'running' && 'PRUEBA EN CURSO'}
                           {step2Overlay.test5mState === 'ok' && <span className="text-green-400">PRUEBA SUPERADA</span>}
                           {step2Overlay.test5mState === 'nok' && 'PRUEBA FALLIDA'}
                         </span>
                         {(step2Overlay.test5mState === 'running' || step2Overlay.test5mState === 'ok' || step2Overlay.test5mState === 'nok') && (
-                          <span className={`text-4xl font-mono font-black tracking-wider ${
-                            step2Overlay.test5mState === 'nok' ? 'text-red-500' :
+                          <span className={`text-4xl font-mono font-black tracking-wider ${step2Overlay.test5mState === 'nok' ? 'text-red-500' :
                             step2Overlay.timer5min <= 30 && step2Overlay.test5mState === 'running' ? 'text-red-400 animate-pulse' :
-                            step2Overlay.timer5min <= 60 && step2Overlay.test5mState === 'running' ? 'text-yellow-400' :
-                            'text-logisnext-magenta'
-                          }`}>
+                              step2Overlay.timer5min <= 60 && step2Overlay.test5mState === 'running' ? 'text-yellow-400' :
+                                'text-logisnext-magenta'
+                            }`}>
                             {`${Math.floor(step2Overlay.timer5min / 60).toString().padStart(2, '0')}:${(step2Overlay.timer5min % 60).toString().padStart(2, '0')}`}
                           </span>
                         )}
@@ -888,7 +886,7 @@ function App() {
 
           {/* ALARMS ICON */}
           {(hasUnreadAlarms || activeAlarmsList.length > 0) && !showActiveAlarms && (
-            <button 
+            <button
               onClick={() => { setShowActiveAlarms(true); setHasUnreadAlarms(false); }}
               className="absolute top-48 right-12 z-50 bg-red-600/90 border-4 border-red-500 text-white p-8 rounded-full shadow-[0_0_50px_rgba(220,38,38,0.8)] hover:scale-110 active:scale-95 transition-all animate-pulse"
             >
@@ -900,35 +898,34 @@ function App() {
           {showActiveAlarms && (
             <div className="absolute top-56 right-6 z-50 w-[600px] bg-[#0a0f12]/95 border border-red-500/50 rounded-2xl shadow-[0_0_40px_rgba(220,38,38,0.3)] backdrop-blur-md overflow-hidden flex flex-col max-h-[70vh] animate-in slide-in-from-right-8 duration-300">
               <div className="bg-red-600/20 border-b border-red-500/30 p-5 flex justify-between items-center shrink-0">
-                 <div className="flex items-center gap-3">
-                    <AlertTriangle size={24} className="text-red-500" />
-                    <span className="text-base font-black text-red-500 uppercase tracking-widest drop-shadow-md">Alarmas Activas</span>
-                 </div>
-                 <div className="flex items-center gap-3">
-                   <button onClick={() => { 
-                       handleResetAlarms(); 
-                       // No cerramos el modal manualmente. Se cerrará solo si activeAlarmsList se queda vacío.
-                     }} 
-                     className="text-white text-xs font-bold uppercase tracking-wider bg-red-600/80 border border-red-500 hover:bg-red-500 px-3 py-1.5 rounded-lg shadow-sm transition-colors">
-                     Reset Alarmas
-                   </button>
-                   <button onClick={() => setShowActiveAlarms(false)} className="text-gray-400 hover:text-white bg-[#1d2930] p-2 rounded-lg hover:bg-red-600 transition-colors"><X size={20}/></button>
-                 </div>
+                <div className="flex items-center gap-3">
+                  <AlertTriangle size={24} className="text-red-500" />
+                  <span className="text-base font-black text-red-500 uppercase tracking-widest drop-shadow-md">Alarmas Activas</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => {
+                    handleResetAlarms();
+                    // No cerramos el modal manualmente. Se cerrará solo si activeAlarmsList se queda vacío.
+                  }}
+                    className="text-white text-xs font-bold uppercase tracking-wider bg-red-600/80 border border-red-500 hover:bg-red-500 px-3 py-1.5 rounded-lg shadow-sm transition-colors">
+                    Reset Alarmas
+                  </button>
+                  <button onClick={() => setShowActiveAlarms(false)} className="text-gray-400 hover:text-white bg-[#1d2930] p-2 rounded-lg hover:bg-red-600 transition-colors"><X size={20} /></button>
+                </div>
               </div>
               <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 custom-scrollbar">
                 {activeAlarmsList.length === 0 ? (
-                   <span className="text-sm text-gray-500 italic text-center py-10">No hay alarmas activas en este momento.</span>
+                  <span className="text-sm text-gray-500 italic text-center py-10">No hay alarmas activas en este momento.</span>
                 ) : activeAlarmsList.map(a => {
-                   const isWarning = a.type?.toUpperCase() === 'ADVERTENCIA';
-                   return (
-                     <div key={a.id} className={`bg-[#1d2930]/80 p-4 rounded-xl border flex flex-col gap-2 shadow-sm transition-colors ${
-                       isWarning ? 'border-yellow-500/50 hover:border-yellow-500/80' : 'border-red-500/50 hover:border-red-500/80'
-                     }`}>
-                       <span className={`text-sm font-bold tracking-wide ${isWarning ? 'text-yellow-400' : 'text-red-400'}`}>
-                         {a.description}
-                       </span>
-                     </div>
-                   );
+                  const isWarning = a.type?.toUpperCase() === 'ADVERTENCIA';
+                  return (
+                    <div key={a.id} className={`bg-[#1d2930]/80 p-4 rounded-xl border flex flex-col gap-2 shadow-sm transition-colors ${isWarning ? 'border-yellow-500/50 hover:border-yellow-500/80' : 'border-red-500/50 hover:border-red-500/80'
+                      }`}>
+                      <span className={`text-sm font-bold tracking-wide ${isWarning ? 'text-yellow-400' : 'text-red-400'}`}>
+                        {a.description}
+                      </span>
+                    </div>
+                  );
                 })}
               </div>
             </div>
@@ -939,25 +936,25 @@ function App() {
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-8">
               <div className="w-full max-w-6xl bg-[#0a0f12] border border-red-500/50 rounded-2xl shadow-[0_0_60px_rgba(220,38,38,0.3)] overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-300">
                 <div className="bg-red-600/20 border-b border-red-500/30 p-6 flex justify-between items-center shrink-0">
-                   <div className="flex items-center gap-4">
-                      <AlertTriangle size={32} className="text-red-500" />
-                      <span className="text-2xl font-black text-red-500 uppercase tracking-widest drop-shadow-md">Log_Alarms</span>
-                   </div>
-                   <div className="flex items-center gap-4">
-                     <button onClick={() => setAlarms([])} className="text-white text-sm font-bold uppercase tracking-wider bg-orange-600/80 border border-orange-500 hover:bg-orange-500 px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-2">
-                       <Trash2 size={18} /> Borrar Histórico
-                     </button>
-                     <button onClick={handleExportAlarms} className="text-white text-sm font-bold uppercase tracking-wider bg-green-600/80 border border-green-500 hover:bg-green-500 px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-2">
-                       <Download size={18} /> Exportar .xlsx
-                     </button>
-                     <button onClick={() => setShowAlarmsHistory(false)} className="text-gray-400 hover:text-white bg-[#1d2930] p-2.5 rounded-lg hover:bg-red-600 transition-colors">
-                       <X size={24} />
-                     </button>
-                   </div>
+                  <div className="flex items-center gap-4">
+                    <AlertTriangle size={32} className="text-red-500" />
+                    <span className="text-2xl font-black text-red-500 uppercase tracking-widest drop-shadow-md">Log_Alarms</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <button onClick={() => setAlarms([])} className="text-white text-sm font-bold uppercase tracking-wider bg-orange-600/80 border border-orange-500 hover:bg-orange-500 px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-2">
+                      <Trash2 size={18} /> Borrar Histórico
+                    </button>
+                    <button onClick={handleExportAlarms} className="text-white text-sm font-bold uppercase tracking-wider bg-green-600/80 border border-green-500 hover:bg-green-500 px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-2">
+                      <Download size={18} /> Exportar .xlsx
+                    </button>
+                    <button onClick={() => setShowAlarmsHistory(false)} className="text-gray-400 hover:text-white bg-[#1d2930] p-2.5 rounded-lg hover:bg-red-600 transition-colors">
+                      <X size={24} />
+                    </button>
+                  </div>
                 </div>
                 <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
                   {alarms.length === 0 ? (
-                     <div className="text-lg text-gray-500 italic text-center py-20">No hay alarmas registradas en el histórico.</div>
+                    <div className="text-lg text-gray-500 italic text-center py-20">No hay alarmas registradas en el histórico.</div>
                   ) : (
                     <table className="w-full text-left border-collapse text-sm">
                       <thead className="bg-[#1d2930] sticky top-0 z-10">
@@ -973,18 +970,16 @@ function App() {
                           const isWarning = a.type?.toUpperCase() === 'ADVERTENCIA';
                           const isActive = a.duration === 'Activa';
                           return (
-                            <tr key={a.id} className={`border-b border-gray-800/50 transition-colors ${
-                              isWarning ? 'hover:bg-yellow-500/10' : 'hover:bg-red-500/10'
-                            }`}>
+                            <tr key={a.id} className={`border-b border-gray-800/50 transition-colors ${isWarning ? 'hover:bg-yellow-500/10' : 'hover:bg-red-500/10'
+                              }`}>
                               <td className="p-4 text-gray-400 font-mono">{a.timestamp}</td>
                               <td className={`p-4 font-bold ${isWarning ? 'text-yellow-500' : 'text-red-500'}`}>
                                 {isWarning ? 'ADVERTENCIA' : 'ALARMA'}
                               </td>
                               <td className="p-4 text-gray-200">{a.description}</td>
                               <td className="p-4">
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                                  isActive ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-gray-800 text-gray-400'
-                                }`}>
+                                <span className={`px-3 py-1 rounded-full text-xs font-bold ${isActive ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-gray-800 text-gray-400'
+                                  }`}>
                                   {a.duration}
                                 </span>
                               </td>
@@ -1024,11 +1019,10 @@ function App() {
 
           {/* BANNER GIGANTE DE CARGA (Para Test con Carga) */}
           {erpData && (currentStep === 3 || currentStep === 4) && (
-            <div className={`absolute top-10 right-10 z-50 px-6 py-4 rounded-2xl border-2 backdrop-blur-md shadow-2xl flex flex-col gap-3 ${
-              (appPlc?.OW_Numero_Pallets || 0) * 250 === erpData.capac_interm_1
-                ? 'bg-green-600/80 border-green-400' 
-                : 'bg-[#0a0f12]/90 border-logisnext-magenta'
-            }`}>
+            <div className={`absolute top-10 right-10 z-50 px-6 py-4 rounded-2xl border-2 backdrop-blur-md shadow-2xl flex flex-col gap-3 ${(appPlc?.OW_Numero_Pallets || 0) * 250 === erpData.capac_interm_1
+              ? 'bg-green-600/80 border-green-400'
+              : 'bg-[#0a0f12]/90 border-logisnext-magenta'
+              }`}>
               <h3 className="text-xs font-black uppercase tracking-widest text-gray-300 border-b border-white/20 pb-2">Control de Carga</h3>
               <div className="flex justify-between items-center gap-8">
                 <span className="text-sm font-bold text-gray-400 tracking-wider">CARGA REQUERIDA (ERP)</span>
@@ -1072,12 +1066,11 @@ function App() {
                       {testHUDOverlay.cameraTestState === 'ok' && 'PRUEBA OK ✓'}
                       {testHUDOverlay.cameraTestState === 'nok' && 'PRUEBA NOK ✗'}
                     </span>
-                    <div className={`w-3.5 h-3.5 rounded-full border-2 ${
-                      testHUDOverlay.ledState === 'active' ? 'bg-green-400 border-green-200 animate-pulse shadow-[0_0_8px_#4ade80]' :
+                    <div className={`w-3.5 h-3.5 rounded-full border-2 ${testHUDOverlay.ledState === 'active' ? 'bg-green-400 border-green-200 animate-pulse shadow-[0_0_8px_#4ade80]' :
                       testHUDOverlay.ledState === 'ok' ? 'bg-green-500 border-green-300 shadow-[0_0_10px_#22c55e]' :
-                      testHUDOverlay.ledState === 'nok' ? 'bg-red-500 border-red-300 shadow-[0_0_10px_#ef4444]' :
-                      'bg-red-600 border-red-400 animate-pulse shadow-[0_0_8px_#dc2626]'
-                    }`} />
+                        testHUDOverlay.ledState === 'nok' ? 'bg-red-500 border-red-300 shadow-[0_0_10px_#ef4444]' :
+                          'bg-red-600 border-red-400 animate-pulse shadow-[0_0_8px_#dc2626]'
+                      }`} />
                   </div>
                 </div>
 
@@ -1098,23 +1091,20 @@ function App() {
                       ? rawElev >= testHUDOverlay._minElev && rawElev <= testHUDOverlay._maxElev : null;
                     const isActive = testHUDOverlay.cameraTestState === 'ascenso';
                     return (
-                      <div className={`p-3 rounded-xl border relative overflow-hidden transition-all ${
-                        inRange === true ? 'bg-green-900/20 border-green-500/50' :
+                      <div className={`p-3 rounded-xl border relative overflow-hidden transition-all ${inRange === true ? 'bg-green-900/20 border-green-500/50' :
                         inRange === false ? 'bg-red-900/20 border-red-500/50' :
-                        isActive ? 'bg-blue-900/20 border-blue-500/40' : 'bg-[#1d2930]/60 border-[#2e404a]'
-                      }`}>
-                        <div className={`absolute top-0 left-0 w-1 h-full ${
-                          inRange === true ? 'bg-green-500' : inRange === false ? 'bg-red-500' :
+                          isActive ? 'bg-blue-900/20 border-blue-500/40' : 'bg-[#1d2930]/60 border-[#2e404a]'
+                        }`}>
+                        <div className={`absolute top-0 left-0 w-1 h-full ${inRange === true ? 'bg-green-500' : inRange === false ? 'bg-red-500' :
                           isActive ? 'bg-blue-400' : 'bg-blue-600/40'
-                        }`} />
+                          }`} />
                         <div className="flex items-baseline justify-between mb-1">
                           <span className="text-[10px] text-logisnext-slate uppercase tracking-widest">↑ Ascenso</span>
                           {isActive && <span className="text-[9px] text-blue-400 font-bold animate-pulse">● MIDIENDO</span>}
                         </div>
-                        <span className={`text-4xl font-mono font-black leading-none ${
-                          inRange === true ? 'text-green-400' : inRange === false ? 'text-red-400' :
+                        <span className={`text-4xl font-mono font-black leading-none ${inRange === true ? 'text-green-400' : inRange === false ? 'text-red-400' :
                           isActive ? 'text-blue-300' : 'text-gray-300'
-                        }`}>{elevVal ?? '—'}</span>
+                          }`}>{elevVal ?? '—'}</span>
                         <div className="mt-2 pt-2 border-t border-[#2e404a]/60 flex items-center gap-2">
                           <span className="text-[10px] text-logisnext-slate font-bold">ERP:</span>
                           <span className="text-sm font-mono font-bold text-gray-300">
@@ -1132,23 +1122,20 @@ function App() {
                       ? rawDesc >= testHUDOverlay._minDesc && rawDesc <= testHUDOverlay._maxDesc : null;
                     const isActive = testHUDOverlay.cameraTestState === 'descenso';
                     return (
-                      <div className={`p-3 rounded-xl border relative overflow-hidden transition-all ${
-                        inRange === true ? 'bg-green-900/20 border-green-500/50' :
+                      <div className={`p-3 rounded-xl border relative overflow-hidden transition-all ${inRange === true ? 'bg-green-900/20 border-green-500/50' :
                         inRange === false ? 'bg-red-900/20 border-red-500/50' :
-                        isActive ? 'bg-purple-900/20 border-purple-500/40' : 'bg-[#1d2930]/60 border-[#2e404a]'
-                      }`}>
-                        <div className={`absolute top-0 left-0 w-1 h-full ${
-                          inRange === true ? 'bg-green-500' : inRange === false ? 'bg-red-500' :
+                          isActive ? 'bg-purple-900/20 border-purple-500/40' : 'bg-[#1d2930]/60 border-[#2e404a]'
+                        }`}>
+                        <div className={`absolute top-0 left-0 w-1 h-full ${inRange === true ? 'bg-green-500' : inRange === false ? 'bg-red-500' :
                           isActive ? 'bg-purple-400' : 'bg-purple-600/40'
-                        }`} />
+                          }`} />
                         <div className="flex items-baseline justify-between mb-1">
                           <span className="text-[10px] text-logisnext-slate uppercase tracking-widest">↓ Descenso</span>
                           {isActive && <span className="text-[9px] text-purple-400 font-bold animate-pulse">● MIDIENDO</span>}
                         </div>
-                        <span className={`text-4xl font-mono font-black leading-none ${
-                          inRange === true ? 'text-green-400' : inRange === false ? 'text-red-400' :
+                        <span className={`text-4xl font-mono font-black leading-none ${inRange === true ? 'text-green-400' : inRange === false ? 'text-red-400' :
                           isActive ? 'text-purple-300' : 'text-gray-300'
-                        }`}>{descVal ?? '—'}</span>
+                          }`}>{descVal ?? '—'}</span>
                         <div className="mt-2 pt-2 border-t border-[#2e404a]/60 flex items-center gap-2">
                           <span className="text-[10px] text-logisnext-slate font-bold">ERP:</span>
                           <span className="text-sm font-mono font-bold text-gray-300">
@@ -1229,17 +1216,15 @@ function App() {
                 {/* Backdrop: pointer-events-none para no bloquear los botones de simulación */}
                 <div className="absolute inset-0 bg-black/60 backdrop-blur-[3px] pointer-events-none" />
                 {/* Dialog */}
-                <div className={`relative flex flex-col items-center gap-6 bg-[#0d1a20] border-2 rounded-3xl px-14 py-10 max-w-lg w-full mx-8 ${
-                  isIncomplete
-                    ? 'border-orange-500/70 shadow-[0_0_80px_rgba(249,115,22,0.4)]'
-                    : 'border-red-500/70 shadow-[0_0_80px_rgba(239,68,68,0.4)]'
-                }`}>
-                  {/* Icono */}
-                  <div className={`flex items-center justify-center w-20 h-20 rounded-full border-2 ${
-                    isIncomplete
-                      ? 'bg-orange-500/20 border-orange-500/50 shadow-[0_0_30px_rgba(249,115,22,0.4)]'
-                      : 'bg-red-500/20 border-red-500/50 shadow-[0_0_30px_rgba(239,68,68,0.4)]'
+                <div className={`relative flex flex-col items-center gap-6 bg-[#0d1a20] border-2 rounded-3xl px-14 py-10 max-w-lg w-full mx-8 ${isIncomplete
+                  ? 'border-orange-500/70 shadow-[0_0_80px_rgba(249,115,22,0.4)]'
+                  : 'border-red-500/70 shadow-[0_0_80px_rgba(239,68,68,0.4)]'
                   }`}>
+                  {/* Icono */}
+                  <div className={`flex items-center justify-center w-20 h-20 rounded-full border-2 ${isIncomplete
+                    ? 'bg-orange-500/20 border-orange-500/50 shadow-[0_0_30px_rgba(249,115,22,0.4)]'
+                    : 'bg-red-500/20 border-red-500/50 shadow-[0_0_30px_rgba(239,68,68,0.4)]'
+                    }`}>
                     <span className="text-4xl">{isIncomplete ? '⚠' : '✕'}</span>
                   </div>
 
@@ -1282,11 +1267,10 @@ function App() {
                             : 'La carretilla no completó el descenso hasta la posición inicial. La prueba ha sido cancelada.'}
                         </p>
                         {/* Indicador visual del movimiento fallido */}
-                        <div className={`mt-2 flex items-center gap-3 px-6 py-3 rounded-xl border ${
-                          isAscIncomplete
-                            ? 'bg-orange-900/20 border-orange-500/40'
-                            : 'bg-orange-900/20 border-orange-500/40'
-                        }`}>
+                        <div className={`mt-2 flex items-center gap-3 px-6 py-3 rounded-xl border ${isAscIncomplete
+                          ? 'bg-orange-900/20 border-orange-500/40'
+                          : 'bg-orange-900/20 border-orange-500/40'
+                          }`}>
                           <span className="text-orange-300 text-3xl font-black">
                             {isAscIncomplete ? '↑' : '↓'}
                           </span>
@@ -1305,6 +1289,7 @@ function App() {
                         <span className="text-red-400 text-sm font-black uppercase tracking-[0.25em]">CAÍDA EXCESIVA</span>
                         <h2 className="text-white text-3xl font-black tracking-wide">¿Repetir la prueba?</h2>
                         <p className="text-gray-400 text-sm font-medium">
+                          26050138
                           La altura ha descendido por debajo de la tolerancia configurada ({testHUDOverlay.subtitle}).
                         </p>
                       </>
@@ -1388,19 +1373,19 @@ function App() {
           })()}
 
 
-          <TelemetryHUD 
-            telemetry={telemetry} 
-            cycleTimer={cycleTimer} 
+          <TelemetryHUD
+            telemetry={telemetry}
+            cycleTimer={cycleTimer}
             isSimulation={isSimulation}
             distance={appPlc?.OR_Altura_Carretilla !== undefined ? appPlc.OR_Altura_Carretilla : telemetry.distance}
           />
-          <DigitalTwin 
+          <DigitalTwin
             currentStep={currentStep}
-            distance={appPlc?.OR_Altura_Carretilla !== undefined ? appPlc.OR_Altura_Carretilla : telemetry.distance} 
-            plcState={appPlc} 
-            palletState={palletState} 
+            distance={appPlc?.OR_Altura_Carretilla !== undefined ? appPlc.OR_Altura_Carretilla : telemetry.distance}
+            plcState={appPlc}
+            palletState={palletState}
             erpData={erpData}
-            onPalletAnimComplete={() => setPalletState('picked_up')} 
+            onPalletAnimComplete={() => setPalletState('picked_up')}
             showStickers={appPlc.Ob_Poner_Pegatina || currentStep > 1}
             zoomToStickers={currentStep === 1}
             zoomOutMultiload={currentStep > 1}
@@ -1412,16 +1397,16 @@ function App() {
           {isSimulation && (
             <div className="absolute right-6 top-1/2 -translate-y-1/2 flex flex-col items-center gap-4 bg-[#0a0f12]/80 backdrop-blur-md p-4 rounded-full border border-blue-500/30 shadow-[0_0_20px_rgba(59,130,246,0.15)] z-40">
               <span className="text-blue-400 text-xs font-black uppercase tracking-widest bg-blue-500/10 px-2 py-1 rounded">8.7m</span>
-              <input 
-                type="range" 
-                min="0" 
-                max="8700" 
+              <input
+                type="range"
+                min="0"
+                max="8700"
                 step="10"
                 value={simCarriageHeight}
                 onChange={async (e) => {
                   const val = parseFloat(e.target.value);
                   setSimCarriageHeight(val);
-                  
+
                   // En simulación: escribir window.__carriageY DIRECTAMENTE en metros
                   // para que el Sequencer detecte el cruce de 1500mm independientemente del pallet
                   if (typeof window !== 'undefined') {
@@ -1466,18 +1451,18 @@ function App() {
                   }}
                   className={`w-14 h-14 rounded-full flex items-center justify-center transition-all border-4 shadow-[0_4px_10px_rgba(34,197,94,0.3)]
                     ${hasActiveCriticalAlarm || !appPlc?.Ob_Estado_Automatico || iniciarPlcTime !== null
-                      ? 'bg-gray-600 border-gray-500 opacity-50 cursor-not-allowed' 
+                      ? 'bg-gray-600 border-gray-500 opacity-50 cursor-not-allowed'
                       : 'bg-gradient-to-b from-green-500 to-green-700 active:from-green-700 active:to-green-900 border-[#1d2930] active:scale-95 active:shadow-inner'}`}
                 >
                   {iniciarPlcTime !== null ? (
-                     <span className="text-white font-black text-2xl animate-pulse">{iniciarPlcTime}</span>
+                    <span className="text-white font-black text-2xl animate-pulse">{iniciarPlcTime}</span>
                   ) : (
-                     <Play size={20} className="text-white ml-1" />
+                    <Play size={20} className="text-white ml-1" />
                   )}
                 </button>
-                <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Iniciar<br/>Secuencia</span>
+                <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Iniciar<br />Secuencia</span>
               </div>
-              
+
               <div className="flex flex-col items-center">
                 <button
                   onClick={() => {
@@ -1490,12 +1475,12 @@ function App() {
                       : 'bg-gradient-to-b from-blue-500 to-blue-700 active:from-blue-700 active:to-blue-900'}`}
                 >
                   {pegatinaPlcTime !== null ? (
-                     <span className="text-white font-black text-2xl animate-pulse">{pegatinaPlcTime}</span>
+                    <span className="text-white font-black text-2xl animate-pulse">{pegatinaPlcTime}</span>
                   ) : (
-                     <CheckCircle2 size={24} className="text-white" />
+                    <CheckCircle2 size={24} className="text-white" />
                   )}
                 </button>
-                <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Pegatina<br/>Colocada</span>
+                <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Pegatina<br />Colocada</span>
               </div>
 
               <div className="flex flex-col items-center border-r border-gray-700 pr-3 mr-1">
@@ -1510,12 +1495,12 @@ function App() {
                       : 'bg-gradient-to-b from-red-500 to-red-700 active:from-red-700 active:to-red-900'}`}
                 >
                   {abortarPlcTime !== null ? (
-                     <span className="text-white font-black text-2xl animate-pulse">{abortarPlcTime}</span>
+                    <span className="text-white font-black text-2xl animate-pulse">{abortarPlcTime}</span>
                   ) : (
-                     <PowerOff size={20} className="text-white" />
+                    <PowerOff size={20} className="text-white" />
                   )}
                 </button>
-                <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Abortar<br/>Secuencia</span>
+                <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Abortar<br />Secuencia</span>
               </div>
 
               {/* Control de Vallas Simuladas */}
@@ -1531,13 +1516,12 @@ function App() {
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ Ob_Subir_Vallas: newVal, Ob_Bajar_Vallas: false, is_force: true })
                         });
-                      } catch(e) {}
+                      } catch (e) { }
                     }}
-                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-                      appPlc.Ob_Subir_Vallas 
-                        ? 'bg-indigo-500 border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.6)] text-white scale-105' 
-                        : 'bg-[#1d2930] border-[#2e404a] text-gray-400 hover:bg-indigo-900/50 hover:text-indigo-300'
-                    } border-2`}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${appPlc.Ob_Subir_Vallas
+                      ? 'bg-indigo-500 border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.6)] text-white scale-105'
+                      : 'bg-[#1d2930] border-[#2e404a] text-gray-400 hover:bg-indigo-900/50 hover:text-indigo-300'
+                      } border-2`}
                     title="Subir Vallas"
                   >
                     <span className="text-sm font-black">↑</span>
@@ -1551,13 +1535,12 @@ function App() {
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ Ob_Bajar_Vallas: newVal, Ob_Subir_Vallas: false, is_force: true })
                         });
-                      } catch(e) {}
+                      } catch (e) { }
                     }}
-                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-                      appPlc.Ob_Bajar_Vallas 
-                        ? 'bg-orange-500 border-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.6)] text-white scale-105' 
-                        : 'bg-[#1d2930] border-[#2e404a] text-gray-400 hover:bg-orange-900/50 hover:text-orange-300'
-                    } border-2`}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${appPlc.Ob_Bajar_Vallas
+                      ? 'bg-orange-500 border-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.6)] text-white scale-105'
+                      : 'bg-[#1d2930] border-[#2e404a] text-gray-400 hover:bg-orange-900/50 hover:text-orange-300'
+                      } border-2`}
                     title="Bajar Vallas"
                   >
                     <span className="text-sm font-black">↓</span>
@@ -1626,18 +1609,18 @@ function App() {
             </div>
           )}
         </div>
-        
+
         <div className="w-96 border-l border-[#2e404a] bg-[#0a0f12] flex flex-col z-30 shadow-[-10px_0_30px_rgba(0,0,0,0.5)]">
-          <Sequencer 
-            erpData={erpData} 
+          <Sequencer
+            erpData={erpData}
             telemetry={telemetry}
             palletState={palletState}
             setPalletState={setPalletState}
             onStepChange={setCurrentStep}
             operario={operario}
             sequencerRef={sequencerRef}
-            onErpData={setErpData} 
-            onOpenErp={() => setErpModalOpen(true)} 
+            onErpData={setErpData}
+            onOpenErp={() => setErpModalOpen(true)}
             plcState={appPlc}
             isSimulation={isSimulation}
             setStep2Overlay={setStep2Overlay}
@@ -1657,11 +1640,11 @@ function App() {
       />
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} telemetry={telemetry} />
-      
-      <PlcModal 
-        open={plcModalOpen} 
-        onClose={() => setPlcModalOpen(false)} 
-        telemetry={telemetry} 
+
+      <PlcModal
+        open={plcModalOpen}
+        onClose={() => setPlcModalOpen(false)}
+        telemetry={telemetry}
         isSimulation={isSimulation}
         setIsSimulation={setIsSimulation}
         pulsePlc={pulsePlc}
@@ -1669,7 +1652,7 @@ function App() {
 
       {/* Identificación de operario al inicio */}
       {!operario && <OperatorLoginModal onLogin={setOperario} />}
-      
+
       <LogViewer isOpen={logsOpen} onClose={() => setLogsOpen(false)} />
     </div>
   );

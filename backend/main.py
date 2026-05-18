@@ -255,10 +255,36 @@ def buscar_por_qr(qr_raw: str, db: Session = Depends(get_db)):
 
     # Intento 1: fecha + secuencia (si tenemos ambos)
     if fecha_q:
-        erp = db.query(ErpCarretilla).filter(
-            ErpCarretilla.secuencia.ilike(f"%{seq_q}%"),
-            ErpCarretilla.fecha_montaje.ilike(f"%{fecha_q}%")
-        ).first()
+        from sqlalchemy import or_
+        query_filters = [ErpCarretilla.secuencia.ilike(f"%{seq_q}%")]
+        
+        if len(fecha_q) == 6:
+            # QR puede ser DDMMYY (260525 -> 26 mayo 2025) o YYMMDD (250526)
+            # En la BD tenemos YYYYMMDD (ej: 20250526).
+            yy = fecha_q[4:6]
+            mm = fecha_q[2:4]
+            dd = fecha_q[0:2]
+            yyyy = f"20{yy}"
+            
+            # 1. Asumiendo que es DDMMYY -> Fecha en BD sería YYYYMMDD -> yyyy + mm + dd
+            fecha_as_ddmmyy = f"{yyyy}{mm}{dd}"
+            
+            # 2. Asumiendo que es YYMMDD -> Fecha en BD sería YYYYMMDD -> 20 + yy + mm + dd
+            yy_alt = fecha_q[0:2]
+            mm_alt = fecha_q[2:4]
+            dd_alt = fecha_q[4:6]
+            yyyy_alt = f"20{yy_alt}"
+            fecha_as_yymmdd = f"{yyyy_alt}{mm_alt}{dd_alt}"
+            
+            query_filters.append(or_(
+                ErpCarretilla.fecha_montaje.ilike(f"%{fecha_q}%"),
+                ErpCarretilla.fecha_montaje.ilike(f"%{fecha_as_ddmmyy}%"),
+                ErpCarretilla.fecha_montaje.ilike(f"%{fecha_as_yymmdd}%")
+            ))
+        else:
+            query_filters.append(ErpCarretilla.fecha_montaje.ilike(f"%{fecha_q}%"))
+            
+        erp = db.query(ErpCarretilla).filter(*query_filters).first()
         if erp:
             return _erp_row_to_dict(erp)
 
