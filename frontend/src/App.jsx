@@ -1613,6 +1613,7 @@ function App() {
 
         <div className="w-96 border-l border-[#2e404a] bg-[#0a0f12] flex flex-col z-30 shadow-[-10px_0_30px_rgba(0,0,0,0.5)]">
           <Sequencer
+            iniciarPlcTime={iniciarPlcTime}
             erpData={erpData}
             telemetry={telemetry}
             palletState={palletState}

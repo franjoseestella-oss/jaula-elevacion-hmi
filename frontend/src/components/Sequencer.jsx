@@ -133,7 +133,7 @@ const STitle = ({ icon, label }) => (
   </div>
 );
 
-const ErpPreviewCard = ({ data, onConfirm, onCancel }) => createPortal(
+const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime }) => createPortal(
   <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
     <div className="w-[98vw] h-[92vh] max-w-none bg-[#0a0f12] rounded-3xl border-2 border-[#2e404a] shadow-[0_0_120px_rgba(0,0,0,1)] flex flex-col overflow-hidden">
 
@@ -234,9 +234,11 @@ const ErpPreviewCard = ({ data, onConfirm, onCancel }) => createPortal(
         </button>
         <button
           onClick={onConfirm}
-          className="flex items-center gap-4 px-16 py-6 rounded-2xl bg-logisnext-magenta hover:bg-logisnext-magenta/80 text-white font-black text-3xl uppercase tracking-widest transition-all shadow-[0_0_50px_rgba(221,40,118,0.5)] active:scale-95 border-2 border-pink-400/50"
+          className="flex items-center justify-center gap-4 px-16 py-6 rounded-2xl bg-logisnext-magenta hover:bg-logisnext-magenta/80 text-white font-black text-3xl uppercase tracking-widest transition-all shadow-[0_0_50px_rgba(221,40,118,0.5)] active:scale-95 border-2 border-pink-400/50 min-w-[400px]"
         >
-          Cargar Secuencia <span className="text-4xl translate-y-[-2px]">›</span>
+          {iniciarPlcTime !== null ? `MANTÉN PULSADO (${iniciarPlcTime})` : (
+            <>Cargar Secuencia <span className="text-4xl translate-y-[-2px]">›</span></>
+          )}
         </button>
       </div>
     </div>
@@ -297,7 +299,7 @@ const CameraLED = ({ state, blinkTick }) => {
 
 // ─── Componente principal ────────────────────────────────────────────────────
 
-const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState, plcState, setStep2Overlay, setTestHUDOverlay, setWaitingForIniciar, sequencerRef, onSequenceEnd, onStepChange, operario, isSimulation, isAnyModalOpen }) => {
+const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState, plcState, setStep2Overlay, setTestHUDOverlay, setWaitingForIniciar, sequencerRef, onSequenceEnd, onStepChange, operario, isSimulation, isAnyModalOpen, iniciarPlcTime }) => {
   const [stepStatus, setStepStatus] = useState([
     STEP_STATUS.ACTIVE,
     STEP_STATUS.PENDING,
@@ -1329,6 +1331,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   const stepStartedRef = useRef(stepStarted);
   const currentStepRef = useRef(currentStep);
   const erpDataRef = useRef(erpData);
+  const erpPreviewRef = useRef(erpPreview);
   const toleranciasRef = useRef(tolerancias);
   const simTimersRef = useRef(simTimers);
 
@@ -1336,6 +1339,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   useEffect(() => { stepStartedRef.current = stepStarted; }, [stepStarted]);
   useEffect(() => { currentStepRef.current = currentStep; }, [currentStep]);
   useEffect(() => { erpDataRef.current = erpData; }, [erpData]);
+  useEffect(() => { erpPreviewRef.current = erpPreview; }, [erpPreview]);
   useEffect(() => { toleranciasRef.current = tolerancias; }, [tolerancias]);
   useEffect(() => { simTimersRef.current = simTimers; }, [simTimers]);
 
@@ -1352,6 +1356,16 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
   // ── Handlers directos (llamados desde botones sin pasar por WebSocket) ────────
   const handleIniciarSecuenciaDirecto = () => {
+    // Si el modal de previsualización está abierto, iniciar_secuencia confirma la carga
+    if (erpPreviewRef.current) {
+      console.log('[DIRECTO] Confirmando previsualización de ERP');
+      onErpData(erpPreviewRef.current);
+      setErpPreview(null);
+      setSeqInput('');
+      markOk(0);
+      return;
+    }
+
     const step = currentStepRef.current;
     const started = stepStartedRef.current;
     const statuses = stepStatusRef.current;
@@ -1908,6 +1922,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         {erpPreview && (
           <ErpPreviewCard
             data={erpPreview}
+            iniciarPlcTime={iniciarPlcTime}
             onConfirm={handleConfirmPreview}
             onCancel={handleCancelarLectura}
           />
