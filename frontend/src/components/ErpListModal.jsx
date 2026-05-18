@@ -35,102 +35,6 @@ const SourceBadge = ({ fuente }) => {
   );
 };
 
-// ── Panel de detalle de una carretilla ───────────────────────────────────────
-const DetallePanel = ({ item, onClose, onVincular }) => {
-  const Section = ({ title, icon: Icon, children }) => (
-    <div className="mb-4">
-      <div className="flex items-center gap-2 mb-2 pb-1 border-b border-[#2e404a]/60">
-        <Icon size={12} className="text-logisnext-magenta" />
-        <span className="text-[10px] text-logisnext-magenta font-black uppercase tracking-[0.15em]">{title}</span>
-      </div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">{children}</div>
-    </div>
-  );
-
-  const Field = ({ label, value, unit = '', highlight = false }) => (
-    <div className="flex flex-col">
-      <span className="text-[9px] text-logisnext-slate uppercase tracking-wider leading-tight">{label}</span>
-      <span className={`text-xs font-mono font-bold mt-0.5 ${highlight ? 'text-logisnext-magenta' : 'text-white'}`}>
-        {value}{unit && value !== '—' ? <span className="text-logisnext-slate text-[9px] ml-0.5">{unit}</span> : ''}
-      </span>
-    </div>
-  );
-
-  return (
-    <div className="fixed inset-0 z-[160] flex items-center justify-center"
-      style={{ background: 'rgba(5,10,14,0.75)', backdropFilter: 'blur(4px)' }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="relative w-[560px] max-h-[88vh] flex flex-col bg-gradient-to-b from-[#151f25] to-[#0d1a20] border border-[#2e404a] rounded-2xl shadow-[0_0_60px_rgba(221,40,118,0.2)] overflow-hidden">
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#2e404a] bg-[#1d2930]/60 shrink-0">
-          <div>
-            <h3 className="text-logisnext-magenta font-black text-sm uppercase tracking-widest">
-              {item.bastidor?.trim()}
-            </h3>
-            <span className="text-[10px] text-logisnext-lightslate font-mono">{item.modelo} · Mástil {item.mastil}</span>
-          </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-[#2e404a] rounded-lg text-logisnext-slate hover:text-white transition-colors">
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Contenido scrollable */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-0">
-
-          <Section title="Identificación" icon={Server}>
-            <Field label="Bastidor" value={item.bastidor?.trim()} highlight />
-            <Field label="Secuencia" value={item.secuencia?.trim()} />
-            <Field label="Modelo" value={item.modelo?.trim()} />
-            <Field label="Mástil ref" value={item.mastil?.trim()} />
-            <Field label="Fec. montaje" value={fmtDate(item.fecha_montaje)} />
-            <Field label="Fec. importación" value={item.fecha_importacion} />
-          </Section>
-
-          <Section title="Geometría" icon={Ruler}>
-            <Field label="Altura máx intermedia" value={fmt(item.altura_max_interm, 0)} unit="mm" highlight />
-          </Section>
-
-          <Section title="Capacidades intermedias" icon={Weight}>
-            <Field label="Capac. interm. 1" value={fmt(item.capac_interm_1, 0)} unit="kg" />
-            <Field label="Capac. interm. 2" value={fmt(item.capac_interm_2, 0)} unit="kg" />
-            <Field label="Capac. interm. 3" value={fmt(item.capac_interm_3, 0)} unit="kg" />
-          </Section>
-
-          <Section title="Tiempos con carga" icon={Clock}>
-            <Field label="Elevación mín" value={cs2s(item.tpo_elevac_min)} />
-            <Field label="Elevación máx" value={cs2s(item.tpo_elevac_max)} />
-            <Field label="Descenso mín" value={cs2s(item.tpo_descenso_min)} />
-            <Field label="Descenso máx" value={cs2s(item.tpo_descenso_max)} />
-
-          </Section>
-
-          <Section title="Tiempos sin carga" icon={RotateCcw}>
-            <Field label="Elevación mín" value={cs2s(item.tpo_elev_min_scarga)} />
-            <Field label="Elevación máx" value={cs2s(item.tpo_elev_max_scarga)} />
-            <Field label="Descenso mín" value={cs2s(item.tpo_desc_min_scarga)} />
-            <Field label="Descenso máx" value={cs2s(item.tpo_desc_max_scarga)} />
-          </Section>
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-3 border-t border-[#2e404a] bg-[#0a0f12]/60 shrink-0">
-          <button onClick={onClose} className="text-[10px] text-logisnext-slate hover:text-white uppercase tracking-widest font-bold transition-colors">
-            Cancelar
-          </button>
-          <button
-            onClick={() => onVincular(item)}
-            className="flex items-center gap-2 px-5 py-2 bg-logisnext-magenta hover:bg-logisnext-magenta/80 text-white text-xs font-black uppercase tracking-wider rounded-lg transition-all shadow-[0_0_20px_rgba(221,40,118,0.4)]"
-          >
-            Cargar secuencia <ChevronRight size={13} />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 // ── Modal principal ───────────────────────────────────────────────────────────
 const ErpListModal = ({ open, onClose, onSelect }) => {
   const [items, setItems] = useState([]);
@@ -141,7 +45,6 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
   const [syncMsg, setSyncMsg] = useState('');
   const [syncOk, setSyncOk] = useState(null);
   const [filter, setFilter] = useState('');
-  const [detalle, setDetalle] = useState(null);
   const [sortField, setSortField] = useState('secuencia');
   const [sortDir, setSortDir] = useState('desc');
 
@@ -162,7 +65,7 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
   }, []);
 
   useEffect(() => {
-    if (open) { setFilter(''); setDetalle(null); setSyncMsg(''); setSyncOk(null); fetchList(); }
+    if (open) { setFilter(''); setSyncMsg(''); setSyncOk(null); fetchList(); }
   }, [open, fetchList]);
 
   // ── Sync DAT ──────────────────────────────────────────────────────────────
@@ -182,7 +85,7 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
   };
 
   // ── Vincular ──────────────────────────────────────────────────────────────
-  const handleVincular = (item) => { onSelect(item.bastidor); onClose(); };
+  const handleVincular = (item) => { onSelect(item); onClose(); };
 
   // ── Ordenación ────────────────────────────────────────────────────────────
   const toggleSort = (field) => {
@@ -335,7 +238,7 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
               filtered.map((item, idx) => (
                 <div
                   key={idx}
-                  onClick={() => setDetalle(item)}
+                  onClick={() => handleVincular(item)}
                   className={`grid gap-4 items-center px-6 py-4 border-b cursor-pointer transition-all group ${item.estado_prueba === 'FINALIZADO_OK'
                       ? 'bg-green-600/30 border-green-500/80 hover:bg-green-500/50 shadow-[inset_4px_0_0_rgba(34,197,94,1)]'
                       : item.estado_prueba === 'ERROR'
