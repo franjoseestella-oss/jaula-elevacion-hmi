@@ -640,6 +640,17 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     const sData = stageDataRef.current;
     const prevLog = repeatModal.log || {};
 
+    // Distancia de prueba para cálculo de AVG (mm/s)
+    const testDist = (() => {
+      const mastilStr = erp?.mastil;
+      if (!mastilStr) return 2;
+      const str = String(mastilStr).trim().toUpperCase();
+      if (str.startsWith('2F')) return 1;
+      const match = str.match(/\d{3,}/);
+      if (match) return parseInt(match[0], 10) < 400 ? 1 : 2;
+      return 2;
+    })();
+
     // Etapa 1: Multiload
     let estadoMultiload = stepStatus[1] === STEP_STATUS.OK ? 'OK' : 'NOK';
     if (stepStatus[1] === STEP_STATUS.SKIP) estadoMultiload = prevLog.ESTADO_MULTILOAD || 'NO APLICA';
@@ -694,6 +705,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       TIEMPO_DESCENSO_MIN_SINCARGA: erp?.tpo_desc_min_scarga != null ? erp.tpo_desc_min_scarga / 100 : null,
       TIEMPO_DESCENSO_MAX_SINCARGA: erp?.tpo_desc_max_scarga != null ? erp.tpo_desc_max_scarga / 100 : null,
       TIEMPO_DESCENSO_MEDIDO_SINCARGA: stepStatus[2] === STEP_STATUS.SKIP ? prevLog.TIEMPO_DESCENSO_MEDIDO_SINCARGA : (sData[3].desc != null ? sData[3].desc / 100 : null),
+      AVG_ELEVACION_SINCARGA: stepStatus[2] === STEP_STATUS.SKIP ? prevLog.AVG_ELEVACION_SINCARGA : (sData[3].elev > 0 ? Number(((testDist * 100000) / sData[3].elev).toFixed(0)) : null),
+      AVG_DESCENSO_SINCARGA: stepStatus[2] === STEP_STATUS.SKIP ? prevLog.AVG_DESCENSO_SINCARGA : (sData[3].desc > 0 ? Number(((testDist * 100000) / sData[3].desc).toFixed(0)) : null),
       FECHA_HORA_INICIO_SINCARGA: stepStatus[2] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_INICIO_SINCARGA : (stepStartTime[2] ? new Date(stepStartTime[2]).toISOString() : null),
       FECHA_HORA_FIN_SINCARGA: stepStatus[2] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_FIN_SINCARGA : (stepStartTime[2] && stepDurations[2] ? new Date(stepStartTime[2] + stepDurations[2] * 1000).toISOString() : null),
       ESTADO_SINCARGA: estadoSinCarga,
@@ -705,6 +718,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       TIEMPO_DESCENSO_MIN_CARGA: erp?.tpo_descenso_min != null ? erp.tpo_descenso_min / 100 : null,
       TIEMPO_DESCENSO_MAX_CARGA: erp?.tpo_descenso_max != null ? erp.tpo_descenso_max / 100 : null,
       TIEMPO_DESCENSO_MEDIDO_CARGA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.TIEMPO_DESCENSO_MEDIDO_CARGA : (sData[4].desc != null ? sData[4].desc / 100 : null),
+      AVG_ELEVACION_CARGA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.AVG_ELEVACION_CARGA : (sData[4].elev > 0 ? Number(((testDist * 100000) / sData[4].elev).toFixed(0)) : null),
+      AVG_DESCENSO_CARGA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.AVG_DESCENSO_CARGA : (sData[4].desc > 0 ? Number(((testDist * 100000) / sData[4].desc).toFixed(0)) : null),
       FECHA_HORA_INICIO_CARGA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_INICIO_CARGA : (stepStartTime[3] ? new Date(stepStartTime[3]).toISOString() : null),
       FECHA_HORA_FIN_CARGA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_FIN_CARGA : (stepStartTime[3] && stepDurations[3] ? new Date(stepStartTime[3] + stepDurations[3] * 1000).toISOString() : null),
       ESTADO_CARGA: estadoConCarga,
@@ -929,7 +944,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           if (cameraTestState === 'nok') {
             setCameraTestState('esperando_1500');
             setTestAlarm(null);
-            setSimTimers({ tStart: null, tEndElev: null, tStartDesc: null, tEndDesc: null, finishedElev: false, finishedDesc: false });
+            setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
             setWaitCountdown(null);
             return;
           }
@@ -955,7 +970,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           if (cameraTestState === 'nok') {
             setCameraTestState('esperando_1500');
             setTestAlarm(null);
-            setSimTimers({ tStart: null, tEndElev: null, tStartDesc: null, tEndDesc: null, finishedElev: false, finishedDesc: false });
+            setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
             setWaitCountdown(null);
             return;
           }
@@ -1753,7 +1768,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           _minDesc: minDesc,
           _maxDesc: maxDesc,
           waitCountdown,
-          testAlarm
+          testAlarm,
+          testDist: is1mTest ? 1.0 : 2.0
         });
       } else if (currentStep === 4 && stepStatus[4] === STEP_STATUS.ACTIVE && erpData) {
         setTestHUDOverlay({
@@ -2239,19 +2255,31 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                 )}
 
                 <div className="grid grid-cols-2 gap-2 mb-2">
-                  <div className="bg-[#1d2930]/50 p-2 rounded border border-[#2e404a]">
+                  <div className="bg-[#1d2930]/50 p-2 rounded border border-[#2e404a] flex flex-col justify-between">
                     <span className="text-[8px] text-logisnext-slate uppercase tracking-widest block mb-1">Ascenso (s)</span>
                     <div className="flex justify-between items-end">
                       <span className="text-xs font-mono font-black text-white">{ds2s(realElev)}</span>
                       <span className="text-[8px] font-mono text-gray-500">[{ds2s(minElev)} - {ds2s(maxElev)}]</span>
                     </div>
+                    {realElev > 0 && (
+                      <div className="mt-1 pt-1 border-t border-[#2e404a] flex justify-between items-center">
+                        <span className="text-[8px] text-gray-500">AVG:</span>
+                        <span className="text-[10px] font-mono font-bold text-gray-300">{(((is1mTest ? 1 : 2) * 100000) / realElev).toFixed(0)} mm/s</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="bg-[#1d2930]/50 p-2 rounded border border-[#2e404a]">
+                  <div className="bg-[#1d2930]/50 p-2 rounded border border-[#2e404a] flex flex-col justify-between">
                     <span className="text-[8px] text-logisnext-slate uppercase tracking-widest block mb-1">Descenso (s)</span>
                     <div className="flex justify-between items-end">
                       <span className="text-xs font-mono font-black text-white">{ds2s(realDesc)}</span>
                       <span className="text-[8px] font-mono text-gray-500">[{ds2s(minDesc)} - {ds2s(maxDesc)}]</span>
                     </div>
+                    {realDesc > 0 && (
+                      <div className="mt-1 pt-1 border-t border-[#2e404a] flex justify-between items-center">
+                        <span className="text-[8px] text-gray-500">AVG:</span>
+                        <span className="text-[10px] font-mono font-bold text-gray-300">{(((is1mTest ? 1 : 2) * 100000) / realDesc).toFixed(0)} mm/s</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -2360,19 +2388,31 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                 )}
 
                 <div className="grid grid-cols-2 gap-2 mb-2 mt-2">
-                  <div className="bg-[#1d2930]/50 p-2 rounded border border-[#2e404a]">
+                  <div className="bg-[#1d2930]/50 p-2 rounded border border-[#2e404a] flex flex-col justify-between">
                     <span className="text-[8px] text-logisnext-slate uppercase tracking-widest block mb-1">Ascenso (s)</span>
                     <div className="flex justify-between items-end">
                       <span className="text-xs font-mono font-black text-white">{ds2s(realElev)}</span>
                       <span className="text-[8px] font-mono text-gray-500">[{ds2s(minElev)} - {ds2s(maxElev)}]</span>
                     </div>
+                    {realElev > 0 && (
+                      <div className="mt-1 pt-1 border-t border-[#2e404a] flex justify-between items-center">
+                        <span className="text-[8px] text-gray-500">AVG:</span>
+                        <span className="text-[10px] font-mono font-bold text-gray-300">{(((is1mTest ? 1 : 2) * 100000) / realElev).toFixed(0)} mm/s</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="bg-[#1d2930]/50 p-2 rounded border border-[#2e404a]">
+                  <div className="bg-[#1d2930]/50 p-2 rounded border border-[#2e404a] flex flex-col justify-between">
                     <span className="text-[8px] text-logisnext-slate uppercase tracking-widest block mb-1">Descenso (s)</span>
                     <div className="flex justify-between items-end">
                       <span className="text-xs font-mono font-black text-white">{ds2s(realDesc)}</span>
                       <span className="text-[8px] font-mono text-gray-500">[{ds2s(minDesc)} - {ds2s(maxDesc)}]</span>
                     </div>
+                    {realDesc > 0 && (
+                      <div className="mt-1 pt-1 border-t border-[#2e404a] flex justify-between items-center">
+                        <span className="text-[8px] text-gray-500">AVG:</span>
+                        <span className="text-[10px] font-mono font-bold text-gray-300">{(((is1mTest ? 1 : 2) * 100000) / realDesc).toFixed(0)} mm/s</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 

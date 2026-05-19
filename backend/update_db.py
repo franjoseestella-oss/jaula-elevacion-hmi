@@ -14,9 +14,27 @@ with engine.connect() as conn:
         print('Rename failed:', e)
     
     try:
-        conn.execute(text("ALTER TABLE LOG_TABLA ADD DURACION_SEC VARCHAR(50) NULL;"))
-        print('Added DURACION_SEC')
+        conn.execute(text("ALTER TABLE LOG_TABLA ADD AVG_ELEVACION_SINCARGA FLOAT NULL;"))
+        print('Added AVG_ELEVACION_SINCARGA')
     except Exception as e:
-        print('Add DURACION_SEC failed:', e)
+        print('Add AVG_ELEVACION_SINCARGA failed:', e)
+        
+    try:
+        conn.execute(text("ALTER TABLE LOG_TABLA ADD AVG_DESCENSO_SINCARGA FLOAT NULL;"))
+        print('Added AVG_DESCENSO_SINCARGA')
+    except Exception as e:
+        print('Add AVG_DESCENSO_SINCARGA failed:', e)
+
+    try:
+        conn.execute(text("ALTER TABLE LOG_TABLA ADD AVG_ELEVACION_CARGA FLOAT NULL;"))
+        print('Added AVG_ELEVACION_CARGA')
+    except Exception as e:
+        print('Add AVG_ELEVACION_CARGA failed:', e)
+
+    try:
+        conn.execute(text("ALTER TABLE LOG_TABLA ADD AVG_DESCENSO_CARGA FLOAT NULL;"))
+        print('Added AVG_DESCENSO_CARGA')
+    except Exception as e:
+        print('Add AVG_DESCENSO_CARGA failed:', e)
         
     conn.commit()

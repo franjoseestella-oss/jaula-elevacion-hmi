@@ -17,6 +17,8 @@ from database.models import init_db, ErpCarretilla
 from database.crud import create_log, get_logs
 from erp_sync import parse_and_sync_dat
 from opcua_client import opcua_manager
+from fastapi.responses import Response
+import basler_camera
 
 # ─────────────────────────────────────────────────────────────
 # Resolución de rutas (compatible con PyInstaller --onefile)
@@ -606,6 +608,47 @@ def read_qr_connection(config: DatalogicConfig):
 # PLC OPC UA — Simulación de lectura y escritura
 # ─────────────────────────────────────────────────────────────
 
+class BaslerConfig(BaseModel):
+    ip: str
+
+@app.get("/api/basler/status")
+def basler_status_endpoint():
+    """
+    Comprueba si la cámara Basler está accesible y devuelve el diagnóstico.
+    """
+    is_connected, msg = basler_camera.check_connection()
+    return {"connected": is_connected, "message": msg}
+
+@app.post("/api/basler/config")
+def update_basler_config(config: BaslerConfig):
+    """
+    Actualiza la configuración de la cámara Basler en memoria.
+    """
+    basler_camera.CAMERA_CONFIG["IPAddress"] = config.ip.strip()
+    return {"status": "ok", "message": f"IP de cámara actualizada a {config.ip}"}
+
+@app.get("/api/basler/capture")
+def capture_basler_endpoint():
+    """
+    Captura un frame de la cámara Basler y lo devuelve como base64.
+    """
+    try:
+        import cv2
+        import base64
+        frame = basler_camera.capture_basler_frame()
+        if frame is None:
+            raise HTTPException(status_code=503, detail="No se pudo capturar la imagen de la cámara Basler.")
+            
+        success, encoded_image = cv2.imencode('.jpg', frame)
+        if not success:
+            raise HTTPException(status_code=500, detail="Error al codificar la imagen capturada.")
+            
+        # Convertir a base64 para evitar problemas de parsing binario en el frontend
+        b64_str = base64.b64encode(encoded_image.tobytes()).decode('utf-8')
+        return {"image": f"data:image/jpeg;base64,{b64_str}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error en la captura de Basler: {str(e)}")
+
 # Estado global simulado
 plc_sim_state = {
     # Salidas (Comandos HMI -> PLC)
@@ -645,6 +688,7 @@ class PlcWriteParams(BaseModel):
     b_Poner_Pegatina: bool | None = None
     b_Abortar_Secuencia: bool | None = None
     is_force: bool = False
+
 
 class PlcConfigModel(BaseModel):
     ip: str

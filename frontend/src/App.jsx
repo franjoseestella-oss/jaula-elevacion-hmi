@@ -11,6 +11,7 @@ import ErpListModal from './components/ErpListModal';
 import SettingsModal from './components/SettingsModal';
 import OperatorLoginModal from './components/OperatorLoginModal';
 import PlcModal from './components/PlcModal';
+import BaslerModal from './components/BaslerModal';
 import LogViewer from './components/LogViewer';
 
 const API_BASE = 'http://localhost:8001';
@@ -20,6 +21,7 @@ function App() {
   const [erpModalOpen, setErpModalOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [plcModalOpen, setPlcModalOpen] = useState(false);
+  const [baslerModalOpen, setBaslerModalOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const [telemetry, setTelemetry] = useState({ distance: 0, timer: 0.0, state: 'IDLE' });
   const [networkStatus, setNetworkStatus] = useState({ opc: false, basler: false, db: false, erp: true, lectorqr: null });
@@ -563,8 +565,19 @@ function App() {
       }
     };
 
+    const checkBasler = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/basler/status`);
+        const data = await res.json();
+        setNetworkStatus(prev => ({ ...prev, basler: data.connected === true }));
+      } catch {
+        setNetworkStatus(prev => ({ ...prev, basler: false }));
+      }
+    };
+
     checkDb();
     checkQr();
+    checkBasler();
 
     const handleQrChange = () => checkQr();
     window.addEventListener('qrConfigChanged', handleQrChange);
@@ -572,6 +585,7 @@ function App() {
     const interval = setInterval(() => {
       checkDb();
       checkQr();
+      checkBasler();
     }, 10_000);
 
     return () => {
@@ -693,7 +707,7 @@ function App() {
     if (sequencerRef.current?.onAbortar) sequencerRef.current.onAbortar();
   });
 
-  const isMainScreen = !erpModalOpen && !settingsOpen && !plcModalOpen && !logsOpen && !showAlarmsHistory;
+  const isMainScreen = !erpModalOpen && !settingsOpen && !plcModalOpen && !baslerModalOpen && !logsOpen && !showAlarmsHistory;
 
   return (
     <div className="h-screen w-screen flex flex-col bg-logisnext-darkslate text-white overflow-hidden font-primary">
@@ -704,6 +718,7 @@ function App() {
         onSettingsClick={() => setSettingsOpen(true)}
         onLogsClick={() => setLogsOpen(true)}
         onPlcClick={() => setPlcModalOpen(true)}
+        onBaslerClick={() => setBaslerModalOpen(true)}
         operario={operario}
         canChangeOperator={!erpData}
         onOperatorClick={() => setOperario(null)}
@@ -795,6 +810,11 @@ function App() {
                             <div className={`flex flex-col items-center px-6 py-2 rounded-lg border-2 ${step2Overlay.cameraTestState === 'ascenso' ? 'border-blue-400 bg-blue-900/40 animate-pulse shadow-[0_0_20px_rgba(59,130,246,0.3)]' : 'border-gray-600 bg-gray-800/50 opacity-80'}`}>
                               <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">↑ Ascenso</span>
                               <span className={`text-4xl font-mono font-black ${step2Overlay.cameraTestState === 'ascenso' ? 'text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]' : 'text-gray-300'}`}>{testHUDOverlay.realElev ?? '0.00'}s</span>
+                              {testHUDOverlay._rawElev > 0 && testHUDOverlay.testDist && (
+                                <span className="text-sm font-mono font-bold text-gray-400 mt-1">
+                                  AVG: {((testHUDOverlay.testDist * 100000) / testHUDOverlay._rawElev).toFixed(0)} mm/s
+                                </span>
+                              )}
                             </div>
 
                             <div className="text-blue-500/50 mx-2 text-3xl font-black">|</div>
@@ -813,6 +833,11 @@ function App() {
                             <div className={`flex flex-col items-center px-6 py-2 rounded-lg border-2 ${step2Overlay.cameraTestState === 'descenso' ? 'border-blue-400 bg-blue-900/40 animate-pulse shadow-[0_0_20px_rgba(59,130,246,0.3)]' : 'border-gray-600 bg-gray-800/50 opacity-80'}`}>
                               <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">↓ Descenso</span>
                               <span className={`text-4xl font-mono font-black ${step2Overlay.cameraTestState === 'descenso' ? 'text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]' : 'text-gray-300'}`}>{testHUDOverlay.realDesc ?? '0.00'}s</span>
+                              {testHUDOverlay._rawDesc > 0 && testHUDOverlay.testDist && (
+                                <span className="text-sm font-mono font-bold text-gray-400 mt-1">
+                                  AVG: {((testHUDOverlay.testDist * 100000) / testHUDOverlay._rawDesc).toFixed(0)} mm/s
+                                </span>
+                              )}
                             </div>
                           </div>
                         )}
@@ -1108,6 +1133,11 @@ function App() {
                         <span className={`text-4xl font-mono font-black leading-none ${inRange === true ? 'text-green-400' : inRange === false ? 'text-red-400' :
                           isActive ? 'text-blue-300' : 'text-gray-300'
                           }`}>{elevVal ?? '—'}</span>
+                        {rawElev > 0 && testHUDOverlay.testDist && (
+                          <div className="mt-1 text-sm font-mono font-bold text-blue-200/70">
+                            AVG: {((testHUDOverlay.testDist * 100000) / rawElev).toFixed(0)} mm/s
+                          </div>
+                        )}
                         <div className="mt-2 pt-2 border-t border-[#2e404a]/60 flex items-center gap-2">
                           <span className="text-[10px] text-logisnext-slate font-bold">ERP:</span>
                           <span className="text-sm font-mono font-bold text-gray-300">
@@ -1139,6 +1169,11 @@ function App() {
                         <span className={`text-4xl font-mono font-black leading-none ${inRange === true ? 'text-green-400' : inRange === false ? 'text-red-400' :
                           isActive ? 'text-purple-300' : 'text-gray-300'
                           }`}>{descVal ?? '—'}</span>
+                        {rawDesc > 0 && testHUDOverlay.testDist && (
+                          <div className="mt-1 text-sm font-mono font-bold text-purple-200/70">
+                            AVG: {((testHUDOverlay.testDist * 100000) / rawDesc).toFixed(0)} mm/s
+                          </div>
+                        )}
                         <div className="mt-2 pt-2 border-t border-[#2e404a]/60 flex items-center gap-2">
                           <span className="text-[10px] text-logisnext-slate font-bold">ERP:</span>
                           <span className="text-sm font-mono font-bold text-gray-300">
@@ -1654,6 +1689,11 @@ function App() {
         isSimulation={isSimulation}
         setIsSimulation={setIsSimulation}
         pulsePlc={pulsePlc}
+      />
+
+      <BaslerModal
+        open={baslerModalOpen}
+        onClose={() => setBaslerModalOpen(false)}
       />
 
       {/* Identificación de operario al inicio */}

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Settings, Network, Usb, Save, TestTube, Cpu, Activity, Lightbulb, Box, Upload, QrCode } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Settings, Network, Usb, Save, TestTube, Cpu, Activity, Lightbulb, Box, Upload, QrCode, Camera } from 'lucide-react';
 import ObjViewer from './ObjViewer';
 
 const SettingsModal = ({ open, onClose, telemetry }) => {
@@ -20,6 +20,12 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
   const [isReadingQr, setIsReadingQr] = useState(false);
   const [qrReadResult, setQrReadResult] = useState(null);
   const [availableComPorts, setAvailableComPorts] = useState([]);
+
+  // Cámara Basler
+  const [baslerIp, setBaslerIp] = useState(() => localStorage.getItem('baslerIp') || '');
+  const [isBaslerTesting, setIsBaslerTesting] = useState(false);
+  const [baslerTestResult, setBaslerTestResult] = useState(null);
+  const [baslerPreviewUrl, setBaslerPreviewUrl] = useState(null);
 
   // Archivos 3D
   const [objFile, setObjFile] = useState(null);
@@ -75,6 +81,14 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
     localStorage.setItem('test5mTolerancia', test5mTolerancia);
     localStorage.setItem('cotaInicialPruebas', cotaInicial);
     
+    // Guardar config Basler y enviarla al backend
+    localStorage.setItem('baslerIp', baslerIp);
+    fetch('http://localhost:8001/api/basler/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ip: baslerIp })
+    }).catch(err => console.error("Error actualizando IP Basler", err));
+    
     // Notificar al sistema
     window.dispatchEvent(new Event('toleranciaChanged'));
     window.dispatchEvent(new Event('test5mConfigChanged'));
@@ -115,6 +129,43 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
       setQrReadResult({ status: 'error', message: err.message });
     } finally {
       setIsReadingQr(false);
+    }
+  };
+
+  const handleTestBasler = async () => {
+    setIsBaslerTesting(true);
+    setBaslerTestResult(null);
+    setBaslerPreviewUrl(null);
+    try {
+      // 1. Send the config to the backend first
+      await fetch('http://localhost:8001/api/basler/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ip: baslerIp })
+      });
+
+      // 2. Check status
+      const statusRes = await fetch('http://localhost:8001/api/basler/status');
+      const statusData = await statusRes.json();
+      
+      if (statusData.connected) {
+        setBaslerTestResult({ status: 'ok', message: statusData.message });
+        // 3. Try to capture an image
+        const imgRes = await fetch('http://localhost:8001/api/basler/capture');
+        if (imgRes.ok) {
+          const imgData = await imgRes.json();
+          setBaslerPreviewUrl(imgData.image);
+        } else {
+          const errData = await imgRes.json().catch(() => ({}));
+          setBaslerTestResult({ status: 'warning', message: errData.detail || 'Cámara conectada, pero error al capturar imagen.' });
+        }
+      } else {
+        setBaslerTestResult({ status: 'error', message: statusData.message || 'Cámara no conectada' });
+      }
+    } catch (err) {
+      setBaslerTestResult({ status: 'error', message: err.message });
+    } finally {
+      setIsBaslerTesting(false);
     }
   };
 
@@ -203,6 +254,17 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
             >
               <Lightbulb size={14} />
               Cámara 3D
+            </button>
+            <button
+              onClick={() => setActiveTab('basler')}
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                activeTab === 'basler'
+                  ? 'bg-logisnext-magenta/20 text-logisnext-magenta border border-logisnext-magenta/30'
+                  : 'text-logisnext-slate hover:bg-[#1d2930] hover:text-white border border-transparent'
+              }`}
+            >
+              <Camera size={14} />
+              Cámara Basler
             </button>
           </div>
 
@@ -531,6 +593,71 @@ Z: ${cameraCoords.target.z.toFixed(3)}`}
                       </pre>
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'basler' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-logisnext-magenta/50 pb-1 inline-block">
+                    Configuración Cámara Basler
+                  </h3>
+                </div>
+
+                <div className="bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-5 space-y-6">
+                  <p className="text-xs text-logisnext-lightslate font-medium">
+                    Configure la dirección IP de la cámara industrial Basler. Si la deja en blanco, el sistema intentará autodetectar la primera cámara disponible en la red.
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
+                      Dirección IP (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: 192.168.0.100"
+                      value={baslerIp}
+                      onChange={(e) => setBaslerIp(e.target.value)}
+                      className="bg-[#0a0f12] border border-[#2e404a] rounded-lg px-4 py-3 text-white text-sm font-mono outline-none focus:border-logisnext-magenta transition-colors w-1/2"
+                    />
+                  </div>
+                  
+                  <div className="pt-2 flex flex-col gap-4">
+                    <div className="flex items-center justify-between gap-4">
+                      {baslerTestResult && (
+                        <div className={`text-xs px-3 py-1.5 rounded bg-[#1d2930]/80 border ${
+                          baslerTestResult.status === 'ok' ? 'text-green-400 border-green-500/30' : 
+                          baslerTestResult.status === 'warning' ? 'text-yellow-400 border-yellow-500/30' : 'text-red-400 border-red-500/30'
+                        } flex-1 overflow-hidden text-ellipsis whitespace-nowrap`} title={baslerTestResult.message}>
+                          {baslerTestResult.message}
+                        </div>
+                      )}
+                      {!baslerTestResult && <div className="flex-1"></div>}
+                      
+                      <button
+                        onClick={handleTestBasler}
+                        disabled={isBaslerTesting}
+                        className="flex items-center gap-2 px-4 py-2 border border-[#2e404a] hover:bg-[#2e404a] text-logisnext-lightslate hover:text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50 shrink-0"
+                      >
+                        <TestTube size={14} className={isBaslerTesting ? "animate-spin" : ""} />
+                        {isBaslerTesting ? "Diagnosticando..." : "Diagnóstico de Cámara"}
+                      </button>
+                    </div>
+
+                    {baslerPreviewUrl && (
+                      <div className="mt-4 border border-[#2e404a] rounded-lg overflow-hidden bg-black flex flex-col items-center justify-center relative min-h-[200px]">
+                        <div className="absolute top-2 left-2 z-10 px-2 py-1 bg-black/60 text-white text-[10px] font-mono rounded backdrop-blur flex items-center gap-2">
+                           <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_5px_#22c55e]"></span>
+                           PREVIEW BASLER
+                        </div>
+                        <img 
+                          src={baslerPreviewUrl} 
+                          alt="Previsualización Basler" 
+                          className="max-h-[300px] w-auto object-contain"
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
