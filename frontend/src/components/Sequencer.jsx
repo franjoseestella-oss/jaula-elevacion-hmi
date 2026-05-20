@@ -430,7 +430,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   // Estados: 'standby' | 'esperando_1500' | 'ascenso' | 'espera_arriba' | 'descenso' | 'ok' | 'nok'
   const [cameraTestState, setCameraTestState] = useState('standby');
   const [testAlarm, setTestAlarm] = useState(null); // 'ascenso_incompleto', 'descenso_incompleto'
-  const [simTimers, setSimTimers] = useState({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
+  const [simTimers, setSimTimers] = useState({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
   const [waitCountdown, setWaitCountdown] = useState(null); // cuenta atrás 3-2-1 en espera_arriba
 
   // Modal para repetir prueba
@@ -483,7 +483,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   useEffect(() => {
     if (cameraTestState === 'standby' || cameraTestState === 'esperando_1500') {
       if (cameraTestState === 'standby') {
-        setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
+        setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
         setWaitCountdown(null);
         setTestAlarm(null);
       }
@@ -564,17 +564,19 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
 
         if (isAscentFinished && !simTimersRef.current.finishedElev) {
-          const finalElev = isSimulation 
-            ? Math.floor((Date.now() - (s.tStartElev || Date.now())) / 10)
-            : Math.floor(((getPlcVal(plcStateRef.current, 'OW_Tiempo_Elevacion') ?? getPlcVal(plcStateRef.current, 'or_tiempo_elevacion') ?? 0)) / 10);
-          setSimTimers(prev => ({ ...prev, finishedElev: true, elev: finalElev }));
           if (isSimulation) {
+            // Simulación: medir por Date.now()
+            const finalElev = Math.floor((Date.now() - (s.tStartElev || Date.now())) / 10);
+            setSimTimers(prev => ({ ...prev, finishedElev: true, elev: finalElev }));
             fetch(`${API_BASE}/plc/write`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ or_tiempo_elevacion: finalElev * 10, OW_Tiempo_Elevacion: finalElev * 10, is_force: true })
             }).catch(console.error);
           }
+          // PLC real: NO leer el valor aquí — puede ser el de la medición anterior.
+          // El flanco ascendente de Ob_Ready_Temporizador (False→True) leerá el valor estable.
+          // Solo transicionamos de estado.
           setCameraTestState('espera_arriba');
           setWaitCountdown(3);
           s.tTopReachTime = null;
@@ -622,36 +624,36 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           }
         }
 
-        if (isDescentFinished && !simTimersRef.current.finishedDesc) {
-          const isSinCarga = currentStep === 2;
-          const minElev = isSinCarga ? erpData?.tpo_elev_min_scarga : erpData?.tpo_elevac_min;
-          const maxElev = isSinCarga ? erpData?.tpo_elev_max_scarga : erpData?.tpo_elevac_max;
-          const minDesc = isSinCarga ? erpData?.tpo_desc_min_scarga : erpData?.tpo_descenso_min;
-          const maxDesc = isSinCarga ? erpData?.tpo_desc_max_scarga : erpData?.tpo_descenso_max;
-
-          const finalElev = simTimersRef.current.elev;
-          const finalDesc = isSimulation 
-            ? Math.floor((Date.now() - (s.tStartDesc || Date.now())) / 10)
-            : Math.floor(((getPlcVal(plcStateRef.current, 'OW_Tiempo_Descenso') ?? getPlcVal(plcStateRef.current, 'or_tiempo_descenso') ?? 0)) / 10);
-
-          setSimTimers(prev => ({ ...prev, finishedDesc: true, desc: finalDesc }));
+        if (isDescentFinished && !simTimersRef.current.finishedDesc && !simTimersRef.current.pendingReadDesc) {
           if (isSimulation) {
+            // Simulación: medir por Date.now() y evaluar directamente
+            const isSinCarga = currentStep === 2;
+            const minElev = isSinCarga ? erpData?.tpo_elev_min_scarga : erpData?.tpo_elevac_min;
+            const maxElev = isSinCarga ? erpData?.tpo_elev_max_scarga : erpData?.tpo_elevac_max;
+            const minDesc = isSinCarga ? erpData?.tpo_desc_min_scarga : erpData?.tpo_descenso_min;
+            const maxDesc = isSinCarga ? erpData?.tpo_desc_max_scarga : erpData?.tpo_descenso_max;
+            const finalElev = simTimersRef.current.elev;
+            const finalDesc = Math.floor((Date.now() - (s.tStartDesc || Date.now())) / 10);
+            setSimTimers(prev => ({ ...prev, finishedDesc: true, desc: finalDesc }));
             fetch(`${API_BASE}/plc/write`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ or_tiempo_descenso: finalDesc * 10, OW_Tiempo_Descenso: finalDesc * 10, is_force: true })
             }).catch(console.error);
-          }
-
-          const isElevOk = Number(finalElev) >= Number(minElev) && Number(finalElev) <= Number(maxElev);
-          const isDescOk = Number(finalDesc) >= Number(minDesc) && Number(finalDesc) <= Number(maxDesc);
-          
-          if (!isElevOk || !isDescOk) {
-            setTestAlarm('fuera_tolerancia');
-            setCameraTestState('nok');
+            const isElevOk = Number(finalElev) >= Number(minElev) && Number(finalElev) <= Number(maxElev);
+            const isDescOk = Number(finalDesc) >= Number(minDesc) && Number(finalDesc) <= Number(maxDesc);
+            if (!isElevOk || !isDescOk) {
+              setTestAlarm('fuera_tolerancia');
+              setCameraTestState('nok');
+            } else {
+              setTestAlarm(null);
+              setCameraTestState('ok');
+            }
           } else {
-            setTestAlarm(null);
-            setCameraTestState('ok');
+            // PLC real: NO leer aquí — el valor puede ser el de la medición anterior.
+            // Marcar que la altura de descenso se alcanzó y esperar el flanco Ready.
+            setSimTimers(prev => ({ ...prev, pendingReadDesc: true }));
+            console.log('[DESCENSO] Altura alcanzada. Esperando flanco Ready para leer OR_Tiempo_Descenso...');
           }
         } else {
           if (isSimulation && !s.tStartDesc) {
@@ -860,7 +862,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     setCameraTestState('standby');
     setTestAlarm(null);
     setWaitCountdown(null);
-    setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
+    setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
     setRepeatModal({ show: false, log: null, selections: [true, true, true, true] });
     if (setStep2Overlay) setStep2Overlay(null);
     if (setPalletState) setPalletState('idle');
@@ -1104,7 +1106,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             resetStartsInPlc();
             setCameraTestState('standby');
             setTestAlarm(null);
-            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
+            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
             setWaitCountdown(null);
             setTimeout(() => {
               setCameraTestState('esperando_1500');
@@ -1113,7 +1115,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           }
           if (cameraTestState === 'standby') {
             setCameraTestState('esperando_1500');
-            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
+            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
           } else if (cameraTestState === 'ok') {
             markOk(2);
           }
@@ -1135,7 +1137,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             resetStartsInPlc();
             setCameraTestState('standby');
             setTestAlarm(null);
-            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
+            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
             setWaitCountdown(null);
             setTimeout(() => {
               setCameraTestState('esperando_1500');
@@ -1144,7 +1146,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           }
           if (cameraTestState === 'standby') {
             setCameraTestState('esperando_1500');
-            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
+            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
           } else if (cameraTestState === 'ok') {
             markOk(3);
           }
@@ -1567,6 +1569,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   const erpPreviewRef = useRef(erpPreview);
   const toleranciasRef = useRef(tolerancias);
   const simTimersRef = useRef(simTimers);
+  const cameraTestStateRef = useRef(cameraTestState);
+  const prevReadyRef = useRef(null); // Para detección de flanco ascendente de Ob_Ready_Temporizador
 
   useEffect(() => { stepStatusRef.current = stepStatus; }, [stepStatus]);
   useEffect(() => { stepStartedRef.current = stepStarted; }, [stepStarted]);
@@ -1575,6 +1579,63 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   useEffect(() => { erpPreviewRef.current = erpPreview; }, [erpPreview]);
   useEffect(() => { toleranciasRef.current = tolerancias; }, [tolerancias]);
   useEffect(() => { simTimersRef.current = simTimers; }, [simTimers]);
+  useEffect(() => { cameraTestStateRef.current = cameraTestState; }, [cameraTestState]);
+
+  // ── Detección de flanco ascendente de Ob_Ready_Temporizador (solo modo PLC real) ──
+  // Cuando Ready pasa de False a True, los valores OR_Tiempo_Elevacion/Descenso son estables.
+  const isTimerReadyVal = telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador ?? false;
+  useEffect(() => {
+    if (isSimulation) {
+      prevReadyRef.current = isTimerReadyVal;
+      return; // En simulación los tiempos se capturan por Date.now()
+    }
+    const prevReady = prevReadyRef.current;
+    prevReadyRef.current = isTimerReadyVal;
+
+    // Flanco ascendente: estaba False y ahora es True
+    if (prevReady === false && isTimerReadyVal === true) {
+      const testState = cameraTestStateRef.current;
+      const step = currentStepRef.current;
+      if (step !== 2 && step !== 3) return;
+
+      const timers = simTimersRef.current;
+      const erp = erpDataRef.current;
+      const isSinCarga = step === 2;
+
+      if ((testState === 'ascenso' || testState === 'espera_arriba') && !timers.finishedElev) {
+        // Leer tiempo de elevación estable del PLC
+        const finalElev = Math.floor((getPlcVal(plcStateRef.current, 'OW_Tiempo_Elevacion') ?? getPlcVal(plcStateRef.current, 'or_tiempo_elevacion') ?? 0) / 10);
+        console.log(`[FLANCO READY↑] Elevación capturada del PLC: ${finalElev} (×10 = ${finalElev * 10})`);
+        setSimTimers(prev => ({ ...prev, finishedElev: true, elev: finalElev }));
+        // Si aún estamos en 'ascenso', transicionar (puede que el height loop ya lo hizo)
+        if (testState === 'ascenso') {
+          setCameraTestState('espera_arriba');
+          setWaitCountdown(3);
+        }
+
+      } else if (timers.pendingReadDesc && !timers.finishedDesc) {
+        // Leer tiempo de descenso estable del PLC y evaluar tolerancia
+        const finalElev = timers.elev;
+        const finalDesc = Math.floor((getPlcVal(plcStateRef.current, 'OW_Tiempo_Descenso') ?? getPlcVal(plcStateRef.current, 'or_tiempo_descenso') ?? 0) / 10);
+        console.log(`[FLANCO READY↑] Descenso capturado del PLC: ${finalDesc} (×10 = ${finalDesc * 10})`);
+        const minElev = isSinCarga ? erp?.tpo_elev_min_scarga : erp?.tpo_elevac_min;
+        const maxElev = isSinCarga ? erp?.tpo_elev_max_scarga : erp?.tpo_elevac_max;
+        const minDesc = isSinCarga ? erp?.tpo_desc_min_scarga : erp?.tpo_descenso_min;
+        const maxDesc = isSinCarga ? erp?.tpo_desc_max_scarga : erp?.tpo_descenso_max;
+        setSimTimers(prev => ({ ...prev, finishedDesc: true, desc: finalDesc, pendingReadDesc: false }));
+        const isElevOk = Number(finalElev) >= Number(minElev) && Number(finalElev) <= Number(maxElev);
+        const isDescOk = Number(finalDesc) >= Number(minDesc) && Number(finalDesc) <= Number(maxDesc);
+        if (!isElevOk || !isDescOk) {
+          setTestAlarm('fuera_tolerancia');
+          setCameraTestState('nok');
+        } else {
+          setTestAlarm(null);
+          setCameraTestState('ok');
+        }
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTimerReadyVal, isSimulation]);
 
   // Registrar timestamp de inicio cuando un paso se activa
   useEffect(() => {
@@ -1659,7 +1720,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           resetStartsInPlc();
           setCameraTestState('standby');
           setTestAlarm(null);
-          setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
+          setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
           setWaitCountdown(null);
           setTimeout(() => {
             setCameraTestState('esperando_1500');
@@ -1668,7 +1729,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
         if (cameraTestState === 'standby') {
           setCameraTestState('esperando_1500');
-          setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
+          setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
         } else if (cameraTestState === 'ok') markOk(2);
       } else if (statuses[3] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') {
         const currentPallets = pState?.OW_Numero_Pallets || 0;
@@ -1687,7 +1748,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           resetStartsInPlc();
           setCameraTestState('standby');
           setTestAlarm(null);
-          setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
+          setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
           setWaitCountdown(null);
           setTimeout(() => {
             setCameraTestState('esperando_1500');
@@ -1696,7 +1757,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
         if (cameraTestState === 'standby') {
           setCameraTestState('esperando_1500');
-          setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
+          setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
         } else if (cameraTestState === 'ok') markOk(3);
       } else if (statuses[4] === STEP_STATUS.ACTIVE) {
         if (test5mState === 'nok') {
