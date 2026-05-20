@@ -61,7 +61,7 @@ def on_startup():
                 ip = config_data.get("ip", "192.168.0.1")
                 port = config_data.get("port", "4840")
                 db_name = config_data.get("dbName") or config_data.get("dbNameFast") or "DB25_OPC_UA_SCAN_LENTO"
-                frequency = config_data.get("frequency") or config_data.get("hzFast") or 300.0
+                frequency = config_data.get("frequency") or config_data.get("hzFast") or 100.0
                 namespace = config_data.get("namespace", "3")
                 is_simulation = config_data.get("isSimulation", True)
                 
@@ -764,8 +764,8 @@ def update_plc_config(config: PlcConfigModel):
         port=config.port, 
         db_name_fast=config.dbNameFast or config.dbName or "DB25_OPC_UA_SCAN_LENTO",
         db_name_slow=config.dbNameSlow or config.dbName or "DB25_OPC_UA_SCAN_LENTO",
-        hz_fast=config.hzFast if config.hzFast is not None else (config.frequency or 300.0),
-        hz_slow=config.hzSlow if config.hzSlow is not None else (config.frequency or 300.0),
+        hz_fast=config.hzFast if config.hzFast is not None else (config.frequency or 100.0),
+        hz_slow=config.hzSlow if config.hzSlow is not None else (config.frequency or 100.0),
         namespace=config.namespace,
         db_name=config.dbName,
         frequency=config.frequency
@@ -1020,11 +1020,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 "opcua_latency_ms": opcua_manager.latency_ms if opcua_manager.active else 0
             })
             
-            # El sleep(0.0033) en Windows suele durar 15-16ms (aprox 60Hz).
-            # Para ir a 300Hz reales (3.3ms), usamos sleep(0) y control de tiempo manual.
-            await asyncio.sleep(0) 
-            while time.time() - cycle_start < 0.0033:
-                await asyncio.sleep(0)
+            # Frecuencia de envío de telemetría por WebSocket (aprox 60-100Hz sin consumir CPU)
+            await asyncio.sleep(0.01)
 
     except WebSocketDisconnect:
         print("[WS] Cliente desconectado.")

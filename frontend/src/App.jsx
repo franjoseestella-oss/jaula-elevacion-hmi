@@ -648,7 +648,7 @@ function App() {
   }, [testHUDOverlay?.cameraTestState, waitingForIniciar, isSimulation]);
 
   useEffect(() => {
-    const ws = new WebSocket('ws://localhost:8001/ws');
+    const ws = new WebSocket('ws://127.0.0.1:8001/ws');
     ws.onopen = () => setNetworkStatus(prev => ({ ...prev, opc: true, basler: true }));
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);

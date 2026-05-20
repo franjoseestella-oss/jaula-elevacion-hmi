@@ -3,63 +3,71 @@ opcua_client.py
 ───────────────
 Cliente OPC UA persistente para PLC Siemens S7-1200.
 
-- Se instancia una sola vez (singleton).
-- Cuando está activo (modo PLC real) lee todas las variables de forma
-  cíclica y expone los datos en `opcua_client.state`.
-- Cuando se escribe una salida, la envía directamente al PLC.
-- Si el modo es simulación, queda en standby sin hacer nada.
-
-Dependencia: pip install asyncua
+Estrategia de comunicación robusta:
+  - UNA sola sesión a la vez (el S7-1200 tiene límite muy bajo de sesiones).
+  - Ciclo lento deliberado: NO más rápido de lo que el PLC puede responder.
+  - Sin keepalive propio (asyncua lo gestiona internamente).
+  - Sin lecturas previas a las escrituras (tipos cacheados en discovery).
+  - Tolerancia a errores transitoria antes de forzar reconexión.
 """
 
 import asyncio
 import threading
 import time
 import logging
-from typing import Optional
+from typing import Optional, Dict
 
 logger = logging.getLogger("opcua_client")
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Configuración (se actualiza desde la API REST)
+# Configuración
 # ──────────────────────────────────────────────────────────────────────────────
 class OpcUaConfig:
-    ip: str        = "192.168.0.1"
-    port: str      = "4840"
-    db_name: str   = "DB25_OPC_UA_SCAN_LENTO"
+    ip: str          = "192.168.0.1"
+    port: str        = "4840"
+    db_name: str     = "DB25_OPC_UA_SCAN_LENTO"
     db_name_fast: str = "DB25_OPC_UA_SCAN_LENTO"
     db_name_slow: str = "DB25_OPC_UA_SCAN_LENTO"
-    frequency: float = 300.0
-    hz_fast: float = 300.0
-    hz_slow: float = 300.0
-    namespace: str = "3"
+    frequency: float = 100.0
+    hz_fast: float   = 100.0
+    hz_slow: float   = 100.0
+    namespace: str   = "3"
 
     @property
     def url(self) -> str:
         return f"opc.tcp://{self.ip}:{self.port}"
-
-    def node_id_fast(self, var_name: str) -> str:
-        return f'ns={self.namespace};s="{self.db_name}"."{var_name}"'
 
     def node_id_slow(self, var_name: str) -> str:
         return f'ns={self.namespace};s="{self.db_name}"."{var_name}"'
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Variables expuestas por el PLC (las mismas que en plc_sim_state de main.py)
+# Variables
 # ──────────────────────────────────────────────────────────────────────────────
-# Nota: la lista de lectura es ahora dinámica (autodiscovery del DB completo).
-# Solo se mantiene una lista fija para los nodos de ESCRITURA esenciales.
 PLC_WRITE_VARS = [
-    "Ib_LUZ_VERDE",
-    "Ib_LUZ_AZUL",
-    "Ib_LUZ_ROJA",
-    "Ib_LUZ_Pulsador_1",
-    "Ib_LUZ_Pulsador_2",
-    "Ib_Bit_VIDA_APP_PLC",
-    "Ob_Subir_Vallas",
-    "Ob_Bajar_Vallas"
+    "Ib_LUZ_VERDE", "Ib_LUZ_AZUL", "Ib_LUZ_ROJA",
+    "Ib_LUZ_Pulsador_1", "Ib_LUZ_Pulsador_2",
+    "Ib_Bit_VIDA_APP_PLC", "Ob_Subir_Vallas", "Ob_Bajar_Vallas"
 ]
+
+# Variables críticas leídas en cada ciclo rápido
+FAST_VARS_SET = {
+    "OR_Altura_Carretilla", "IW_Altura_Relativa",
+    "Ib_Restart_Temporizador", "Ob_Ready_Temporizador",
+    "Ib_Start_Ascenso", "Ib_Start_Descenso",
+    "Ob_Iniciar_Secuencia", "Ob_Abortar_Secuencia", "Ob_Poner_Pegatina"
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Tiempos de ciclo reales del S7-1200 (medidos empíricamente)
+# fast (~6 vars) ≈ 90 ms  →  limitamos a máx 8 Hz en lectura rápida
+# slow (~38 vars) ≈ 390 ms →  limitamos a máx 2 Hz en lectura lenta
+# ──────────────────────────────────────────────────────────────────────────────
+FAST_READ_TIMEOUT  = 5.0   # s – si get_values tarda más → reconectar
+SLOW_READ_TIMEOUT  = 8.0   # s – ciclo completo puede ser más lento
+WRITE_TIMEOUT      = 3.0   # s – timeout individual por escritura
+MAX_CONSEC_ERRORS  = 3     # número de ciclos con error antes de reconectar
+SLOW_CYCLE_EVERY   = 8     # un ciclo completo cada N ciclos rápidos
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -73,50 +81,47 @@ class OpcUaClientManager:
 
     def __init__(self):
         self.config    = OpcUaConfig()
-        self.state     = {}  # Se llena dinámicamente con autodiscovery
+        self.state: Dict = {}
 
         self.connected      = False
-        self.active         = False          # True = modo PLC real
+        self.active         = False
         self.error_msg      = ""
-        self.latency_ms     = 0.0            # Latency (cycle time) in milliseconds
-        self._write_queue: asyncio.Queue = None  # type: ignore
+        self.latency_ms     = 0.0
+        self._write_queue: asyncio.Queue = None   # type: ignore
         self._loop: asyncio.AbstractEventLoop = None  # type: ignore
-        self._thread: threading.Thread = None  # type: ignore
+        self._thread: threading.Thread = None     # type: ignore
 
     # ── API pública ────────────────────────────────────────────────────────────
 
     def enable(self):
-        """Activa el modo PLC real y arranca el loop de conexión."""
         if self.active and self._thread and self._thread.is_alive():
-            return  # ya en marcha
+            return
         self.active = True
         self._thread = threading.Thread(target=self._run_loop, daemon=True, name="opcua-thread")
         self._thread.start()
-        logger.info("[OPC UA] Cliente activado → %s", self.config.url)
+        logger.info("[OPC UA] Cliente activado -> %s", self.config.url)
 
     def disable(self):
-        """Desactiva el modo PLC real y detiene el loop."""
         self.active    = False
         self.connected = False
-        self.error_msg = "Modo simulación activo"
-        logger.info("[OPC UA] Cliente desactivado (modo simulación)")
+        self.error_msg = "Modo simulacion activo"
+        logger.info("[OPC UA] Cliente desactivado (modo simulacion)")
 
     def write(self, payload: dict):
-        """Encola una escritura al PLC (seguro desde cualquier thread)."""
         if not self.active or not self._loop:
             return
-        self._loop.call_soon_threadsafe(
-            self._write_queue.put_nowait, payload
-        )
+        self._loop.call_soon_threadsafe(self._write_queue.put_nowait, payload)
 
-    def update_config(self, ip: str, port: str, db_name_fast: str = "", db_name_slow: str = "", hz_fast: float = 300.0, hz_slow: float = 300.0, namespace: str = "3", db_name: Optional[str] = None, frequency: Optional[float] = None):
-        """Actualiza la configuración y reinicia la conexión."""
+    def update_config(self, ip: str, port: str,
+                      db_name_fast: str = "", db_name_slow: str = "",
+                      hz_fast: float = 100.0, hz_slow: float = 100.0,
+                      namespace: str = "3",
+                      db_name: Optional[str] = None,
+                      frequency: Optional[float] = None):
         self.config.ip        = ip
         self.config.port      = port
-        
-        resolved_db = db_name if db_name is not None else db_name_fast
-        resolved_freq = frequency if frequency is not None else hz_fast
-        
+        resolved_db           = db_name if db_name is not None else db_name_fast
+        resolved_freq         = frequency if frequency is not None else hz_fast
         self.config.db_name   = resolved_db
         self.config.db_name_fast = resolved_db
         self.config.db_name_slow = resolved_db
@@ -125,9 +130,8 @@ class OpcUaClientManager:
         self.config.hz_slow   = float(resolved_freq)
         self.config.namespace = namespace
         if self.active:
-            # Reiniciar el loop con la nueva config
             self.disable()
-            time.sleep(0.3)
+            time.sleep(0.5)
             self.enable()
 
     # ── Loop asíncrono interno ─────────────────────────────────────────────────
@@ -139,240 +143,265 @@ class OpcUaClientManager:
         try:
             self._loop.run_until_complete(self._connect_and_poll())
         except Exception as e:
-            logger.error("[OPC UA] Loop terminado con error: %s", e)
+            logger.error("[OPC UA] Loop terminado: %s", e)
         finally:
             self._loop.close()
             self.connected = False
 
     async def _connect_and_poll(self):
-        """Bucle principal: conecta, lee, escribe, reconecta si falla."""
+        """Bucle de reconexión con backoff. Una sesión a la vez."""
+        retry_delay = 5.0
+        max_delay   = 30.0
+
         while self.active:
             try:
                 await self._session()
+                retry_delay = 5.0   # sesión terminó ok → reiniciar delay
             except Exception as e:
                 self.connected = False
-                self.error_msg = str(e)
-                logger.warning("[OPC UA] Reconectando en 3s... (%s)", e)
-                await asyncio.sleep(3)
+                err_str = str(e)
+                self.error_msg = err_str
+                is_too_many = "BadTooManySessions" in err_str
+                # Si el PLC rechaza por límite de sesiones, esperar
+                # al menos que expire la sesión anterior (30 s)
+                wait = 35.0 if is_too_many else retry_delay
+                logger.warning("[OPC UA] Reconectando en %.0f s... (%s)", wait, err_str)
+                await asyncio.sleep(wait)
+                if not is_too_many:
+                    retry_delay = min(retry_delay * 1.5, max_delay)
 
     async def _session(self):
-        """Una sesión completa: conecta y lee/escribe hasta desconexión."""
+        """Una sesión completa: conecta, descubre, lee/escribe y cierra."""
         try:
             from asyncua import Client, ua
         except ImportError:
-            self.error_msg = "asyncua no instalado. Ejecuta: pip install asyncua"
-            logger.error(self.error_msg)
+            self.error_msg = "asyncua no instalado"
             self.active = False
             return
 
         client = Client(url=self.config.url)
-        client.session_timeout = 30_000          # 30 s
+        # El S7-1200 negocia 30 000 ms; pedimos lo mismo
+        client.session_timeout        = 30_000
         client.secure_channel_timeout = 30_000
 
         logger.info("[OPC UA] Conectando a %s ...", self.config.url)
         try:
             await asyncio.wait_for(client.connect(), timeout=10.0)
         except asyncio.TimeoutError:
-            raise Exception("Timeout conectando al PLC (Revisa IP o red)")
+            raise Exception("Timeout conectando (10 s)")
+        except Exception as e:
+            raise Exception(f"Error al conectar: {e}")
+
         self.connected = True
         self.error_msg = ""
-        logger.info("[OPC UA] ✓ Conectado a %s", self.config.url)
+        logger.info("[OPC UA] Conectado a %s", self.config.url)
 
         try:
-            from asyncua import ua
-            fast_nodes = {}
-            slow_nodes = {}
+            fast_nodes: Dict = {}
+            slow_nodes: Dict = {}
+            node_types: Dict = {}   # caché de VariantType para escrituras
 
-            async def discover_vars_in_node(node, target_dict, depth=0):
+            # ── Discovery ────────────────────────────────────────────────────
+            async def discover(node, depth=0):
                 if depth > 4:
                     return
                 try:
-                    node_class = await node.read_node_class()
-                    if node_class == ua.NodeClass.Variable:
-                        bname = await node.read_browse_name()
-                        target_dict[bname.Name] = node
-                    elif node_class == ua.NodeClass.Object:
+                    nc = await node.read_node_class()
+                    if nc == ua.NodeClass.Variable:
+                        bn = await node.read_browse_name()
+                        name = bn.Name
+                        target = fast_nodes if name in FAST_VARS_SET else slow_nodes
+                        target[name] = node
+                    elif nc == ua.NodeClass.Object:
                         for child in await node.get_children():
-                            await discover_vars_in_node(child, target_dict, depth + 1)
+                            await discover(child, depth + 1)
                 except Exception:
                     pass
 
-            try:
-                logger.info("[OPC UA] Buscando DB '%s' en Objects...", self.config.db_name)
-                
-                db_node = None
-                async def find_dbs_recursive(node, depth=1, max_depth=3):
-                    nonlocal db_node
-                    if depth > max_depth:
-                        return
-                    if db_node:
-                        return
-                        
-                    try:
-                        children = await node.get_children()
-                        for child in children:
-                            try:
-                                bname = (await child.read_browse_name()).Name
-                                if bname == self.config.db_name:
-                                    db_node = child
-                                    return
-                                
-                                await find_dbs_recursive(child, depth + 1, max_depth)
-                            except Exception:
-                                pass
-                    except Exception:
-                        pass
+            db_node = None
+            async def find_db(node, depth=1):
+                nonlocal db_node
+                if depth > 3 or db_node:
+                    return
+                try:
+                    for child in await node.get_children():
+                        try:
+                            name = (await child.read_browse_name()).Name
+                            if name == self.config.db_name:
+                                db_node = child
+                                return
+                            await find_db(child, depth + 1)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
 
-                await find_dbs_recursive(client.nodes.objects)
+            logger.info("[OPC UA] Buscando DB '%s'...", self.config.db_name)
+            await find_db(client.nodes.objects)
 
-                # Explorar DB
-                if db_node:
-                    logger.info("[OPC UA] DB '%s' encontrado.", self.config.db_name)
-                    await discover_vars_in_node(db_node, fast_nodes, depth=0)
-                else:
-                    logger.warning("[OPC UA] DB NO encontrado: %s", self.config.db_name)
+            if db_node:
+                await discover(db_node)
+                logger.info("[OPC UA] Discovery: %d vars rapidas, %d vars lentas",
+                            len(fast_nodes), len(slow_nodes))
+            else:
+                logger.warning("[OPC UA] DB no encontrado: %s", self.config.db_name)
 
-                logger.info("[OPC UA] Discovery finalizado: %d variables detectadas", len(fast_nodes))
-            except Exception as e:
-                logger.warning("[OPC UA] Error en discovery: %s", e)
-
+            # Fallback por NodeId si discovery vacío
             if not fast_nodes and not slow_nodes:
-                logger.warning("[OPC UA] Discovery falló, usando fallback directo.")
                 for var in PLC_WRITE_VARS:
                     try:
                         n = client.get_node(self.config.node_id_slow(var))
                         await n.read_value()
-                        slow_nodes[var] = n
+                        (fast_nodes if var in FAST_VARS_SET else slow_nodes)[var] = n
                     except Exception:
                         pass
 
-            # Generamos listas inmutables para el bucle
-            f_names = list(fast_nodes.keys())
+            # Cachear tipos de dato para evitar lecturas extra en escrituras
+            for name, node in {**fast_nodes, **slow_nodes}.items():
+                try:
+                    dv = await node.read_data_value()
+                    if dv and dv.Value is not None:
+                        node_types[name] = dv.Value.VariantType
+                except Exception:
+                    pass
+            logger.info("[OPC UA] Tipos cacheados: %d nodos", len(node_types))
+
+            # Listas inmutables para el ciclo
+            f_names    = list(fast_nodes.keys())
             f_nodelist = list(fast_nodes.values())
-            
-            s_names = list(slow_nodes.keys())
-            s_nodelist = list(slow_nodes.values())
+            all_names  = f_names + list(slow_nodes.keys())
+            all_nodes  = f_nodelist + list(slow_nodes.values())
 
-            # Unificamos para lectura en bloque único (evita saturar el PLC con peticiones concurrentes)
-            all_names = f_names + s_names
-            all_nodes = f_nodelist + s_nodelist
-
-            last_vida_value = None
-            last_heartbeat = time.time()
-            last_app_heartbeat = time.time()
+            # ── Estado del bucle ──────────────────────────────────────────────
+            last_app_heartbeat  = time.time()
             app_heartbeat_state = False
-            first_fail_time = 0.0
+            consec_errors       = 0
+            cycle_counter       = 0
 
-            last_slow_read_time = 0.0
+            # ── Bucle principal ───────────────────────────────────────────────
+            while self.active:
+                cycle_start = time.time()
 
-            async def main_loop():
-                nonlocal last_vida_value, last_heartbeat, last_app_heartbeat, app_heartbeat_state, first_fail_time
-                
-                while self.active:
-                    cycle_start = time.time()
-                    
-                    # ── 1. Lectura UNIFICADA de TODO (máxima velocidad)
+                # Decidir ciclo rápido (solo vars críticas) o completo
+                read_all      = (cycle_counter % SLOW_CYCLE_EVERY == 0)
+                cycle_counter += 1
+                nodes_now     = all_nodes  if read_all else f_nodelist
+                names_now     = all_names  if read_all else f_names
+                timeout_now   = SLOW_READ_TIMEOUT if read_all else FAST_READ_TIMEOUT
+
+                # ── Lectura en bloque ─────────────────────────────────────────
+                if nodes_now:
                     try:
-                        if all_nodes:
-                            values = await client.get_values(all_nodes)
-                            for i, val in enumerate(values):
-                                self.state[all_names[i]] = val if isinstance(val, (int, float, bool, str)) else str(val)
-                            first_fail_time = 0.0
+                        values = await asyncio.wait_for(
+                            client.get_values(nodes_now),
+                            timeout=timeout_now
+                        )
+                        for i, val in enumerate(values):
+                            self.state[names_now[i]] = (
+                                val if isinstance(val, (int, float, bool, str)) else str(val)
+                            )
+                        consec_errors = 0
+
+                    except asyncio.TimeoutError:
+                        # Timeout en lectura = estado TCP inconsistente → reconectar
+                        consec_errors += 1
+                        logger.warning("[OPC UA] Timeout lectura (ciclo %s, intento %d/%d)",
+                                       "completo" if read_all else "rapido",
+                                       consec_errors, MAX_CONSEC_ERRORS)
+                        if consec_errors >= MAX_CONSEC_ERRORS:
+                            raise Exception(f"Reconectando: {consec_errors} timeouts consecutivos")
+                        # Pausa breve antes de reintentar (da tiempo al PLC)
+                        await asyncio.sleep(1.0)
+                        continue
+
                     except Exception as e:
-                        if first_fail_time == 0.0:
-                            logger.warning("[OPC UA] Lectura unificada falló (%s).", e)
-                            first_fail_time = time.time()
-                        elif time.time() - first_fail_time > 5.0:
-                            raise Exception("Conexión perdida: >5s sin lecturas exitosas.")
-                        
-                        # Fallback individual
-                        for i, n in enumerate(all_nodes):
+                        consec_errors += 1
+                        logger.warning("[OPC UA] Error lectura (intento %d/%d): %s",
+                                       consec_errors, MAX_CONSEC_ERRORS, e)
+                        if consec_errors >= MAX_CONSEC_ERRORS:
+                            raise Exception(f"Reconectando: {consec_errors} errores consecutivos ({e})")
+                        await asyncio.sleep(0.5)
+                        continue
+
+                # ── Heartbeat APP → PLC (cada 2 s, sin leer tipo extra) ───────
+                now = time.time()
+                if now - last_app_heartbeat >= 2.0:
+                    last_app_heartbeat  = now
+                    app_heartbeat_state = not app_heartbeat_state
+                    node_vida = slow_nodes.get("Ib_Bit_VIDA_APP_PLC") or fast_nodes.get("Ib_Bit_VIDA_APP_PLC")
+                    if node_vida:
+                        try:
+                            v_type = node_types.get("Ib_Bit_VIDA_APP_PLC", ua.VariantType.Boolean)
+                            await asyncio.wait_for(
+                                node_vida.write_value(
+                                    ua.DataValue(ua.Variant(app_heartbeat_state, v_type))
+                                ),
+                                timeout=WRITE_TIMEOUT
+                            )
+                        except Exception as e:
+                            logger.warning("[OPC UA] Heartbeat fallo: %s", e)
+
+                # ── Escrituras manuales ───────────────────────────────────────
+                while not self._write_queue.empty():
+                    try:
+                        payload = self._write_queue.get_nowait()
+                        for k, v in payload.items():
+                            if k == "is_force":
+                                continue
+                            node = fast_nodes.get(k) or slow_nodes.get(k)
+                            if not node:
+                                continue
+                            # Usar tipo cacheado (sin leer el nodo de nuevo)
+                            v_type = node_types.get(k)
+                            if v_type is None:
+                                v_type = (
+                                    ua.VariantType.Boolean if isinstance(v, bool)
+                                    else ua.VariantType.Float if isinstance(v, float)
+                                    else ua.VariantType.Int16
+                                )
+                            # Coerción de tipo
+                            if v_type == ua.VariantType.Boolean:
+                                coerced = bool(v)
+                            elif v_type in (ua.VariantType.Float, ua.VariantType.Double):
+                                coerced = float(v)
+                            elif v_type in (
+                                ua.VariantType.Int16, ua.VariantType.Int32, ua.VariantType.Int64,
+                                ua.VariantType.UInt16, ua.VariantType.UInt32, ua.VariantType.UInt64
+                            ):
+                                coerced = int(v)
+                            else:
+                                coerced = v
                             try:
-                                val = await n.read_value()
-                                self.state[all_names[i]] = val if isinstance(val, (int, float, bool, str)) else str(val)
-                            except:
-                                pass
-
-                    # ── 2. Comprobar BIT VIDA PLC -> APP
-                    try:
-                        current_vida = self.state.get("Ob_Bit_VIDA_PLC_APP")
-                        if current_vida != last_vida_value:
-                            last_heartbeat = time.time()
-                            last_vida_value = current_vida
-                        elif time.time() - last_heartbeat > 10.0:
-                            raise Exception("Conexión perdida (BIT VIDA PLC estancado por >10s)")
+                                await asyncio.wait_for(
+                                    node.write_value(ua.DataValue(ua.Variant(coerced, v_type))),
+                                    timeout=WRITE_TIMEOUT
+                                )
+                            except Exception as we:
+                                logger.error("[OPC UA] Error escritura %s=%s: %s", k, v, we)
+                        self._write_queue.task_done()
+                    except asyncio.QueueEmpty:
+                        break
                     except Exception as e:
-                        logger.error("[OPC UA] Error heartbeat lectura: %s", e)
-                        if "Conexión perdida" in str(e):
-                            raise e
+                        logger.warning("[OPC UA] Error procesando escritura: %s", e)
+                        break
 
-                    # ── 3. Generar BIT VIDA APP -> PLC (Toggle 1s)
-                    try:
-                        if time.time() - last_app_heartbeat >= 1.0:
-                            app_heartbeat_state = not app_heartbeat_state
-                            last_app_heartbeat = time.time()
-                            node_vida = slow_nodes.get("Ib_Bit_VIDA_APP_PLC") or fast_nodes.get("Ib_Bit_VIDA_APP_PLC")
-                            if node_vida:
-                                v = ua.DataValue(ua.Variant(app_heartbeat_state, ua.VariantType.Boolean))
-                                await node_vida.write_value(v)
-                    except Exception as e:
-                        logger.warning("[OPC UA] Error escribiendo heartbeat: %s", e)
-
-                    # ── 4. PROCESAR ESCRITURAS MANUALES
-                    try:
-                        while not self._write_queue.empty():
-                            payload = self._write_queue.get_nowait()
-                            for k, v in payload.items():
-                                if k == "is_force":
-                                    continue
-                                node = slow_nodes.get(k) or fast_nodes.get(k)
-                                if node:
-                                    try:
-                                        # Obtener el tipo de variante esperado leyendo el valor actual del nodo
-                                        val_data = await node.read_data_value()
-                                        v_type = None
-                                        if val_data and val_data.Value is not None:
-                                            v_type = val_data.Value.VariantType
-                                        
-                                        if v_type is None:
-                                            v_type = ua.VariantType.Boolean if isinstance(v, bool) else (ua.VariantType.Float if isinstance(v, float) else ua.VariantType.Int16)
-                                        
-                                        # Coaccionar el valor al tipo esperado para evitar BadTypeMismatch
-                                        if v_type == ua.VariantType.Boolean:
-                                            coerced_value = bool(v)
-                                        elif v_type in (ua.VariantType.Float, ua.VariantType.Double):
-                                            coerced_value = float(v)
-                                        elif v_type in (ua.VariantType.Int16, ua.VariantType.Int32, ua.VariantType.Int64, 
-                                                        ua.VariantType.UInt16, ua.VariantType.UInt32, ua.VariantType.UInt64):
-                                            coerced_value = int(v)
-                                        else:
-                                            coerced_value = v
-                                            
-                                        await node.write_value(ua.DataValue(ua.Variant(coerced_value, v_type)))
-                                    except Exception as write_err:
-                                        logger.error("[OPC UA] Error escribiendo %s = %s: %s", k, v, write_err)
-                            self._write_queue.task_done()
-                    except Exception as e:
-                        logger.warning("[OPC UA] Error procesando escrituras: %s", e)
-                            
-                    elapsed = time.time() - cycle_start
-                    self.latency_ms = elapsed * 1000
-                    # Controlar la velocidad de escaneo según los Hz configurados
-                    target_delay = 1.0 / max(1.0, self.config.frequency)
-                    sleep_time = max(0.001, target_delay - elapsed)
-                    await asyncio.sleep(sleep_time)
-
-            await main_loop()
+                # ── Cadencia: respetar el ciclo mínimo del PLC ────────────────
+                elapsed = time.time() - cycle_start
+                self.latency_ms = elapsed * 1000
+                # No enviar peticiones más rápido de lo que el PLC puede responder
+                # fast ~90 ms → mín 100 ms entre ciclos rápidos
+                # slow ~390 ms → ya consume su propio tiempo
+                min_cycle = 0.10 if not read_all else 0.0
+                sleep_t   = max(0.01, min_cycle - elapsed)
+                await asyncio.sleep(sleep_t)
 
         finally:
-            # NO setear self.active = False aquí. self.active define la "intención" de estar conectado.
-            # Si self.active se apaga, el bucle de autoreconexión muere.
             try:
-                await client.disconnect()
+                await asyncio.wait_for(client.disconnect(), timeout=5.0)
             except Exception:
                 pass
             self.connected = False
-            logger.info("[OPC UA] Desconectado de %s", self.config.url)
+            logger.info("[OPC UA] Sesion cerrada (%s)", self.config.url)
 
 
 # ── Instancia global (singleton) ───────────────────────────────────────────────
