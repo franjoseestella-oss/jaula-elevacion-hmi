@@ -939,8 +939,22 @@ def write_to_plc(payload: dict):
         
         # Simulación de temporizadores ready/restart
         if key == "Ib_Restart_Temporizador" and value is True:
-            plc_sim_state["Ob_Ready_Temporizador"] = True
+            # Resetear valores de tiempo medidos a 0
+            plc_sim_state["or_tiempo_elevacion"] = 0
+            plc_sim_state["or_tiempo_descenso"] = 0
+            plc_sim_state["OW_Tiempo_Elevacion"] = 0
+            plc_sim_state["OW_Tiempo_Descenso"] = 0
+            plc_sim_state["inicia_temporizador_ascenso"] = False
+            plc_sim_state["Ib_Inicia_Temporizador_Ascenso"] = False
+            plc_sim_state["inicia_temporizador_descenso"] = False
+            plc_sim_state["Ib_Inicia_Temporizador_Descenso"] = False
+            plc_sim_state["Ob_Ready_Temporizador"] = True   # READY: timers frescos
             plc_sim_state["Ib_Restart_Temporizador"] = False
+
+        # Cuando los timers empiezan a correr, Ready vuelve a False
+        # (el PLC indica que los timers están en uso; hay que reiniciar para la próxima prueba)
+        if key in ("inicia_temporizador_ascenso", "Ib_Inicia_Temporizador_Ascenso") and value is True:
+            plc_sim_state["Ob_Ready_Temporizador"] = False
             
         # Exclusión mutua para luces
         if value is True:
