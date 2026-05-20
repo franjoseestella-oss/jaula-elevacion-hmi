@@ -50,6 +50,40 @@ def on_startup():
     except Exception as e:
         print(f"[WARN] No se pudo inicializar la BD: {e}")
         print("   El servidor arrancara en modo solo-simulacion.")
+        
+    # Cargar la configuración guardada del PLC
+    try:
+        import json
+        config_path = resource_path("plc_config.json")
+        if os.path.exists(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                config_data = json.load(f)
+                ip = config_data.get("ip", "192.168.0.1")
+                port = config_data.get("port", "4840")
+                db_name = config_data.get("dbName") or config_data.get("dbNameFast") or "DB25_OPC_UA_SCAN_LENTO"
+                frequency = config_data.get("frequency") or config_data.get("hzFast") or 300.0
+                namespace = config_data.get("namespace", "3")
+                is_simulation = config_data.get("isSimulation", True)
+                
+                opcua_manager.update_config(
+                    ip=ip,
+                    port=port,
+                    db_name_fast=db_name,
+                    db_name_slow=db_name,
+                    hz_fast=float(frequency),
+                    hz_slow=float(frequency),
+                    namespace=str(namespace),
+                    db_name=db_name,
+                    frequency=float(frequency)
+                )
+                
+                if is_simulation:
+                    opcua_manager.disable()
+                else:
+                    opcua_manager.enable()
+                print(f"[OK] Configuración PLC cargada desde archivo: {ip}:{port}, DB={db_name}, sim={is_simulation}")
+    except Exception as e:
+        print(f"[WARN] No se pudo cargar plc_config.json: {e}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -672,6 +706,21 @@ plc_sim_state = {
     
     "Ob_Dtec_Valla_2_trabajo_LH": False,
     "Ob_Dtec_Valla_2_trabajo_RH": False,
+
+    # Temporización y Consignas del PLC
+    "or_tiempo_elevacion": 0,
+    "or_tiempo_descenso": 0,
+    "Ib_Inicia_Temp_Ascenso": False,
+    "inicia_temporizador_ascenso": False,
+    "Ib_Inicia_Temporizador_Ascenso": False,
+    "Ib_Inicia_Temp_Descenso": False,
+    "inicia_temporizador_descenso": False,
+    "Ib_Inicia_Temporizador_Descenso": False,
+    "IW_Altura_Relativa": 0,
+    "altura_relativa": 0,
+    "IW_Consigna_Posicion_Altura": 0,
+    "consigna_posicion_altura": 0,
+    "consigna_posicion": 0
 }
 
 global_force_mode = False
@@ -693,10 +742,12 @@ class PlcWriteParams(BaseModel):
 class PlcConfigModel(BaseModel):
     ip: str
     port: str
-    dbNameFast: str
-    dbNameSlow: str
-    hzFast: float
-    hzSlow: float
+    dbNameFast: str | None = None
+    dbNameSlow: str | None = None
+    hzFast: float | None = None
+    hzSlow: float | None = None
+    dbName: str | None = None
+    frequency: float | None = None
     namespace: str
     isSimulation: bool
 
@@ -709,18 +760,49 @@ def update_plc_config(config: PlcConfigModel):
     opcua_manager.update_config(
         ip=config.ip, 
         port=config.port, 
-        db_name_fast=config.dbNameFast,
-        db_name_slow=config.dbNameSlow,
-        hz_fast=config.hzFast,
-        hz_slow=config.hzSlow,
-        namespace=config.namespace
+        db_name_fast=config.dbNameFast or config.dbName or "DB25_OPC_UA_SCAN_LENTO",
+        db_name_slow=config.dbNameSlow or config.dbName or "DB25_OPC_UA_SCAN_LENTO",
+        hz_fast=config.hzFast if config.hzFast is not None else (config.frequency or 300.0),
+        hz_slow=config.hzSlow if config.hzSlow is not None else (config.frequency or 300.0),
+        namespace=config.namespace,
+        db_name=config.dbName,
+        frequency=config.frequency
     )
     if config.isSimulation:
         opcua_manager.disable()
     else:
         opcua_manager.enable()
         
+    # Guardar configuración en archivo plc_config.json
+    try:
+        import json
+        config_path = resource_path("plc_config.json")
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "ip": config.ip,
+                "port": config.port,
+                "dbName": config.dbName or config.dbNameFast,
+                "frequency": config.frequency or config.hzFast,
+                "namespace": config.namespace,
+                "isSimulation": config.isSimulation
+            }, f, indent=4)
+        print("[OK] Configuración PLC guardada en plc_config.json")
+    except Exception as e:
+        print(f"[WARN] No se pudo guardar plc_config.json: {e}")
+        
     return {"status": "ok", "message": "Configuración guardada"}
+
+@app.get("/config/plc")
+def get_plc_config():
+    """Devuelve la configuración actual del PLC."""
+    return {
+        "ip": opcua_manager.config.ip,
+        "port": opcua_manager.config.port,
+        "dbName": opcua_manager.config.db_name,
+        "frequency": opcua_manager.config.frequency,
+        "namespace": opcua_manager.config.namespace,
+        "isSimulation": not opcua_manager.active
+    }
 
 @app.get("/plc/scan_ips")
 async def scan_ips():

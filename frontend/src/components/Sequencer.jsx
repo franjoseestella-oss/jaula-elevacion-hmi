@@ -25,6 +25,37 @@ const isMxXL = (modelo) => {
   return m.startsWith('MX') || m.startsWith('XL');
 };
 
+const getPlcVal = (plc, keyLower) => {
+  if (!plc) return null;
+  const foundKey = Object.keys(plc).find(k => k.toLowerCase() === keyLower.toLowerCase());
+  return foundKey ? plc[foundKey] : null;
+};
+
+const translatePayload = (payload, isSimulation) => {
+  if (isSimulation) return payload;
+  const mappingStr = localStorage.getItem('plcVarMapping');
+  if (!mappingStr) return payload;
+  try {
+    const mapping = JSON.parse(mappingStr);
+    const newPayload = {};
+    if (payload.is_force !== undefined) {
+      newPayload.is_force = payload.is_force;
+    }
+    Object.entries(payload).forEach(([key, value]) => {
+      if (key === 'is_force') return;
+      const found = Object.entries(mapping).find(([k, v]) => v.appVar === key);
+      if (found) {
+        newPayload[found[0]] = value;
+      } else {
+        newPayload[key] = value;
+      }
+    });
+    return newPayload;
+  } catch (e) {
+    return payload;
+  }
+};
+
 // ─── Componentes de paso ─────────────────────────────────────────────────────
 
 const STEP_STATUS = {
@@ -319,7 +350,7 @@ const CameraLED = ({ state, blinkTick }) => {
 
 // ─── Componente principal ────────────────────────────────────────────────────
 
-const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState, plcState, setStep2Overlay, setTestHUDOverlay, setWaitingForIniciar, sequencerRef, onSequenceEnd, onStepChange, operario, isSimulation, isAnyModalOpen, iniciarPlcTime }) => {
+const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState, plcState, setStep2Overlay, setTestHUDOverlay, setWaitingForIniciar, sequencerRef, onSequenceEnd, onStepChange, operario, isSimulation, isAnyModalOpen, iniciarPlcTime, telemetry }) => {
   const [stepStatus, setStepStatus] = useState([
     STEP_STATUS.ACTIVE,
     STEP_STATUS.PENDING,
@@ -388,6 +419,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   });
   
   const [cotaInicial, setCotaInicial] = useState(() => parseInt(localStorage.getItem('cotaInicialPruebas')) || 1500);
+  const [syncTrigger, setSyncTrigger] = useState(0);
 
   // Refs para lógica de la etapa 5
   const stage5InitialHeightRef = useRef(null);
@@ -506,15 +538,30 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
 
         if (isAscentFinished && !simTimers.finishedElev) {
-          setSimTimers(prev => ({ ...prev, finishedElev: true, elev: prev.elev }));
+          const finalElev = isSimulation 
+            ? simTimers.elev 
+            : Math.floor(((getPlcVal(plcStateRef.current, 'OW_Tiempo_Elevacion') ?? getPlcVal(plcStateRef.current, 'or_tiempo_elevacion') ?? 0)) / 10);
+          setSimTimers(prev => ({ ...prev, finishedElev: true, elev: finalElev }));
+          if (isSimulation) {
+            fetch(`${API_BASE}/plc/write`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ or_tiempo_elevacion: finalElev * 10, OW_Tiempo_Elevacion: finalElev * 10, is_force: true })
+            }).catch(console.error);
+          }
           setCameraTestState('espera_arriba');
           setWaitCountdown(3);
           s.tTopReachTime = null;
         } else {
           setSimTimers(prev => {
             if (prev.finishedElev) return prev;
-            if (!s.tStartElev) s.tStartElev = Date.now();
-            return { ...prev, elev: Math.floor((Date.now() - s.tStartElev) / 10) };
+            if (isSimulation) {
+              if (!s.tStartElev) s.tStartElev = Date.now();
+              return { ...prev, elev: Math.floor((Date.now() - s.tStartElev) / 10) };
+            } else {
+              const plcTimeVal = Math.floor(((getPlcVal(plcStateRef.current, 'OW_Tiempo_Elevacion') ?? getPlcVal(plcStateRef.current, 'or_tiempo_elevacion') ?? 0)) / 10);
+              return { ...prev, elev: plcTimeVal };
+            }
           });
         }
       } else if (cameraTestState === 'espera_arriba') {
@@ -557,19 +604,27 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
 
         if (isDescentFinished && !simTimers.finishedDesc) {
-          const elapsed = Math.floor((Date.now() - (s.tStartDesc || Date.now())) / 10);
-          
           const isSinCarga = currentStep === 2;
           const minElev = isSinCarga ? erpData?.tpo_elev_min_scarga : erpData?.tpo_elevac_min;
           const maxElev = isSinCarga ? erpData?.tpo_elev_max_scarga : erpData?.tpo_elevac_max;
           const minDesc = isSinCarga ? erpData?.tpo_desc_min_scarga : erpData?.tpo_descenso_min;
           const maxDesc = isSinCarga ? erpData?.tpo_desc_max_scarga : erpData?.tpo_descenso_max;
 
-          // USAR SIEMPRE LOS TIEMPOS INTERNOS DE LA APP
-          const finalElev = simTimers.elev;
-          const finalDesc = elapsed;
+          const finalElev = isSimulation 
+            ? simTimers.elev 
+            : Math.floor(((getPlcVal(plcStateRef.current, 'OW_Tiempo_Elevacion') ?? getPlcVal(plcStateRef.current, 'or_tiempo_elevacion') ?? 0)) / 10);
+          const finalDesc = isSimulation 
+            ? Math.floor((Date.now() - (s.tStartDesc || Date.now())) / 10)
+            : Math.floor(((getPlcVal(plcStateRef.current, 'OW_Tiempo_Descenso') ?? getPlcVal(plcStateRef.current, 'or_tiempo_descenso') ?? 0)) / 10);
 
-          setSimTimers(prev => ({ ...prev, finishedDesc: true, desc: elapsed }));
+          setSimTimers(prev => ({ ...prev, finishedDesc: true, elev: finalElev, desc: finalDesc }));
+          if (isSimulation) {
+            fetch(`${API_BASE}/plc/write`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ or_tiempo_descenso: finalDesc * 10, OW_Tiempo_Descenso: finalDesc * 10, is_force: true })
+            }).catch(console.error);
+          }
 
           const isElevOk = Number(finalElev) >= Number(minElev) && Number(finalElev) <= Number(maxElev);
           const isDescOk = Number(finalDesc) >= Number(minDesc) && Number(finalDesc) <= Number(maxDesc);
@@ -582,12 +637,15 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             setCameraTestState('ok');
           }
         } else if (!simTimers.finishedDesc) {
-          // Timer de descenso: arranca en cuanto entramos en estado descenso (h bajando)
-          if (!s.tStartDesc) s.tStartDesc = Date.now();
-          setSimTimers(prev => ({
-            ...prev,
-            desc: Math.floor((Date.now() - s.tStartDesc) / 10)
-          }));
+          setSimTimers(prev => {
+            if (isSimulation) {
+              if (!s.tStartDesc) s.tStartDesc = Date.now();
+              return { ...prev, desc: Math.floor((Date.now() - s.tStartDesc) / 10) };
+            } else {
+              const plcTimeVal = Math.floor(((getPlcVal(plcStateRef.current, 'OW_Tiempo_Descenso') ?? getPlcVal(plcStateRef.current, 'or_tiempo_descenso') ?? 0)) / 10);
+              return { ...prev, desc: plcTimeVal };
+            }
+          });
         }
       }
 
@@ -621,14 +679,20 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     };
     const handleCota = () => {
       setCotaInicial(parseInt(localStorage.getItem('cotaInicialPruebas')) || 1500);
+      setSyncTrigger(prev => prev + 1);
+    };
+    const handleMappingChange = () => {
+      setSyncTrigger(prev => prev + 1);
     };
     window.addEventListener('toleranciaChanged', handleTolerancia);
     window.addEventListener('test5mConfigChanged', handle5mConfig);
     window.addEventListener('toleranciaChanged', handleCota);
+    window.addEventListener('plcVarMappingChanged', handleMappingChange);
     return () => {
       window.removeEventListener('toleranciaChanged', handleTolerancia);
       window.removeEventListener('test5mConfigChanged', handle5mConfig);
       window.removeEventListener('toleranciaChanged', handleCota);
+      window.removeEventListener('plcVarMappingChanged', handleMappingChange);
     };
   }, []);
 
@@ -1792,6 +1856,69 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                              (currentStep >= 1 && currentStep <= 4 && stepStatus[currentStep] === STEP_STATUS.ACTIVE && !stepStarted[currentStep]);
     setWaitingForIniciar(isWaitingToStart);
   }, [currentStep, erpPreview, stepStatus, stepStarted, setWaitingForIniciar]);
+
+  // ── Sincronizar Inicia temporizador ascenso y descenso con el PLC ──
+  useEffect(() => {
+    const isTesting = (currentStep === 2 || currentStep === 3);
+    const iniciaAscenso = isTesting && ['esperando_1500', 'ascenso', 'espera_arriba'].includes(cameraTestState);
+    const iniciaDescenso = isTesting && ['descenso'].includes(cameraTestState);
+
+    const payload = {
+      inicia_temporizador_ascenso: iniciaAscenso,
+      inicia_temporizador_descenso: iniciaDescenso,
+      is_force: isSimulation
+    };
+
+    if (cameraTestState === 'esperando_1500') {
+      payload.OW_Tiempo_Elevacion = 0;
+      payload.OW_Tiempo_Descenso = 0;
+      payload.or_tiempo_elevacion = 0;
+      payload.or_tiempo_descenso = 0;
+    }
+
+    const payloadKey = JSON.stringify({ iniciaAscenso, iniciaDescenso, cameraTestState });
+    if (window.__lastTimerControlState === payloadKey) return;
+    window.__lastTimerControlState = payloadKey;
+
+    fetch(`${API_BASE}/plc/write`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(translatePayload(payload, isSimulation))
+    }).catch(err => console.error("Error setting PLC timer controls:", err));
+
+  }, [cameraTestState, currentStep, isSimulation]);
+
+  // ── Sincronizar consigna_posicion_altura al cargar la aplicación y al cambiar de cota ──
+  useEffect(() => {
+    const payload = {
+      consigna_posicion_altura: cotaInicial,
+      is_force: isSimulation
+    };
+
+    fetch(`${API_BASE}/plc/write`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(translatePayload(payload, isSimulation))
+    }).catch(err => console.error("Error setting PLC height reference:", err));
+  }, [cotaInicial, isSimulation, syncTrigger, telemetry?.opcua_connected]);
+
+  // ── Sincronizar altura relativa únicamente cuando se cargue la referencia (erpData) ──
+  useEffect(() => {
+    if (!erpData) return;
+
+    const testDistValue = is1mTest ? 1 : 2;
+    const payload = {
+      altura_relativa: testDistValue,
+      is_force: isSimulation
+    };
+
+    fetch(`${API_BASE}/plc/write`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(translatePayload(payload, isSimulation))
+    }).catch(err => console.error("Error setting PLC relative height:", err));
+
+  }, [erpData, is1mTest, isSimulation, syncTrigger, telemetry?.opcua_connected]);
 
   // ── PASO 5: 5 minutos — decidir automáticamente al entrar ─────────────────
   useEffect(() => {

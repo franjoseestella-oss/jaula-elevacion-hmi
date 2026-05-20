@@ -16,6 +16,7 @@ import {
   Link as LinkIcon,
   Save,
   AlertTriangle,
+  Timer,
 } from "lucide-react";
 const PROJECT_VARS = [
   "Ob_Poner_Pegatina",
@@ -35,6 +36,10 @@ const PROJECT_VARS = [
   "Ob_Estado_Automatico",
   "OW_Tiempo_Elevacion",
   "OW_Tiempo_Descenso",
+  "inicia_temporizador_ascenso",
+  "inicia_temporizador_descenso",
+  "altura_relativa",
+  "consigna_posicion_altura",
 ];
 
 const PROJECT_VAR_LABELS = {
@@ -55,6 +60,10 @@ const PROJECT_VAR_LABELS = {
   Ob_Estado_Automatico: "Estado Automático (Auto/Manual)",
   OW_Tiempo_Elevacion: "Tiempo Elevación",
   OW_Tiempo_Descenso: "Tiempo Descenso",
+  inicia_temporizador_ascenso: "Inicia Temp Ascenso",
+  inicia_temporizador_descenso: "Inicia Temp Descenso",
+  altura_relativa: "Altura Relativa (1m o 2m)",
+  consigna_posicion_altura: "Consigna Posición Altura (Cota Inicial)",
 };
 
 const PROJECT_VAR_DEFAULT_DIR = {
@@ -77,6 +86,10 @@ const PROJECT_VAR_DEFAULT_DIR = {
   Ob_Bajar_Vallas: "OUT",
   OW_Tiempo_Elevacion: "IN",
   OW_Tiempo_Descenso: "IN",
+  inicia_temporizador_ascenso: "OUT",
+  inicia_temporizador_descenso: "OUT",
+  altura_relativa: "OUT",
+  consigna_posicion_altura: "OUT",
 };
 
 const PlcModal = ({
@@ -131,11 +144,11 @@ const PlcModal = ({
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.dbNameFast === undefined || parsed.dbNameFast === "ServerInterfaces" || parsed.dbNameFast === "DB_Fast" || parsed.dbNameFast === "DB25_OPC_UA_SCAN_RAPIDO") {
-           parsed.dbNameFast = "DB26_OPC_UA_SCAN_RAPIDO";
-           parsed.dbNameSlow = "DB25_OPC_UA_SCAN_LENTO";
-           parsed.hzFast = 100;
-           parsed.hzSlow = 10;
+        if (!parsed.dbName) {
+          parsed.dbName = parsed.dbNameSlow || parsed.dbNameFast || "DB25_OPC_UA_SCAN_LENTO";
+        }
+        if (!parsed.frequency) {
+          parsed.frequency = parsed.hzFast || 300;
         }
         return parsed;
       } catch (e) {}
@@ -143,15 +156,33 @@ const PlcModal = ({
     return {
       ip: "192.168.1.1",
       port: "4840",
-      dbNameFast: "DB25_OPC_UA_SCAN_RAPIDO",
-      dbNameSlow: "DB25_OPC_UA_SCAN_LENTO",
-      hzFast: 100,
-      hzSlow: 10,
+      dbName: "DB25_OPC_UA_SCAN_LENTO",
+      frequency: 300,
       namespace: "4",
     };
   });
 
-  
+  useEffect(() => {
+    fetch("http://localhost:8001/config/plc")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.ip) {
+          const formattedConfig = {
+            ip: data.ip,
+            port: data.port,
+            dbName: data.dbName,
+            frequency: data.frequency,
+            namespace: data.namespace,
+          };
+          setPlcConfig(formattedConfig);
+          localStorage.setItem("plcConfig", JSON.stringify(formattedConfig));
+          setIsSimulation(data.isSimulation);
+          localStorage.setItem("isSimulation", JSON.stringify(data.isSimulation));
+        }
+      })
+      .catch((err) => console.error("Error cargando configuración desde backend:", err));
+  }, [setIsSimulation]);
+
   const [alarmConfig, setAlarmConfig] = useState(() => {
     const saved = localStorage.getItem("plcAlarmConfig");
     return saved ? JSON.parse(saved) : { in: [], out: [] };
@@ -209,6 +240,7 @@ const PlcModal = ({
     }
     setVarMapping(newMapping);
     localStorage.setItem("plcVarMapping", JSON.stringify(newMapping));
+    window.dispatchEvent(new Event('plcVarMappingChanged'));
   };
 
   // También usada internamente por updateMappingFromPlcKey (compatible con localStorage existente)
@@ -224,6 +256,7 @@ const PlcModal = ({
     }
     setVarMapping(newMapping);
     localStorage.setItem("plcVarMapping", JSON.stringify(newMapping));
+    window.dispatchEvent(new Event('plcVarMappingChanged'));
   };
 
   const [isScanningIPs, setIsScanningIPs] = useState(false);
@@ -251,7 +284,7 @@ const PlcModal = ({
     setIsScanningIPs(false);
   };
 
-  const scanDBs = async (targetDb) => {
+  const scanDBs = async () => {
     setIsScanningDBs(true);
     try {
       const res = await fetch("http://localhost:8001/plc/browse_nodes", {
@@ -264,13 +297,13 @@ const PlcModal = ({
       const data = text ? JSON.parse(text) : { nodes: [] };
 
       if (data.error) {
-        setScanModal({ isOpen: true, type: targetDb === "fast" ? "DB_FAST" : "DB_SLOW", data: [], error: data.error });
+        setScanModal({ isOpen: true, type: "DB", data: [], error: data.error });
       } else {
-        setScanModal({ isOpen: true, type: targetDb === "fast" ? "DB_FAST" : "DB_SLOW", data: data.nodes || [] });
+        setScanModal({ isOpen: true, type: "DB", data: data.nodes || [] });
       }
     } catch (e) {
       console.error(e);
-      setScanModal({ isOpen: true, type: targetDb === "fast" ? "DB_FAST" : "DB_SLOW", data: [], error: e.message });
+      setScanModal({ isOpen: true, type: "DB", data: [], error: e.message });
     }
     setIsScanningDBs(false);
   };
@@ -609,9 +642,8 @@ const PlcModal = ({
                     onClick={() => {
                       if (scanModal.type === "IP")
                         setPlcConfig({ ...plcConfig, ip: item });
-                      else if (scanModal.type === "DB_FAST")
-                        setPlcConfig({ ...plcConfig, dbNameFast: item });
-                      else setPlcConfig({ ...plcConfig, dbNameSlow: item });
+                      else
+                        setPlcConfig({ ...plcConfig, dbName: item });
                       setScanModal({ isOpen: false, type: "", data: [] });
                     }}
                     className="bg-[#1d2930] hover:bg-blue-600/20 hover:border-blue-500/50 border border-[#2e404a] p-3 rounded-lg cursor-pointer transition-colors flex items-center gap-3 group"
@@ -745,67 +777,37 @@ const PlcModal = ({
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center justify-between">
                     <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
-                      Nombre DB Rápido
+                      Nombre DB
                     </label>
-                    <button onClick={() => scanDBs("fast")} disabled={isScanningDBs} className="text-[9px] text-blue-400 hover:text-blue-300 font-bold uppercase tracking-widest flex items-center gap-1">
+                    <button onClick={scanDBs} disabled={isScanningDBs} className="text-[9px] text-blue-400 hover:text-blue-300 font-bold uppercase tracking-widest flex items-center gap-1">
                       <RefreshCw size={10} className={isScanningDBs ? "animate-spin" : ""} /> {isScanningDBs ? "Consultando..." : "Buscar en PLC"}
                     </button>
                   </div>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Database className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
-                      <input
-                        type="text"
-                        value={plcConfig.dbNameFast}
-                        onChange={(e) => setPlcConfig({ ...plcConfig, dbNameFast: e.target.value })}
-                        className="w-full bg-[#1d2930] border border-[#2e404a] rounded-lg py-2 pl-9 pr-3 text-xs text-white focus:border-blue-500 outline-none"
-                      />
-                    </div>
-                    <div className="w-16">
-                      <input
-                        type="number"
-                        min="1"
-                        max="1000"
-                        value={plcConfig.hzFast}
-                        onChange={(e) => setPlcConfig({ ...plcConfig, hzFast: Number(e.target.value) })}
-                        title="Hz (Rápido)"
-                        className="w-full bg-[#1d2930] border border-[#2e404a] rounded-lg py-2 px-2 text-xs text-center text-blue-400 font-bold focus:border-blue-500 outline-none"
-                      />
-                    </div>
+                  <div className="relative">
+                    <Database className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
+                    <input
+                      type="text"
+                      value={plcConfig.dbName}
+                      onChange={(e) => setPlcConfig({ ...plcConfig, dbName: e.target.value })}
+                      className="w-full bg-[#1d2930] border border-[#2e404a] rounded-lg py-2 pl-9 pr-3 text-xs text-white focus:border-blue-500 outline-none"
+                    />
                   </div>
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
-                      Nombre DB Lento
-                    </label>
-                    <button onClick={() => scanDBs("slow")} disabled={isScanningDBs} className="text-[9px] text-blue-400 hover:text-blue-300 font-bold uppercase tracking-widest flex items-center gap-1">
-                      <RefreshCw size={10} className={isScanningDBs ? "animate-spin" : ""} /> {isScanningDBs ? "Consultando..." : "Buscar en PLC"}
-                    </button>
-                  </div>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Database className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
-                      <input
-                        type="text"
-                        value={plcConfig.dbNameSlow}
-                        onChange={(e) => setPlcConfig({ ...plcConfig, dbNameSlow: e.target.value })}
-                        className="w-full bg-[#1d2930] border border-[#2e404a] rounded-lg py-2 pl-9 pr-3 text-xs text-white focus:border-blue-500 outline-none"
-                      />
-                    </div>
-                    <div className="w-16">
-                      <input
-                        type="number"
-                        min="0.1"
-                        max="100"
-                        step="0.1"
-                        value={plcConfig.hzSlow}
-                        onChange={(e) => setPlcConfig({ ...plcConfig, hzSlow: Number(e.target.value) })}
-                        title="Hz (Lento)"
-                        className="w-full bg-[#1d2930] border border-[#2e404a] rounded-lg py-2 px-2 text-xs text-center text-green-400 font-bold focus:border-blue-500 outline-none"
-                      />
-                    </div>
+                  <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
+                    Velocidad de Escaneo (Hz)
+                  </label>
+                  <div className="relative">
+                    <Timer className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
+                    <input
+                      type="number"
+                      min="1"
+                      max="1000"
+                      value={plcConfig.frequency}
+                      onChange={(e) => setPlcConfig({ ...plcConfig, frequency: Number(e.target.value) })}
+                      className="w-full bg-[#1d2930] border border-[#2e404a] rounded-lg py-2 pl-9 pr-3 text-xs text-white focus:border-blue-500 outline-none font-bold text-blue-400"
+                    />
                   </div>
                 </div>
 

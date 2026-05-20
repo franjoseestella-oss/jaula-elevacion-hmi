@@ -104,12 +104,12 @@ function App() {
     if (savedConfigStr) {
       try {
         const savedConfig = JSON.parse(savedConfigStr);
-        // Inject defaults for old configs
-        if (savedConfig.dbNameFast === undefined || savedConfig.dbNameFast === "ServerInterfaces" || savedConfig.dbNameFast === "DB_Fast" || savedConfig.dbNameFast === "DB25_OPC_UA_SCAN_RAPIDO") {
-          savedConfig.dbNameFast = "DB26_OPC_UA_SCAN_RAPIDO";
-          savedConfig.dbNameSlow = "DB25_OPC_UA_SCAN_LENTO";
-          savedConfig.hzFast = 100;
-          savedConfig.hzSlow = 10;
+        // Ensure clean single DB structure and map old names if necessary
+        if (!savedConfig.dbName) {
+          savedConfig.dbName = savedConfig.dbNameFast || savedConfig.dbNameSlow || "DB25_OPC_UA_SCAN_LENTO";
+        }
+        if (!savedConfig.frequency) {
+          savedConfig.frequency = savedConfig.hzFast || 300;
         }
 
         // Only send connect request if we are in PLC mode

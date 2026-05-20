@@ -91,6 +91,7 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
     
     // Notificar al sistema
     window.dispatchEvent(new Event('toleranciaChanged'));
+    window.dispatchEvent(new Event('cotaInicialChanged'));
     window.dispatchEvent(new Event('test5mConfigChanged'));
     window.dispatchEvent(new Event('qrConfigChanged'));
     onClose();

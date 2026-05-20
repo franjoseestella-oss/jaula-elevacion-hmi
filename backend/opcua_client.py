@@ -26,10 +26,12 @@ logger = logging.getLogger("opcua_client")
 class OpcUaConfig:
     ip: str        = "192.168.0.1"
     port: str      = "4840"
-    db_name_fast: str = "DB_Fast"
-    db_name_slow: str = "DB_Slow"
-    hz_fast: float = 100.0
-    hz_slow: float = 10.0
+    db_name: str   = "DB25_OPC_UA_SCAN_LENTO"
+    db_name_fast: str = "DB25_OPC_UA_SCAN_LENTO"
+    db_name_slow: str = "DB25_OPC_UA_SCAN_LENTO"
+    frequency: float = 300.0
+    hz_fast: float = 300.0
+    hz_slow: float = 300.0
     namespace: str = "3"
 
     @property
@@ -37,10 +39,10 @@ class OpcUaConfig:
         return f"opc.tcp://{self.ip}:{self.port}"
 
     def node_id_fast(self, var_name: str) -> str:
-        return f'ns={self.namespace};s="{self.db_name_fast}"."{var_name}"'
+        return f'ns={self.namespace};s="{self.db_name}"."{var_name}"'
 
     def node_id_slow(self, var_name: str) -> str:
-        return f'ns={self.namespace};s="{self.db_name_slow}"."{var_name}"'
+        return f'ns={self.namespace};s="{self.db_name}"."{var_name}"'
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -107,14 +109,20 @@ class OpcUaClientManager:
             self._write_queue.put_nowait, payload
         )
 
-    def update_config(self, ip: str, port: str, db_name_fast: str, db_name_slow: str, hz_fast: float, hz_slow: float, namespace: str):
+    def update_config(self, ip: str, port: str, db_name_fast: str = "", db_name_slow: str = "", hz_fast: float = 300.0, hz_slow: float = 300.0, namespace: str = "3", db_name: Optional[str] = None, frequency: Optional[float] = None):
         """Actualiza la configuración y reinicia la conexión."""
         self.config.ip        = ip
         self.config.port      = port
-        self.config.db_name_fast = db_name_fast
-        self.config.db_name_slow = db_name_slow
-        self.config.hz_fast   = float(hz_fast)
-        self.config.hz_slow   = float(hz_slow)
+        
+        resolved_db = db_name if db_name is not None else db_name_fast
+        resolved_freq = frequency if frequency is not None else hz_fast
+        
+        self.config.db_name   = resolved_db
+        self.config.db_name_fast = resolved_db
+        self.config.db_name_slow = resolved_db
+        self.config.frequency = float(resolved_freq)
+        self.config.hz_fast   = float(resolved_freq)
+        self.config.hz_slow   = float(resolved_freq)
         self.config.namespace = namespace
         if self.active:
             # Reiniciar el loop con la nueva config
@@ -190,28 +198,25 @@ class OpcUaClientManager:
                     pass
 
             try:
-                logger.info("[OPC UA] Buscando DBs '%s' y '%s' en Objects...", self.config.db_name_fast, self.config.db_name_slow)
+                logger.info("[OPC UA] Buscando DB '%s' en Objects...", self.config.db_name)
                 
-                db_fast_node = None
-                db_slow_node = None
+                db_node = None
                 async def find_dbs_recursive(node, depth=1, max_depth=3):
-                    nonlocal db_fast_node, db_slow_node
+                    nonlocal db_node
                     if depth > max_depth:
                         return
-                    if db_fast_node and db_slow_node:
-                        return # Encontrados ambos
+                    if db_node:
+                        return
                         
                     try:
                         children = await node.get_children()
                         for child in children:
                             try:
                                 bname = (await child.read_browse_name()).Name
-                                if bname == self.config.db_name_fast and not db_fast_node:
-                                    db_fast_node = child
-                                elif bname == self.config.db_name_slow and not db_slow_node:
-                                    db_slow_node = child
+                                if bname == self.config.db_name:
+                                    db_node = child
+                                    return
                                 
-                                # Seguimos buscando hacia abajo
                                 await find_dbs_recursive(child, depth + 1, max_depth)
                             except Exception:
                                 pass
@@ -220,21 +225,14 @@ class OpcUaClientManager:
 
                 await find_dbs_recursive(client.nodes.objects)
 
-                # Explorar Fast DB
-                if db_fast_node:
-                    logger.info("[OPC UA] DB Rápido encontrado.")
-                    await discover_vars_in_node(db_fast_node, fast_nodes, depth=0)
+                # Explorar DB
+                if db_node:
+                    logger.info("[OPC UA] DB '%s' encontrado.", self.config.db_name)
+                    await discover_vars_in_node(db_node, fast_nodes, depth=0)
                 else:
-                    logger.warning("[OPC UA] DB Rápido NO encontrado: %s", self.config.db_name_fast)
+                    logger.warning("[OPC UA] DB NO encontrado: %s", self.config.db_name)
 
-                # Explorar Slow DB
-                if db_slow_node:
-                    logger.info("[OPC UA] DB Lento encontrado.")
-                    await discover_vars_in_node(db_slow_node, slow_nodes, depth=0)
-                else:
-                    logger.warning("[OPC UA] DB Lento NO encontrado: %s", self.config.db_name_slow)
-
-                logger.info("[OPC UA] Discovery finalizado: %d variables rápidas, %d variables lentas", len(fast_nodes), len(slow_nodes))
+                logger.info("[OPC UA] Discovery finalizado: %d variables detectadas", len(fast_nodes))
             except Exception as e:
                 logger.warning("[OPC UA] Error en discovery: %s", e)
 
@@ -330,8 +328,27 @@ class OpcUaClientManager:
                                 node = slow_nodes.get(k) or fast_nodes.get(k)
                                 if node:
                                     try:
-                                        v_type = ua.VariantType.Boolean if isinstance(v, bool) else (ua.VariantType.Float if isinstance(v, float) else ua.VariantType.Int16)
-                                        await node.write_value(ua.DataValue(ua.Variant(v, v_type)))
+                                        # Obtener el tipo de variante esperado leyendo el valor actual del nodo
+                                        val_data = await node.read_data_value()
+                                        v_type = None
+                                        if val_data and val_data.Value is not None:
+                                            v_type = val_data.Value.VariantType
+                                        
+                                        if v_type is None:
+                                            v_type = ua.VariantType.Boolean if isinstance(v, bool) else (ua.VariantType.Float if isinstance(v, float) else ua.VariantType.Int16)
+                                        
+                                        # Coaccionar el valor al tipo esperado para evitar BadTypeMismatch
+                                        if v_type == ua.VariantType.Boolean:
+                                            coerced_value = bool(v)
+                                        elif v_type in (ua.VariantType.Float, ua.VariantType.Double):
+                                            coerced_value = float(v)
+                                        elif v_type in (ua.VariantType.Int16, ua.VariantType.Int32, ua.VariantType.Int64, 
+                                                        ua.VariantType.UInt16, ua.VariantType.UInt32, ua.VariantType.UInt64):
+                                            coerced_value = int(v)
+                                        else:
+                                            coerced_value = v
+                                            
+                                        await node.write_value(ua.DataValue(ua.Variant(coerced_value, v_type)))
                                     except Exception as write_err:
                                         logger.error("[OPC UA] Error escribiendo %s = %s: %s", k, v, write_err)
                             self._write_queue.task_done()
@@ -340,8 +357,10 @@ class OpcUaClientManager:
                             
                     elapsed = time.time() - cycle_start
                     self.latency_ms = elapsed * 1000
-                    # Sin límite artificial, leer tan rápido como el PLC y la red lo permitan
-                    await asyncio.sleep(0.001)
+                    # Controlar la velocidad de escaneo según los Hz configurados
+                    target_delay = 1.0 / max(1.0, self.config.frequency)
+                    sleep_time = max(0.001, target_delay - elapsed)
+                    await asyncio.sleep(sleep_time)
 
             await main_loop()
 
