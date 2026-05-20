@@ -14,7 +14,7 @@ import PlcModal from './components/PlcModal';
 import BaslerModal from './components/BaslerModal';
 import LogViewer from './components/LogViewer';
 
-const API_BASE = 'http://localhost:8001';
+const API_BASE = 'http://127.0.0.1:8001';
 
 function App() {
   const [erpData, setErpData] = useState(null);

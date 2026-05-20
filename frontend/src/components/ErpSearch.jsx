@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Search, RefreshCw, CheckCircle2, AlertTriangle, Loader2, Hash } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8001';
+const API_BASE = 'http://127.0.0.1:8001';
 
 const ErpSearch = ({ onErpData }) => {
   const [secuencia, setSecuencia] = useState('');

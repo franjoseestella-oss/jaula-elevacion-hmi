@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, RefreshCw, FileText, Download, Activity, Clock, User, CheckCircle2, AlertTriangle } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8001';
+const API_BASE = 'http://127.0.0.1:8001';
 
 const formatNumber = (val) => {
   if (val === null || val === undefined || val === '') return '-';

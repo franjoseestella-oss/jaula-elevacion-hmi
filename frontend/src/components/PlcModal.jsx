@@ -40,6 +40,8 @@ const PROJECT_VARS = [
   "inicia_temporizador_descenso",
   "altura_relativa",
   "consigna_posicion_altura",
+  "Ob_Ready_Temporizador",
+  "Ib_Restart_Temporizador",
 ];
 
 const PROJECT_VAR_LABELS = {
@@ -64,6 +66,8 @@ const PROJECT_VAR_LABELS = {
   inicia_temporizador_descenso: "Inicia Temp Descenso",
   altura_relativa: "Altura Relativa (1m o 2m)",
   consigna_posicion_altura: "Consigna Posición Altura (Cota Inicial)",
+  Ob_Ready_Temporizador: "Temporizadores Ready (PLC)",
+  Ib_Restart_Temporizador: "Restart Temporizador (HMI)",
 };
 
 const PROJECT_VAR_DEFAULT_DIR = {
@@ -90,6 +94,8 @@ const PROJECT_VAR_DEFAULT_DIR = {
   inicia_temporizador_descenso: "OUT",
   altura_relativa: "OUT",
   consigna_posicion_altura: "OUT",
+  Ob_Ready_Temporizador: "IN",
+  Ib_Restart_Temporizador: "OUT",
 };
 
 const PlcModal = ({

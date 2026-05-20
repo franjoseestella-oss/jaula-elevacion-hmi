@@ -720,7 +720,9 @@ plc_sim_state = {
     "altura_relativa": 0,
     "IW_Consigna_Posicion_Altura": 0,
     "consigna_posicion_altura": 0,
-    "consigna_posicion": 0
+    "consigna_posicion": 0,
+    "Ob_Ready_Temporizador": False,
+    "Ib_Restart_Temporizador": False
 }
 
 global_force_mode = False
@@ -935,6 +937,11 @@ def write_to_plc(payload: dict):
     for key, value in escrito.items():
         plc_sim_state[key] = value
         
+        # Simulación de temporizadores ready/restart
+        if key == "Ib_Restart_Temporizador" and value is True:
+            plc_sim_state["Ob_Ready_Temporizador"] = True
+            plc_sim_state["Ib_Restart_Temporizador"] = False
+            
         # Exclusión mutua para luces
         if value is True:
             if key == "b_LUZ_ROJA":

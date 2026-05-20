@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 
 
-const API_BASE = 'http://localhost:8001';
+const API_BASE = 'http://127.0.0.1:8001';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -430,7 +430,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   // Estados: 'standby' | 'esperando_1500' | 'ascenso' | 'espera_arriba' | 'descenso' | 'ok' | 'nok'
   const [cameraTestState, setCameraTestState] = useState('standby');
   const [testAlarm, setTestAlarm] = useState(null); // 'ascenso_incompleto', 'descenso_incompleto'
-  const [simTimers, setSimTimers] = useState({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+  const [simTimers, setSimTimers] = useState({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
   const [waitCountdown, setWaitCountdown] = useState(null); // cuenta atrás 3-2-1 en espera_arriba
 
   // Modal para repetir prueba
@@ -442,6 +442,32 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
   const plcStateRef = useRef(plcState);
   useEffect(() => { plcStateRef.current = plcState; }, [plcState]);
+
+  const resetStartsInPlc = () => {
+    const targetVarAsc = (!isSimulation) 
+      ? Object.keys(JSON.parse(localStorage.getItem('plcVarMapping') || '{}')).find(k => JSON.parse(localStorage.getItem('plcVarMapping'))[k].appVar === 'inicia_temporizador_ascenso') 
+      : 'inicia_temporizador_ascenso';
+    const targetVarDesc = (!isSimulation) 
+      ? Object.keys(JSON.parse(localStorage.getItem('plcVarMapping') || '{}')).find(k => JSON.parse(localStorage.getItem('plcVarMapping'))[k].appVar === 'inicia_temporizador_descenso') 
+      : 'inicia_temporizador_descenso';
+    
+    if (targetVarAsc || targetVarDesc) {
+      const resetPayload = {};
+      if (targetVarAsc) resetPayload[targetVarAsc] = false;
+      if (targetVarDesc) resetPayload[targetVarDesc] = false;
+      resetPayload.is_force = isSimulation;
+      
+      fetch(`${API_BASE}/plc/write`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(translatePayload(resetPayload, isSimulation))
+      }).catch(console.error);
+    }
+  };
+
+  useEffect(() => {
+    resetStartsInPlc();
+  }, [currentStep, isSimulation]);
 
   const testLoopStateRef = useRef({
     tStartElev: null,
@@ -457,7 +483,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   useEffect(() => {
     if (cameraTestState === 'standby' || cameraTestState === 'esperando_1500') {
       if (cameraTestState === 'standby') {
-        setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+        setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
         setWaitCountdown(null);
         setTestAlarm(null);
       }
@@ -537,9 +563,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           }
         }
 
-        if (isAscentFinished && !simTimers.finishedElev) {
+        if (isAscentFinished && !simTimersRef.current.finishedElev) {
           const finalElev = isSimulation 
-            ? simTimers.elev 
+            ? Math.floor((Date.now() - (s.tStartElev || Date.now())) / 10)
             : Math.floor(((getPlcVal(plcStateRef.current, 'OW_Tiempo_Elevacion') ?? getPlcVal(plcStateRef.current, 'or_tiempo_elevacion') ?? 0)) / 10);
           setSimTimers(prev => ({ ...prev, finishedElev: true, elev: finalElev }));
           if (isSimulation) {
@@ -553,16 +579,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           setWaitCountdown(3);
           s.tTopReachTime = null;
         } else {
-          setSimTimers(prev => {
-            if (prev.finishedElev) return prev;
-            if (isSimulation) {
-              if (!s.tStartElev) s.tStartElev = Date.now();
-              return { ...prev, elev: Math.floor((Date.now() - s.tStartElev) / 10) };
-            } else {
-              const plcTimeVal = Math.floor(((getPlcVal(plcStateRef.current, 'OW_Tiempo_Elevacion') ?? getPlcVal(plcStateRef.current, 'or_tiempo_elevacion') ?? 0)) / 10);
-              return { ...prev, elev: plcTimeVal };
-            }
-          });
+          if (isSimulation && !s.tStartElev) {
+            s.tStartElev = Date.now();
+          }
         }
       } else if (cameraTestState === 'espera_arriba') {
         if (!s.tTopReachTime) {
@@ -603,21 +622,19 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           }
         }
 
-        if (isDescentFinished && !simTimers.finishedDesc) {
+        if (isDescentFinished && !simTimersRef.current.finishedDesc) {
           const isSinCarga = currentStep === 2;
           const minElev = isSinCarga ? erpData?.tpo_elev_min_scarga : erpData?.tpo_elevac_min;
           const maxElev = isSinCarga ? erpData?.tpo_elev_max_scarga : erpData?.tpo_elevac_max;
           const minDesc = isSinCarga ? erpData?.tpo_desc_min_scarga : erpData?.tpo_descenso_min;
           const maxDesc = isSinCarga ? erpData?.tpo_desc_max_scarga : erpData?.tpo_descenso_max;
 
-          const finalElev = isSimulation 
-            ? simTimers.elev 
-            : Math.floor(((getPlcVal(plcStateRef.current, 'OW_Tiempo_Elevacion') ?? getPlcVal(plcStateRef.current, 'or_tiempo_elevacion') ?? 0)) / 10);
+          const finalElev = simTimersRef.current.elev;
           const finalDesc = isSimulation 
             ? Math.floor((Date.now() - (s.tStartDesc || Date.now())) / 10)
             : Math.floor(((getPlcVal(plcStateRef.current, 'OW_Tiempo_Descenso') ?? getPlcVal(plcStateRef.current, 'or_tiempo_descenso') ?? 0)) / 10);
 
-          setSimTimers(prev => ({ ...prev, finishedDesc: true, elev: finalElev, desc: finalDesc }));
+          setSimTimers(prev => ({ ...prev, finishedDesc: true, desc: finalDesc }));
           if (isSimulation) {
             fetch(`${API_BASE}/plc/write`, {
               method: 'POST',
@@ -636,16 +653,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             setTestAlarm(null);
             setCameraTestState('ok');
           }
-        } else if (!simTimers.finishedDesc) {
-          setSimTimers(prev => {
-            if (isSimulation) {
-              if (!s.tStartDesc) s.tStartDesc = Date.now();
-              return { ...prev, desc: Math.floor((Date.now() - s.tStartDesc) / 10) };
-            } else {
-              const plcTimeVal = Math.floor(((getPlcVal(plcStateRef.current, 'OW_Tiempo_Descenso') ?? getPlcVal(plcStateRef.current, 'or_tiempo_descenso') ?? 0)) / 10);
-              return { ...prev, desc: plcTimeVal };
-            }
-          });
+        } else {
+          if (isSimulation && !s.tStartDesc) {
+            s.tStartDesc = Date.now();
+          }
         }
       }
 
@@ -827,6 +838,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       body: JSON.stringify(translatePayload(payload, isSimulation))
     }).catch(err => console.error("Error resetting PLC relative height on reset:", err));
 
+    resetStartsInPlc();
+
     setStepStatus([STEP_STATUS.ACTIVE, STEP_STATUS.PENDING, STEP_STATUS.PENDING, STEP_STATUS.PENDING, STEP_STATUS.PENDING]);
     setStepStarted([true, false, false, false, false]);
     setStepStartTime([Date.now(), null, null, null, null]);
@@ -847,7 +860,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     setCameraTestState('standby');
     setTestAlarm(null);
     setWaitCountdown(null);
-    setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+    setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
     setRepeatModal({ show: false, log: null, selections: [true, true, true, true] });
     if (setStep2Overlay) setStep2Overlay(null);
     if (setPalletState) setPalletState('idle');
@@ -857,6 +870,17 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   };
 
   const handleAbort = () => {
+    // Si aborta secuencia la altura relativa tiene que ser 0
+    const payload = {
+      altura_relativa: 0,
+      is_force: isSimulation
+    };
+    fetch(`${API_BASE}/plc/write`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(translatePayload(payload, isSimulation))
+    }).catch(err => console.error("Error setting relative height to 0 on abort:", err));
+
     if (onSequenceEnd) onSequenceEnd();
     resetSequence();
   };
@@ -872,6 +896,36 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       }
     }
   }, [isSequenceFinished, plcState?.Ob_Dtec_Valla_1_trabajo_LH, plcState?.Ob_Dtec_Valla_2_trabajo_RH]);
+
+  // ── Verificar que los temporizadores están READY antes de empezar etapas 3 y 4 ──
+  useEffect(() => {
+    if (currentStep !== 2 && currentStep !== 3) return;
+    if (stepStarted[currentStep]) return;
+
+    const isReady = telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador;
+    if (isReady === false) {
+      console.log(`[TEMPORIZADORES] No listos en etapa ${currentStep + 1}. Enviando Restart...`);
+      const targetVar = (!isSimulation) 
+        ? Object.keys(JSON.parse(localStorage.getItem('plcVarMapping') || '{}')).find(k => JSON.parse(localStorage.getItem('plcVarMapping'))[k].appVar === 'Ib_Restart_Temporizador') 
+        : 'Ib_Restart_Temporizador';
+        
+      if (targetVar) {
+        fetch(`${API_BASE}/plc/write`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [targetVar]: true, is_force: isSimulation })
+        }).then(() => {
+          setTimeout(() => {
+            fetch(`${API_BASE}/plc/write`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ [targetVar]: false, is_force: isSimulation })
+            }).catch(console.error);
+          }, 500);
+        }).catch(err => console.error("Error setting restart temporizador:", err));
+      }
+    }
+  }, [currentStep, stepStarted[2], stepStarted[3], telemetry?.mappedPlc?.Ob_Ready_Temporizador, plcState?.Ob_Ready_Temporizador, isSimulation]);
 
   // ── Auto-Avanzar PASO 1 si se carga desde ERP Modal ───────────────
   useEffect(() => {
@@ -993,6 +1047,33 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
       // Si el paso actual (1-4) aún no está iniciado → desbloquearlo
       if (currentStep >= 1 && currentStep <= 4 && !stepStarted[currentStep]) {
+        // Bloquear si es etapa 3 o 4 (index 2 y 3) y los temporizadores no están listos
+        if (currentStep === 2 || currentStep === 3) {
+          const isTimerReady = telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador ?? false;
+          if (!isTimerReady) {
+            console.warn("[INICIAR] Bloqueado: Temporizadores no están listos (Ob_Ready_Temporizador es False)");
+            const targetVar = (!isSimulation) 
+              ? Object.keys(JSON.parse(localStorage.getItem('plcVarMapping') || '{}')).find(k => JSON.parse(localStorage.getItem('plcVarMapping'))[k].appVar === 'Ib_Restart_Temporizador') 
+              : 'Ib_Restart_Temporizador';
+            if (targetVar) {
+              fetch(`${API_BASE}/plc/write`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ [targetVar]: true, is_force: isSimulation })
+              }).then(() => {
+                setTimeout(() => {
+                  fetch(`${API_BASE}/plc/write`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ [targetVar]: false, is_force: isSimulation })
+                  }).catch(console.error);
+                }, 500);
+              }).catch(console.error);
+            }
+            return;
+          }
+        }
+
         // Bloquear el inicio de etapas 4 y 5 si las vallas no están en trabajo
         if (currentStep === 3 || currentStep === 4) {
           const isDownFront = plcState?.Ob_Dtec_Valla_1_trabajo_LH === true;
@@ -1017,14 +1098,19 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         if (stepStatus[2] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
           // NOK: REPETIR — reiniciar la prueba desde 'esperando_1500'
           if (cameraTestState === 'nok') {
-            setCameraTestState('esperando_1500');
+            resetStartsInPlc();
+            setCameraTestState('standby');
             setTestAlarm(null);
-            setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
             setWaitCountdown(null);
+            setTimeout(() => {
+              setCameraTestState('esperando_1500');
+            }, 500);
             return;
           }
           if (cameraTestState === 'standby') {
             setCameraTestState('esperando_1500');
+            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
           } else if (cameraTestState === 'ok') {
             markOk(2);
           }
@@ -1043,14 +1129,19 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
           // NOK: REPETIR — reiniciar la prueba desde 'esperando_1500'
           if (cameraTestState === 'nok') {
-            setCameraTestState('esperando_1500');
+            resetStartsInPlc();
+            setCameraTestState('standby');
             setTestAlarm(null);
-            setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
             setWaitCountdown(null);
+            setTimeout(() => {
+              setCameraTestState('esperando_1500');
+            }, 500);
             return;
           }
           if (cameraTestState === 'standby') {
             setCameraTestState('esperando_1500');
+            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
           } else if (cameraTestState === 'ok') {
             markOk(3);
           }
@@ -1097,9 +1188,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     if (plcState?.Ob_Iniciar_Secuencia === true && (isWaitingPreview || (currentStep >= 1 && currentStep <= 4))) {
       // Para etapas de test (sin carga, con carga, 5 min) bloquear si carretilla no está abajo
       const isTestStep = currentStep >= 2;
-      const blockByHeight = isTestStep && 
+      const isTimerReady = (currentStep === 2 || currentStep === 3)
+        ? (telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador ?? false)
+        : true;
+      const blockByHeight = (isTestStep && 
         ((currentStep === 2 || currentStep === 3) ? cameraTestState === 'standby' : test5mState === 'idle') 
-        && !isCarriageBelowCota;
+        && !isCarriageBelowCota) || !isTimerReady;
       if (blockByHeight) {
         // No iniciar cuenta atrás, cancelar si la había
         if (iniciarCountdown !== null) setIniciarCountdown(null);
@@ -1122,7 +1216,15 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       }
     }
     return () => clearTimeout(interval);
-  }, [plcState?.Ob_Iniciar_Secuencia, iniciarCountdown, currentStep, isCarriageBelowCota, cameraTestState]);
+  }, [
+    plcState?.Ob_Iniciar_Secuencia,
+    iniciarCountdown,
+    currentStep,
+    isCarriageBelowCota,
+    cameraTestState,
+    telemetry?.mappedPlc?.Ob_Ready_Temporizador,
+    plcState?.Ob_Ready_Temporizador
+  ]);
 
   // 3. Pegatina Colocada y Confirmación — detección robusta con temporizador de 3 segundos
   const handlePegatinaActionRef = useRef();
@@ -1501,6 +1603,33 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     console.log('[DIRECTO] Iniciar Secuencia. step:', step, 'started:', started);
 
     if (step >= 1 && step <= 4 && !started[step]) {
+      // Bloquear si es etapa 3 o 4 (index 2 y 3) y los temporizadores no están listos
+      if (step === 2 || step === 3) {
+        const isTimerReady = telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? pState?.Ob_Ready_Temporizador ?? false;
+        if (!isTimerReady) {
+          console.warn("[DIRECTO] Bloqueado: Temporizadores no están ready");
+          const targetVar = (!isSimulation) 
+            ? Object.keys(JSON.parse(localStorage.getItem('plcVarMapping') || '{}')).find(k => JSON.parse(localStorage.getItem('plcVarMapping'))[k].appVar === 'Ib_Restart_Temporizador') 
+            : 'Ib_Restart_Temporizador';
+          if (targetVar) {
+            fetch(`${API_BASE}/plc/write`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ [targetVar]: true, is_force: isSimulation })
+            }).then(() => {
+              setTimeout(() => {
+                fetch(`${API_BASE}/plc/write`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ [targetVar]: false, is_force: isSimulation })
+                }).catch(console.error);
+              }, 500);
+            }).catch(console.error);
+          }
+          return;
+        }
+      }
+
       // Bloquear el inicio de etapas 4 y 5 si las vallas no están en trabajo
       if (step === 3 || step === 4) {
         const isDownFront = pState?.Ob_Dtec_Valla_1_trabajo_LH === true;
@@ -1524,15 +1653,19 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     if (step >= 1 && step <= 4 && started[step]) {
       if (statuses[2] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') {
         if (cameraTestState === 'nok') {
-          setCameraTestState('esperando_1500');
+          resetStartsInPlc();
+          setCameraTestState('standby');
           setTestAlarm(null);
-          setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+          setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
           setWaitCountdown(null);
+          setTimeout(() => {
+            setCameraTestState('esperando_1500');
+          }, 500);
           return;
         }
         if (cameraTestState === 'standby') {
           setCameraTestState('esperando_1500');
-          setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+          setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
         } else if (cameraTestState === 'ok') markOk(2);
       } else if (statuses[3] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') {
         const currentPallets = pState?.OW_Numero_Pallets || 0;
@@ -1548,15 +1681,19 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
 
         if (cameraTestState === 'nok') {
-          setCameraTestState('esperando_1500');
+          resetStartsInPlc();
+          setCameraTestState('standby');
           setTestAlarm(null);
-          setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+          setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
           setWaitCountdown(null);
+          setTimeout(() => {
+            setCameraTestState('esperando_1500');
+          }, 500);
           return;
         }
         if (cameraTestState === 'standby') {
           setCameraTestState('esperando_1500');
-          setSimTimers({ elev: 0, desc: 0, finishedElev: false, finishedDesc: false });
+          setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false });
         } else if (cameraTestState === 'ok') markOk(3);
       } else if (statuses[4] === STEP_STATUS.ACTIVE) {
         if (test5mState === 'nok') {
@@ -1814,15 +1951,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         const minDesc = isSinCarga ? erpData.tpo_desc_min_scarga : erpData.tpo_descenso_min;
         const maxDesc = isSinCarga ? erpData.tpo_desc_max_scarga : erpData.tpo_descenso_max;
 
-        // Solo mostrar tiempos si el test ya está en marcha (no antes de condición inicial)
-        const testIsRunning = ['ascenso', 'espera_arriba', 'descenso', 'ok', 'nok'].includes(cameraTestState);
-        
-        // Usamos siempre los tiempos calculados internamente por la aplicación
+        // Solo mostrar tiempos si han finalizado (hasta ese momento mostrar guion)
         const rawElev = simTimers.elev;
         const rawDesc = simTimers.desc;
         
-        const realElev = testIsRunning ? rawElev : null;
-        const realDesc = testIsRunning ? rawDesc : null;
+        const realElev = simTimers.finishedElev ? rawElev : null;
+        const realDesc = simTimers.finishedDesc ? rawDesc : null;
 
         setTestHUDOverlay({
           title: isSinCarga ? 'TEST SIN CARGA' : 'TEST CON CARGA',
@@ -1871,7 +2005,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   // ── Sincronizar Inicia temporizador ascenso y descenso con el PLC ──
   useEffect(() => {
     const isTesting = (currentStep === 2 || currentStep === 3);
-    const iniciaAscenso = isTesting && ['esperando_1500', 'ascenso', 'espera_arriba'].includes(cameraTestState);
+    const iniciaAscenso = isTesting && ['esperando_1500', 'ascenso'].includes(cameraTestState);
     const iniciaDescenso = isTesting && ['descenso'].includes(cameraTestState);
 
     const payload = {
@@ -2373,6 +2507,45 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
             return (
               <>
+                <div className="flex items-center justify-between bg-[#0a0f12] p-2 rounded-lg border border-[#2e404a] mb-2">
+                  <span className="text-[10px] text-logisnext-slate font-bold uppercase tracking-widest flex items-center gap-1.5">
+                    Temporizadores PLC
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {!(telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador) && (
+                      <button
+                        onClick={() => {
+                          const targetVar = (!isSimulation) 
+                            ? Object.keys(JSON.parse(localStorage.getItem('plcVarMapping') || '{}')).find(k => JSON.parse(localStorage.getItem('plcVarMapping'))[k].appVar === 'Ib_Restart_Temporizador') 
+                            : 'Ib_Restart_Temporizador';
+                          if (targetVar) {
+                            fetch(`${API_BASE}/plc/write`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ [targetVar]: true, is_force: isSimulation })
+                            }).then(() => {
+                              setTimeout(() => {
+                                fetch(`${API_BASE}/plc/write`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ [targetVar]: false, is_force: isSimulation })
+                                }).catch(console.error);
+                              }, 500);
+                            }).catch(console.error);
+                          }
+                        }}
+                        className="text-[8px] bg-red-950/40 hover:bg-red-950/80 border border-red-500/30 text-red-400 px-1 rounded hover:text-white transition-colors"
+                      >
+                        RESTART
+                      </button>
+                    )}
+                    <span className="text-[9px] text-gray-400 font-mono">
+                      {(telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador) ? 'READY' : 'NOT READY'}
+                    </span>
+                    <span className={`w-2 h-2 rounded-full ${(telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador) ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.8)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)] animate-pulse'}`} />
+                  </div>
+                </div>
+
                 {!isSimulation && (
                   <div className="flex items-center justify-between bg-[#0a0f12] p-2 rounded-lg border border-[#2e404a] mb-2">
                     <span className="text-[10px] text-logisnext-slate font-bold uppercase tracking-widest flex items-center gap-1.5">
@@ -2503,6 +2676,45 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                       ({plcState.OW_Numero_Pallets} pallet{plcState.OW_Numero_Pallets !== 1 ? 's' : ''} × 250kg)
                     </span>
                   )}
+                </div>
+
+                <div className="flex items-center justify-between bg-[#0a0f12] p-2 rounded-lg border border-[#2e404a] mb-2 mt-2">
+                  <span className="text-[10px] text-logisnext-slate font-bold uppercase tracking-widest flex items-center gap-1.5">
+                    Temporizadores PLC
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {!(telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador) && (
+                      <button
+                        onClick={() => {
+                          const targetVar = (!isSimulation) 
+                            ? Object.keys(JSON.parse(localStorage.getItem('plcVarMapping') || '{}')).find(k => JSON.parse(localStorage.getItem('plcVarMapping'))[k].appVar === 'Ib_Restart_Temporizador') 
+                            : 'Ib_Restart_Temporizador';
+                          if (targetVar) {
+                            fetch(`${API_BASE}/plc/write`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ [targetVar]: true, is_force: isSimulation })
+                            }).then(() => {
+                              setTimeout(() => {
+                                fetch(`${API_BASE}/plc/write`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ [targetVar]: false, is_force: isSimulation })
+                                }).catch(console.error);
+                              }, 500);
+                            }).catch(console.error);
+                          }
+                        }}
+                        className="text-[8px] bg-red-950/40 hover:bg-red-950/80 border border-red-500/30 text-red-400 px-1 rounded hover:text-white transition-colors"
+                      >
+                        RESTART
+                      </button>
+                    )}
+                    <span className="text-[9px] text-gray-400 font-mono">
+                      {(telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador) ? 'READY' : 'NOT READY'}
+                    </span>
+                    <span className={`w-2 h-2 rounded-full ${(telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador) ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.8)]' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)] animate-pulse'}`} />
+                  </div>
                 </div>
 
                 {!isSimulation && (
