@@ -816,6 +816,17 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   };
 
   const resetSequence = () => {
+    // Si aborta o resetea secuencia, la altura relativa tiene que ser 0 en el PLC
+    const payload = {
+      altura_relativa: 0,
+      is_force: isSimulation
+    };
+    fetch(`${API_BASE}/plc/write`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(translatePayload(payload, isSimulation))
+    }).catch(err => console.error("Error resetting PLC relative height on reset:", err));
+
     setStepStatus([STEP_STATUS.ACTIVE, STEP_STATUS.PENDING, STEP_STATUS.PENDING, STEP_STATUS.PENDING, STEP_STATUS.PENDING]);
     setStepStarted([true, false, false, false, false]);
     setStepStartTime([Date.now(), null, null, null, null]);
