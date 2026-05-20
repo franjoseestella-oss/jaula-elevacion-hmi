@@ -898,13 +898,16 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   }, [isSequenceFinished, plcState?.Ob_Dtec_Valla_1_trabajo_LH, plcState?.Ob_Dtec_Valla_2_trabajo_RH]);
 
   // ── Verificar que los temporizadores están READY antes de empezar etapas 3 y 4 ──
+  // SOLO cuando la prueba aún no ha comenzado (standby). Si ya está en curso, NO tocar.
   useEffect(() => {
     if (currentStep !== 2 && currentStep !== 3) return;
     if (stepStarted[currentStep]) return;
+    // Si la prueba ya está en marcha, no resetear los timers
+    if (cameraTestState !== 'standby') return;
 
     const isReady = telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador;
     if (isReady === false) {
-      console.log(`[TEMPORIZADORES] No listos en etapa ${currentStep + 1}. Enviando Restart...`);
+      console.log(`[TEMPORIZADORES] No listos en etapa ${currentStep + 1} (standby). Enviando Restart...`);
       const targetVar = (!isSimulation) 
         ? Object.keys(JSON.parse(localStorage.getItem('plcVarMapping') || '{}')).find(k => JSON.parse(localStorage.getItem('plcVarMapping'))[k].appVar === 'Ib_Restart_Temporizador') 
         : 'Ib_Restart_Temporizador';
@@ -925,7 +928,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }).catch(err => console.error("Error setting restart temporizador:", err));
       }
     }
-  }, [currentStep, stepStarted[2], stepStarted[3], telemetry?.mappedPlc?.Ob_Ready_Temporizador, plcState?.Ob_Ready_Temporizador, isSimulation]);
+  }, [currentStep, cameraTestState, stepStarted[2], stepStarted[3], telemetry?.mappedPlc?.Ob_Ready_Temporizador, plcState?.Ob_Ready_Temporizador, isSimulation]);
 
   // ── Auto-Avanzar PASO 1 si se carga desde ERP Modal ───────────────
   useEffect(() => {
