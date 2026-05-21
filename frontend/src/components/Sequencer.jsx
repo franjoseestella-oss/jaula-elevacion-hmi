@@ -1622,20 +1622,20 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         return;
       }
 
-      console.log(`[FLANCO READY↑] Detectado flanco 0→1 en estado '${testState}' (step ${step + 1}) — esperando 2s confirmación...`);
+      console.log(`[FLANCO READY↑] Detectado flanco 0→1 en estado '${testState}' (step ${step + 1}) — esperando 3s confirmación...`);
 
       // Cancelar cualquier timeout anterior antes de crear uno nuevo
       if (readyConfirmTimeoutRef.current) {
         clearTimeout(readyConfirmTimeoutRef.current);
       }
 
-      // Esperar 2 segundos con Ready=True para confirmar que el valor es estable
+      // Esperar 3 segundos con Ready=True para confirmar que el valor es estable
       readyConfirmTimeoutRef.current = setTimeout(() => {
         readyConfirmTimeoutRef.current = null;
 
-        // Verificar que Ready sigue a True tras los 2 segundos
+        // Verificar que Ready sigue a True tras los 3 segundos
         if (!isTimerReadyValRef.current) {
-          console.log(`[FLANCO READY↑] Estado '${testState}' — Ready cayó durante los 2s, descartado`);
+          console.log(`[FLANCO READY↑] Estado '${testState}' — Ready cayó durante los 3s, descartado`);
           return;
         }
 
@@ -1644,7 +1644,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         const erp = erpDataRef.current;
         const isSinCarga = currentStep_ === 2;
 
-        // Re-evaluar el estado actual por si cambió durante los 2 segundos
+        // Re-evaluar el estado actual por si cambió durante los 3 segundos
         const currentTestState = cameraTestStateRef.current;
         console.log(`[FLANCO READY↑] Flanco confirmado en estado '${currentTestState}' — leyendo valor...`);
 
@@ -1685,7 +1685,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             setCameraTestState('ok');
           }
         }
-      }, 2000); // 2 segundos de confirmación
+      }, 3000); // 3 segundos de confirmación
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTimerReadyVal, isSimulation]);
