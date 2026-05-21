@@ -1648,14 +1648,24 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         const currentTestState = cameraTestStateRef.current;
         console.log(`[FLANCO READY↑] Flanco confirmado en estado '${currentTestState}' — leyendo valor...`);
 
+        const hAct = (plcStateRef.current?.OR_Altura_Carretilla || 0) / 1000;
+        const cotaM = cotaInicial / 1000;
+        const testDist = is1mTest ? 1.0 : 2.0;
+
         if (currentTestState === 'ascenso') {
           // ─ Fin del ascenso ─
           if (timers.finishedElev) return;
+          const targetHeight = cotaM + testDist - 0.08; // 80mm de margen
+          if (hAct < targetHeight) {
+            console.warn(`[FLANCO READY↑] Ascenso NO confirmado: Altura actual (${hAct.toFixed(3)}m) no supera la cota mínima de ascenso (${targetHeight.toFixed(3)}m)`);
+            return;
+          }
+
           const raw = getPlcVal(plcStateRef.current, 'OR_Tiempo_Elevacion')
                    ?? getPlcVal(plcStateRef.current, 'OW_Tiempo_Elevacion')
                    ?? 0;
           const finalElev = Math.floor(raw / 10);
-          console.log(`[FLANCO READY↑] Elevación: ${finalElev} (raw=${raw})`);
+          console.log(`[FLANCO READY↑] Elevación confirmada: ${finalElev} cs (raw=${raw}) con altura ${hAct.toFixed(3)}m`);
           setSimTimers(prev => ({ ...prev, finishedElev: true, elev: finalElev }));
           
           setCameraTestState('espera_arriba');
@@ -1664,12 +1674,18 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         } else if (currentTestState === 'descenso') {
           // ─ Fin del descenso ─
           if (timers.finishedDesc) return;
+          const targetHeight = cotaM + 0.08; // 80mm de margen
+          if (hAct > targetHeight) {
+            console.warn(`[FLANCO READY↑] Descenso NO confirmado: Altura actual (${hAct.toFixed(3)}m) está por encima de la cota inicial máxima (${targetHeight.toFixed(3)}m)`);
+            return;
+          }
+
           const rawDesc = getPlcVal(plcStateRef.current, 'OR_Tiempo_Descenso')
                        ?? getPlcVal(plcStateRef.current, 'OW_Tiempo_Descenso')
                        ?? 0;
           const finalElev = timers.elev;
           const finalDesc = Math.floor(rawDesc / 10);
-          console.log(`[FLANCO READY↑] Descenso: ${finalDesc} (raw=${rawDesc})`);
+          console.log(`[FLANCO READY↑] Descenso confirmado: ${finalDesc} cs (raw=${rawDesc}) con altura ${hAct.toFixed(3)}m`);
           const minElev = isSinCarga ? erp?.tpo_elev_min_scarga : erp?.tpo_elevac_min;
           const maxElev = isSinCarga ? erp?.tpo_elev_max_scarga : erp?.tpo_elevac_max;
           const minDesc = isSinCarga ? erp?.tpo_desc_min_scarga : erp?.tpo_descenso_min;
@@ -1688,7 +1704,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       }, 3000); // 3 segundos de confirmación
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isTimerReadyVal, isSimulation]);
+  }, [isTimerReadyVal, isSimulation, cotaInicial, is1mTest]);
 
 
 
