@@ -1069,7 +1069,7 @@ function App() {
 
           {/* OVERLAY DE COMPARATIVA DE TIEMPOS Y CÁMARA (Para pasos 3 y 4) */}
           {testHUDOverlay && !testHUDOverlay.is5mTest && (
-            <div className="absolute top-1/2 left-10 -translate-y-1/2 z-40 flex flex-row gap-4 items-start">
+            <div className="absolute top-1/2 left-10 -translate-y-1/2 z-40 flex flex-row gap-4 items-stretch">
               <div className="glass-panel p-5 rounded-2xl border border-[#2e404a] shadow-[0_20px_50px_rgba(0,0,0,0.5)] w-[22rem] backdrop-blur-xl">
                 {/* Header */}
                 <div className="flex items-center gap-3 mb-4 border-b border-[#2e404a] pb-3">
