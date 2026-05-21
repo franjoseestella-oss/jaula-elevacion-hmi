@@ -407,11 +407,15 @@ class OpcUaClientManager:
                 # ── Cadencia: respetar el ciclo mínimo del PLC ────────────────
                 elapsed = time.time() - cycle_start
                 self.latency_ms = elapsed * 1000
-                # No enviar peticiones más rápido de lo que el PLC puede responder
-                # fast ~40-60ms (19 vars) → fijamos cadencia óptima de 80ms (12.5 Hz)
-                # slow ~250ms → corre cada ~4 segundos (50 ciclos) sin penalizar el flujo
-                min_cycle = 0.08 if not read_all else 0.0
-                sleep_t   = max(0.01, min_cycle - elapsed)
+                
+                # Frecuencia dinámica según la configuración de la HMI (por defecto hz_fast=100)
+                # Establecemos un límite mínimo de 15ms (0.015s) para evitar sobrecargar la CPU del backend.
+                # Al ser lectura secuencial (esperamos respuesta antes de pedir la siguiente), el ritmo se
+                # adaptará de forma natural a la máxima velocidad de respuesta física del PLC S7-1200.
+                target_hz = self.config.hz_fast if self.config.hz_fast > 0 else 50.0
+                min_cycle = max(0.015, 1.0 / target_hz) if not read_all else 0.0
+                
+                sleep_t   = max(0.005, min_cycle - elapsed)
                 await asyncio.sleep(sleep_t)
 
         finally:
