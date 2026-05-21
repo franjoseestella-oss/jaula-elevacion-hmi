@@ -1753,34 +1753,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     }
     // Ya desbloqueada — avanzar
     if (step >= 1 && step <= 4 && started[step]) {
-      const sendTimerResetPulse = () => {
-        const isReady = telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? pState?.Ob_Ready_Temporizador ?? false;
-        if (!isReady) {
-          const targetVar = (!isSimulation)
-            ? Object.keys(JSON.parse(localStorage.getItem('plcVarMapping') || '{}')).find(k => JSON.parse(localStorage.getItem('plcVarMapping'))[k].appVar === 'Ib_Restart_Temporizador')
-            : 'Ib_Restart_Temporizador';
-          if (targetVar) {
-            console.log("[TEMPORIZADORES] Repitiendo prueba y temporizador no listo. Enviando Restart=true por 500ms...");
-            fetch(`${API_BASE}/plc/write`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ [targetVar]: true, is_force: isSimulation })
-            }).then(() => {
-              setTimeout(() => {
-                fetch(`${API_BASE}/plc/write`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ [targetVar]: false, is_force: isSimulation })
-                }).catch(err => console.error('[TEMPORIZADORES] Error al liberar reset tras repetición:', err));
-              }, 500);
-            }).catch(err => console.error('[TEMPORIZADORES] Error enviando reset tras repetición:', err));
-          }
-        }
-      };
-
       if (statuses[2] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') {
         if (cameraTestState === 'nok') {
-          sendTimerResetPulse();
           resetStartsInPlc();
           setCameraTestState('standby');
           setTestAlarm(null);
@@ -1809,7 +1783,6 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
 
         if (cameraTestState === 'nok') {
-          sendTimerResetPulse();
           resetStartsInPlc();
           setCameraTestState('standby');
           setTestAlarm(null);
