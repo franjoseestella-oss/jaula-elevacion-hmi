@@ -1190,6 +1190,7 @@ function App() {
                 telemetry={telemetry}
                 isSimulation={isSimulation}
                 testHUDOverlay={testHUDOverlay}
+                appPlc={appPlc}
               />
             </div>
           )}

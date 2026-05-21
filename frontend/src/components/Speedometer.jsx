@@ -1,12 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Activity } from 'lucide-react';
 
-const Speedometer = ({ telemetry, isSimulation, testHUDOverlay }) => {
+const Speedometer = ({ telemetry, isSimulation, testHUDOverlay, appPlc }) => {
   const cameraTestState = testHUDOverlay?.cameraTestState || 'standby';
-  const distance = telemetry?.distance ?? 0;
+  
+  // Obtener la altura del sensor de forma consistente con TelemetryHUD
+  const distance = appPlc?.OR_Altura_Carretilla !== undefined 
+    ? appPlc.OR_Altura_Carretilla 
+    : (telemetry?.distance ?? 0);
+
+  const distanceRef = useRef(distance);
   const prevHeightRef = useRef(distance);
   const prevTimeRef = useRef(performance.now());
   const [speed, setSpeed] = useState(0); // en mm/s
+
+  // Mantener la referencia al último valor de distancia actualizado
+  useEffect(() => {
+    distanceRef.current = distance;
+  }, [distance]);
 
   // Tiempos medidos y límites
   const testDist = testHUDOverlay?.testDist || 2.0; // en metros
@@ -28,7 +39,7 @@ const Speedometer = ({ telemetry, isSimulation, testHUDOverlay }) => {
     }
   }, [cameraTestState]);
 
-  // Calcular velocidad instantánea en mm/s
+  // Calcular velocidad instantánea en mm/s mediante cronómetro interno (intervalo)
   useEffect(() => {
     // Si no está corriendo el test de movimiento, la velocidad es 0
     const isMoving = ['ascenso', 'descenso'].includes(cameraTestState);
@@ -37,26 +48,34 @@ const Speedometer = ({ telemetry, isSimulation, testHUDOverlay }) => {
       return;
     }
 
-    const now = performance.now();
-    const dt = (now - prevTimeRef.current) / 1000; // en segundos
-    const currentHeight = distance; // en mm
+    // Inicializar referencias al inicio del movimiento
+    prevHeightRef.current = distanceRef.current;
+    prevTimeRef.current = performance.now();
 
-    if (dt > 0.04) { // Evitar ruido por muestreo demasiado rápido (mínimo 40ms)
-      const dh = currentHeight - prevHeightRef.current; // en mm
-      const instantSpeed = dh / dt; // en mm/s
+    const intervalId = setInterval(() => {
+      const now = performance.now();
+      const dt = (now - prevTimeRef.current) / 1000; // en segundos
+      const currentHeight = distanceRef.current; // valor más reciente de la prop
 
-      // Filtro básico para descartar picos imposibles (> 4000 mm/s)
-      if (Math.abs(instantSpeed) < 4000.0) {
-        // Suavizado por media móvil exponencial (EMA)
-        setSpeed(prev => {
-          return prev * 0.65 + instantSpeed * 0.35;
-        });
+      if (dt > 0.05) { // Evitar intervalos demasiado cortos
+        const dh = currentHeight - prevHeightRef.current; // en mm
+        const instantSpeed = dh / dt; // en mm/s
+
+        // Filtro para descartar picos imposibles (> 4000 mm/s)
+        if (Math.abs(instantSpeed) < 4000.0) {
+          // Suavizado por media móvil exponencial (EMA)
+          setSpeed(prev => {
+            return prev * 0.7 + instantSpeed * 0.3;
+          });
+        }
+        
+        prevHeightRef.current = currentHeight;
+        prevTimeRef.current = now;
       }
+    }, 100); // Muestreo cada 100ms (cronómetro interno)
 
-      prevHeightRef.current = currentHeight;
-      prevTimeRef.current = now;
-    }
-  }, [distance, cameraTestState]);
+    return () => clearInterval(intervalId);
+  }, [cameraTestState]);
 
   // Si la prueba está terminada (ok/nok), mostramos las velocidades medias (avg)
   const isFinished = ['ok', 'nok'].includes(cameraTestState);
