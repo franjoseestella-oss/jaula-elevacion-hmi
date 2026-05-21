@@ -881,8 +881,21 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   useEffect(() => {
     // Solo actuar fuera de las etapas de test (currentStep 2 y 3 son etapas 3 y 4 en UI)
     if (currentStep === 2 || currentStep === 3) {
-      // Si salimos del rango y había un reset en hold, asegurarse de limpiar la bandera
-      timerResetHoldingRef.current = false;
+      // Si salimos del rango y había un reset en hold, asegurarse de limpiar la bandera y liberarlo en el PLC
+      if (timerResetHoldingRef.current) {
+        timerResetHoldingRef.current = false;
+        const targetVar = (!isSimulation)
+          ? Object.keys(JSON.parse(localStorage.getItem('plcVarMapping') || '{}')).find(k => JSON.parse(localStorage.getItem('plcVarMapping'))[k].appVar === 'Ib_Restart_Temporizador')
+          : 'Ib_Restart_Temporizador';
+        if (targetVar) {
+          console.log(`[TEMPORIZADORES] Entrando en etapa de test (step ${currentStep + 1}) — Liberando Restart=false.`);
+          fetch(`${API_BASE}/plc/write`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [targetVar]: false, is_force: isSimulation })
+          }).catch(err => console.error('[TEMPORIZADORES] Error liberando reset al entrar en test:', err));
+        }
+      }
       return;
     }
 
