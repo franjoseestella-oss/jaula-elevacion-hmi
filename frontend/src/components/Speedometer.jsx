@@ -6,7 +6,7 @@ const Speedometer = ({ telemetry, isSimulation, testHUDOverlay }) => {
   const distance = telemetry?.distance ?? 0;
   const prevHeightRef = useRef(distance);
   const prevTimeRef = useRef(performance.now());
-  const [speed, setSpeed] = useState(0); // en m/s
+  const [speed, setSpeed] = useState(0); // en mm/s
 
   // Tiempos medidos y límites
   const testDist = testHUDOverlay?.testDist || 2.0; // en metros
@@ -15,20 +15,20 @@ const Speedometer = ({ telemetry, isSimulation, testHUDOverlay }) => {
   const rawElev = testHUDOverlay?._rawElev; // numérico centisegundos
   const rawDesc = testHUDOverlay?._rawDesc; // numérico centisegundos
 
-  // Calcular velocidades medias (AVG) en m/s
+  // Calcular velocidades medias (AVG) en mm/s
   // Si elev/desc está en centisegundos: tiempo en segundos = raw / 100
-  // Velocidad media = testDist / (raw / 100) = (testDist * 100) / raw
-  const avgElev = rawElev > 0 ? (testDist * 100) / rawElev : null;
-  const avgDesc = rawDesc > 0 ? (testDist * 100) / rawDesc : null;
+  // Velocidad media = testDist / (raw / 100) = (testDist * 100000) / raw
+  const avgElev = rawElev > 0 ? (testDist * 100000) / rawElev : null;
+  const avgDesc = rawDesc > 0 ? (testDist * 100000) / rawDesc : null;
 
-  // Resetear el historial y la velocidad al cambiar de estado de test
+  // Resetear la velocidad al cambiar de estado de test
   useEffect(() => {
     if (cameraTestState === 'standby' || cameraTestState === 'esperando_1500') {
       setSpeed(0);
     }
   }, [cameraTestState]);
 
-  // Calcular velocidad instantánea
+  // Calcular velocidad instantánea en mm/s
   useEffect(() => {
     // Si no está corriendo el test de movimiento, la velocidad es 0
     const isMoving = ['ascenso', 'descenso'].includes(cameraTestState);
@@ -43,10 +43,10 @@ const Speedometer = ({ telemetry, isSimulation, testHUDOverlay }) => {
 
     if (dt > 0.04) { // Evitar ruido por muestreo demasiado rápido (mínimo 40ms)
       const dh = currentHeight - prevHeightRef.current; // en mm
-      const instantSpeed = (dh / dt) / 1000; // en m/s
+      const instantSpeed = dh / dt; // en mm/s
 
-      // Filtro básico para descartar picos imposibles (> 4 m/s)
-      if (Math.abs(instantSpeed) < 4.0) {
+      // Filtro básico para descartar picos imposibles (> 4000 mm/s)
+      if (Math.abs(instantSpeed) < 4000.0) {
         // Suavizado por media móvil exponencial (EMA)
         setSpeed(prev => {
           return prev * 0.65 + instantSpeed * 0.35;
@@ -62,7 +62,7 @@ const Speedometer = ({ telemetry, isSimulation, testHUDOverlay }) => {
   const isFinished = ['ok', 'nok'].includes(cameraTestState);
 
   // Parámetros para el arco del velocímetro
-  const maxSpeed = 1.5; // escala máxima de 1.5 m/s
+  const maxSpeed = 1500; // escala máxima de 1500 mm/s
   const displaySpeed = Math.min(Math.max(Math.abs(speed), 0), maxSpeed);
   const percentage = displaySpeed / maxSpeed;
 
@@ -98,8 +98,8 @@ const Speedometer = ({ telemetry, isSimulation, testHUDOverlay }) => {
       </div>
 
       {/* Gauge & Values */}
-      <div className="relative flex items-center justify-center w-full flex-1 min-h-[220px]">
-        <svg width="220" height="220" viewBox="0 0 120 120" className="transform">
+      <div className="relative flex items-center justify-center w-full flex-1 min-h-[240px]">
+        <svg width="240" height="240" viewBox="0 0 120 120" className="transform">
           <defs>
             <linearGradient id="gaugeGrad" x1="0%" y1="100%" x2="100%" y2="0%">
               <stop offset="0%" stopColor="#5d7a8a" />
@@ -169,29 +169,24 @@ const Speedometer = ({ telemetry, isSimulation, testHUDOverlay }) => {
               {avgElev !== null && (
                 <div className="flex justify-between items-center w-full py-1 border-b border-[#2e404a]/40">
                   <span className="text-[9px] font-mono text-blue-400 font-bold">AVG ↑:</span>
-                  <span className="text-sm font-mono font-black text-white">{avgElev.toFixed(2)} <span className="text-[9px] text-logisnext-slate">m/s</span></span>
+                  <span className="text-sm font-mono font-black text-white">{avgElev.toFixed(0)} <span className="text-[9px] text-logisnext-slate">mm/s</span></span>
                 </div>
               )}
               
               {avgDesc !== null && (
                 <div className="flex justify-between items-center w-full py-1 mt-0.5">
                   <span className="text-[9px] font-mono text-purple-400 font-bold">AVG ↓:</span>
-                  <span className="text-sm font-mono font-black text-white">{avgDesc.toFixed(2)} <span className="text-[9px] text-logisnext-slate">m/s</span></span>
+                  <span className="text-sm font-mono font-black text-white">{avgDesc.toFixed(0)} <span className="text-[9px] text-logisnext-slate">mm/s</span></span>
                 </div>
               )}
             </div>
           ) : (
             /* Real-time speed display */
-            <div className="flex flex-col items-center">
-              <span className="text-4xl font-black font-mono text-white tracking-tighter drop-shadow-md animate-pulse">
-                {Math.abs(speed).toFixed(2)}
+            <div className="flex flex-col items-center justify-center">
+              <span className="text-6xl font-black font-mono text-white tracking-tighter drop-shadow-[0_2px_10px_rgba(255,255,255,0.15)] animate-pulse leading-none">
+                {Math.abs(speed).toFixed(0)}
               </span>
-              <span className="text-xs font-black text-logisnext-magenta tracking-widest uppercase mt-0.5">M/S</span>
-              
-              {/* Extra telemetry detail inside the gauge */}
-              <div className="mt-2 text-[10px] font-mono text-gray-400 bg-[#0a0f12]/75 px-3 py-1 rounded-md border border-[#2e404a]/40 shadow-inner">
-                {(Math.abs(speed) * 1000).toFixed(0)} mm/s
-              </div>
+              <span className="text-sm font-black text-logisnext-magenta tracking-widest uppercase mt-2">MM/S</span>
             </div>
           )}
         </div>
