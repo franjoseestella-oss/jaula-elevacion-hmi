@@ -58,19 +58,24 @@ FAST_VARS_SET = {
     "Ob_Iniciar_Secuencia", "Ob_Abortar_Secuencia", "Ob_Poner_Pegatina",
     # Tiempos de ciclo — deben leerse en el flanco Ready (ciclo rápido para tener valor fresco)
     "OR_Tiempo_Elevacion", "OR_Tiempo_Descenso",
-    "OW_Tiempo_Elevacion", "OW_Tiempo_Descenso"
+    "OW_Tiempo_Elevacion", "OW_Tiempo_Descenso",
+    # Variables operativas y de estado adicionales para refresco rápido (evitar lag de 1.5s)
+    "Ob_Estado_Automatico",
+    "Ob_Dtec_Valla_1_trabajo_LH", "Ob_Dtec_Valla_1_trabajo_RH",
+    "Ob_Dtec_Valla_2_trabajo_LH", "Ob_Dtec_Valla_2_trabajo_RH",
+    "OW_Numero_Pallets", "Ob_Repetir_Secuencia"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Tiempos de ciclo reales del S7-1200 (medidos empíricamente)
-# fast (~6 vars) ≈ 90 ms  →  limitamos a máx 8 Hz en lectura rápida
-# slow (~38 vars) ≈ 390 ms →  limitamos a máx 2 Hz en lectura lenta
+# fast (~19 vars) ≈ 95 ms  →  limitamos a máx ~12.5 Hz en lectura rápida (80ms)
+# slow (~25 vars restantes) ≈ 250 ms →  lectura muy espaciada para evitar bloqueo
 # ──────────────────────────────────────────────────────────────────────────────
 FAST_READ_TIMEOUT  = 5.0   # s – si get_values tarda más → reconectar
 SLOW_READ_TIMEOUT  = 8.0   # s – ciclo completo puede ser más lento
 WRITE_TIMEOUT      = 3.0   # s – timeout individual por escritura
 MAX_CONSEC_ERRORS  = 3     # número de ciclos con error antes de reconectar
-SLOW_CYCLE_EVERY   = 8     # un ciclo completo cada N ciclos rápidos
+SLOW_CYCLE_EVERY   = 50    # un ciclo completo cada N ciclos rápidos (ej: cada ~4 segundos)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -249,13 +254,24 @@ class OpcUaClientManager:
             else:
                 logger.warning("[OPC UA] DB no encontrado: %s", self.config.db_name)
 
-            # Fallback por NodeId si discovery vacío
-            if not fast_nodes and not slow_nodes:
-                for var in PLC_WRITE_VARS:
+            # Asegurar mapeo por NodeId (fallback directo) para garantizar que todas las variables críticas existan
+            for var in FAST_VARS_SET:
+                if var not in fast_nodes:
                     try:
                         n = client.get_node(self.config.node_id_slow(var))
                         await n.read_value()
-                        (fast_nodes if var in FAST_VARS_SET else slow_nodes)[var] = n
+                        fast_nodes[var] = n
+                        logger.info("[OPC UA] Variable rápida '%s' cargada por NodeId (fallback)", var)
+                    except Exception:
+                        pass
+
+            for var in PLC_WRITE_VARS:
+                if var not in fast_nodes and var not in slow_nodes:
+                    try:
+                        n = client.get_node(self.config.node_id_slow(var))
+                        await n.read_value()
+                        slow_nodes[var] = n
+                        logger.info("[OPC UA] Variable escritura '%s' cargada por NodeId (fallback)", var)
                     except Exception:
                         pass
 
@@ -392,9 +408,9 @@ class OpcUaClientManager:
                 elapsed = time.time() - cycle_start
                 self.latency_ms = elapsed * 1000
                 # No enviar peticiones más rápido de lo que el PLC puede responder
-                # fast ~90 ms → mín 100 ms entre ciclos rápidos
-                # slow ~390 ms → ya consume su propio tiempo
-                min_cycle = 0.10 if not read_all else 0.0
+                # fast ~40-60ms (19 vars) → fijamos cadencia óptima de 80ms (12.5 Hz)
+                # slow ~250ms → corre cada ~4 segundos (50 ciclos) sin penalizar el flujo
+                min_cycle = 0.08 if not read_all else 0.0
                 sleep_t   = max(0.01, min_cycle - elapsed)
                 await asyncio.sleep(sleep_t)
 
