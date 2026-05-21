@@ -444,25 +444,16 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   useEffect(() => { plcStateRef.current = plcState; }, [plcState]);
 
   const resetStartsInPlc = () => {
-    const targetVarAsc = (!isSimulation) 
-      ? Object.keys(JSON.parse(localStorage.getItem('plcVarMapping') || '{}')).find(k => JSON.parse(localStorage.getItem('plcVarMapping'))[k].appVar === 'inicia_temporizador_ascenso') 
-      : 'inicia_temporizador_ascenso';
-    const targetVarDesc = (!isSimulation) 
-      ? Object.keys(JSON.parse(localStorage.getItem('plcVarMapping') || '{}')).find(k => JSON.parse(localStorage.getItem('plcVarMapping'))[k].appVar === 'inicia_temporizador_descenso') 
-      : 'inicia_temporizador_descenso';
-    
-    if (targetVarAsc || targetVarDesc) {
-      const resetPayload = {};
-      if (targetVarAsc) resetPayload[targetVarAsc] = false;
-      if (targetVarDesc) resetPayload[targetVarDesc] = false;
-      resetPayload.is_force = isSimulation;
-      
-      fetch(`${API_BASE}/plc/write`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(translatePayload(resetPayload, isSimulation))
-      }).catch(console.error);
-    }
+    const payload = {
+      inicia_temporizador_ascenso: false,
+      inicia_temporizador_descenso: false,
+      is_force: isSimulation
+    };
+    fetch(`${API_BASE}/plc/write`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(translatePayload(payload, isSimulation))
+    }).catch(err => console.error("Error resetting PLC starts:", err));
   };
 
   useEffect(() => {
@@ -2139,7 +2130,13 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       payload.or_tiempo_descenso = 0;
     }
 
-    const payloadKey = JSON.stringify({ iniciaAscenso, iniciaDescenso, cameraTestState });
+    const payloadKey = JSON.stringify({ 
+      iniciaAscenso, 
+      iniciaDescenso, 
+      cameraTestState, 
+      connected: telemetry?.opcua_connected,
+      currentStep 
+    });
     if (window.__lastTimerControlState === payloadKey) return;
     window.__lastTimerControlState = payloadKey;
 
@@ -2149,7 +2146,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       body: JSON.stringify(translatePayload(payload, isSimulation))
     }).catch(err => console.error("Error setting PLC timer controls:", err));
 
-  }, [cameraTestState, currentStep, isSimulation]);
+  }, [cameraTestState, currentStep, isSimulation, telemetry?.opcua_connected]);
 
   // ── Sincronizar consigna_posicion_altura al cargar la aplicación y al cambiar de cota ──
   useEffect(() => {
