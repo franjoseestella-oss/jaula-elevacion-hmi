@@ -44,13 +44,36 @@ def main():
     print("\n[!] Presiona Ctrl+C para detener ambos servicios.")
     
     try:
-        # Esperar a que los procesos terminen (o el usuario haga Ctrl+C)
-        backend_process.wait()
-        frontend_process.wait()
+        # Monitorizar activamente ambos procesos
+        while True:
+            # Comprobar si el backend ha terminado
+            backend_code = backend_process.poll()
+            if backend_code is not None:
+                print(f"\n[ERR] El proceso del Backend (FastAPI) ha terminado inesperadamente con código {backend_code}.")
+                break
+                
+            # Comprobar si el frontend ha terminado
+            frontend_code = frontend_process.poll()
+            if frontend_code is not None:
+                print(f"\n[ERR] El proceso del Frontend (Vite) ha terminado inesperadamente con código {frontend_code}.")
+                break
+                
+            time.sleep(1.0)
+            
     except KeyboardInterrupt:
-        print("\n[!] Deteniendo servicios...")
-        backend_process.terminate()
-        frontend_process.terminate()
+        print("\n[!] Deteniendo servicios por solicitud del usuario...")
+    finally:
+        # Asegurar que ambos procesos se detengan al salir
+        try:
+            if backend_process.poll() is None:
+                backend_process.terminate()
+        except Exception:
+            pass
+        try:
+            if frontend_process.poll() is None:
+                frontend_process.terminate()
+        except Exception:
+            pass
         print("[OK] Aplicación cerrada.")
 
 if __name__ == "__main__":

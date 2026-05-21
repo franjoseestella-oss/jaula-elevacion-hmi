@@ -871,38 +871,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     }
   }, [isSequenceFinished, plcState?.Ob_Dtec_Valla_1_trabajo_LH, plcState?.Ob_Dtec_Valla_2_trabajo_RH]);
 
-  // ── Verificar que los temporizadores están READY antes de empezar etapas 3 y 4 ──
-  // SOLO cuando la prueba aún no ha comenzado (standby). Si ya está en curso, NO tocar.
-  useEffect(() => {
-    if (currentStep !== 2 && currentStep !== 3) return;
-    if (stepStarted[currentStep]) return;
-    // Si la prueba ya está en marcha, no resetear los timers
-    if (cameraTestState !== 'standby') return;
 
-    const isReady = telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador;
-    if (isReady === false) {
-      console.log(`[TEMPORIZADORES] No listos en etapa ${currentStep + 1} (standby). Enviando Restart...`);
-      const targetVar = (!isSimulation) 
-        ? Object.keys(JSON.parse(localStorage.getItem('plcVarMapping') || '{}')).find(k => JSON.parse(localStorage.getItem('plcVarMapping'))[k].appVar === 'Ib_Restart_Temporizador') 
-        : 'Ib_Restart_Temporizador';
-        
-      if (targetVar) {
-        fetch(`${API_BASE}/plc/write`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ [targetVar]: true, is_force: isSimulation })
-        }).then(() => {
-          setTimeout(() => {
-            fetch(`${API_BASE}/plc/write`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ [targetVar]: false, is_force: isSimulation })
-            }).catch(console.error);
-          }, 500);
-        }).catch(err => console.error("Error setting restart temporizador:", err));
-      }
-    }
-  }, [currentStep, cameraTestState, stepStarted[2], stepStarted[3], telemetry?.mappedPlc?.Ob_Ready_Temporizador, plcState?.Ob_Ready_Temporizador, isSimulation]);
 
   // ── Reset automático del temporizador fuera de etapas 3 y 4 (UI) ──────────
   // Si el temporizador NO está ready y NO estamos en la etapa 3 o 4 (currentStep 2/3),
@@ -1072,24 +1041,6 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           const isTimerReady = telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador ?? false;
           if (!isTimerReady) {
             console.warn("[INICIAR] Bloqueado: Temporizadores no están listos (Ob_Ready_Temporizador es False)");
-            const targetVar = (!isSimulation) 
-              ? Object.keys(JSON.parse(localStorage.getItem('plcVarMapping') || '{}')).find(k => JSON.parse(localStorage.getItem('plcVarMapping'))[k].appVar === 'Ib_Restart_Temporizador') 
-              : 'Ib_Restart_Temporizador';
-            if (targetVar) {
-              fetch(`${API_BASE}/plc/write`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ [targetVar]: true, is_force: isSimulation })
-              }).then(() => {
-                setTimeout(() => {
-                  fetch(`${API_BASE}/plc/write`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ [targetVar]: false, is_force: isSimulation })
-                  }).catch(console.error);
-                }, 500);
-              }).catch(console.error);
-            }
             return;
           }
         }
@@ -1599,7 +1550,6 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   useEffect(() => { simTimersRef.current = simTimers; }, [simTimers]);
   useEffect(() => { cameraTestStateRef.current = cameraTestState; }, [cameraTestState]);
   // Resetear el contador de flancos cada vez que empieza un ciclo nuevo de prueba.
-  // Si la prueba se repite (standby en step 2/3) y Ready no está listo → enviar Restart.
   useEffect(() => {
     if (cameraTestState === 'esperando_1500' || cameraTestState === 'standby') {
       readyFlancosRef.current = 0;
@@ -1609,30 +1559,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         readyConfirmTimeoutRef.current = null;
       }
     }
-
-    // Al volver a standby (repetición de prueba) en etapas 2 o 3:
-    // si el temporizador no está ready, activar el reset y dejar que
-    // timerResetHoldingRef lo libere cuando el PLC confirme Ready=true.
-    if (cameraTestState === 'standby' && (currentStep === 2 || currentStep === 3) && !isSimulation) {
-      const isReady = isTimerReadyValRef.current;
-      if (isReady === false && !timerResetHoldingRef.current) {
-        timerResetHoldingRef.current = true;
-        const targetVar = (() => {
-          try {
-            const mapping = JSON.parse(localStorage.getItem('plcVarMapping') || '{}');
-            return Object.keys(mapping).find(k => mapping[k].appVar === 'Ib_Restart_Temporizador');
-          } catch { return null; }
-        })() ?? 'Ib_Restart_Temporizador';
-        console.log('[REPETIR] Temporizador no ready en standby — enviando Restart=true...');
-        fetch(`${API_BASE}/plc/write`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ [targetVar]: true, is_force: false })
-        }).catch(err => console.error('[REPETIR] Error enviando Restart:', err));
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cameraTestState, currentStep]);
+  }, [cameraTestState]);
 
 
   // ── Detección de flanco 0→1 de Ob_Ready_Temporizador con confirmación de 2s (solo PLC real) ──
@@ -1779,24 +1706,6 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         const isTimerReady = telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? pState?.Ob_Ready_Temporizador ?? false;
         if (!isTimerReady) {
           console.warn("[DIRECTO] Bloqueado: Temporizadores no están ready");
-          const targetVar = (!isSimulation) 
-            ? Object.keys(JSON.parse(localStorage.getItem('plcVarMapping') || '{}')).find(k => JSON.parse(localStorage.getItem('plcVarMapping'))[k].appVar === 'Ib_Restart_Temporizador') 
-            : 'Ib_Restart_Temporizador';
-          if (targetVar) {
-            fetch(`${API_BASE}/plc/write`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ [targetVar]: true, is_force: isSimulation })
-            }).then(() => {
-              setTimeout(() => {
-                fetch(`${API_BASE}/plc/write`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ [targetVar]: false, is_force: isSimulation })
-                }).catch(console.error);
-              }, 500);
-            }).catch(console.error);
-          }
           return;
         }
       }
