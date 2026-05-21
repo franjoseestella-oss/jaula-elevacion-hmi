@@ -55,7 +55,10 @@ FAST_VARS_SET = {
     "OR_Altura_Carretilla", "IW_Altura_Relativa",
     "Ib_Restart_Temporizador", "Ob_Ready_Temporizador",
     "Ib_Start_Ascenso", "Ib_Start_Descenso",
-    "Ob_Iniciar_Secuencia", "Ob_Abortar_Secuencia", "Ob_Poner_Pegatina"
+    "Ob_Iniciar_Secuencia", "Ob_Abortar_Secuencia", "Ob_Poner_Pegatina",
+    # Tiempos de ciclo — deben leerse en el flanco Ready (ciclo rápido para tener valor fresco)
+    "OR_Tiempo_Elevacion", "OR_Tiempo_Descenso",
+    "OW_Tiempo_Elevacion", "OW_Tiempo_Descenso"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────

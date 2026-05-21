@@ -550,22 +550,11 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       }
 
       if (cameraTestState === 'ascenso') {
-        // La prueba finaliza cuando supera la altura configurada + 1m o 2m (testDist)
-        const isAscentFinished = h >= cotaM + testDist;
-        
-        if (!isAscentFinished && h > cotaM) {
-          // Control de parada incompleta (2 segundos sin variación > 0.01m)
-          // Aumentamos el temporizador de parada incompleta a 5000ms
-          if (Date.now() - s.lastHChangeTime > 5000) {
-            setTestAlarm('ascenso_incompleto');
-            setCameraTestState('nok');
-            return;
-          }
-        }
 
-        if (isAscentFinished && !simTimersRef.current.finishedElev) {
-          if (isSimulation) {
-            // Simulación: medir por Date.now()
+        if (isSimulation) {
+          // SIMULACIÓN: detectar fin de ascenso por altura y medir con Date.now()
+          const isAscentFinished = h >= cotaM + testDist;
+          if (isAscentFinished && !simTimersRef.current.finishedElev) {
             const finalElev = Math.floor((Date.now() - (s.tStartElev || Date.now())) / 10);
             setSimTimers(prev => ({ ...prev, finishedElev: true, elev: finalElev }));
             fetch(`${API_BASE}/plc/write`, {
@@ -573,18 +562,16 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ or_tiempo_elevacion: finalElev * 10, OW_Tiempo_Elevacion: finalElev * 10, is_force: true })
             }).catch(console.error);
-          }
-          // PLC real: NO leer el valor aquí — puede ser el de la medición anterior.
-          // El flanco ascendente de Ob_Ready_Temporizador (False→True) leerá el valor estable.
-          // Solo transicionamos de estado.
-          setCameraTestState('espera_arriba');
-          setWaitCountdown(3);
-          s.tTopReachTime = null;
-        } else {
-          if (isSimulation && !s.tStartElev) {
+            setCameraTestState('espera_arriba');
+            setWaitCountdown(3);
+            s.tTopReachTime = null;
+          } else if (!s.tStartElev) {
             s.tStartElev = Date.now();
           }
         }
+        // PLC REAL: el fin del ascenso lo detecta el flanco 0→1 de Ob_Ready_Temporizador.
+        // El useEffect del flanco captura el tiempo y transiciona a 'espera_arriba'.
+        // Este loop solo gestiona la alarma de ascenso incompleto.
       } else if (cameraTestState === 'espera_arriba') {
         if (!s.tTopReachTime) {
           s.tTopReachTime = Date.now();
@@ -608,25 +595,15 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           if (h <= s.hTopReach - 0.01) {
             setWaitCountdown(null);
             setCameraTestState('descenso');
-            s.tStartDesc = null; // resetear para inicializar al entrar en descenso
+            s.tStartDesc = null;
           }
         }
       } else if (cameraTestState === 'descenso') {
-        // La prueba de descenso termina cuando rebase la distancia de test desde la cota más alta alcanzada
-        const isDescentFinished = h <= s.hTopReach - testDist;
 
-        if (!isDescentFinished && h < s.hTopReach - 0.01 && h > s.hTopReach - testDist) {
-          // Aumentamos el temporizador de parada incompleta a 5000ms
-          if (Date.now() - s.lastHChangeTime > 5000) {
-            setTestAlarm('descenso_incompleto');
-            setCameraTestState('nok');
-            return;
-          }
-        }
-
-        if (isDescentFinished && !simTimersRef.current.finishedDesc && !simTimersRef.current.pendingReadDesc) {
-          if (isSimulation) {
-            // Simulación: medir por Date.now() y evaluar directamente
+        if (isSimulation) {
+          // SIMULACIÓN: detectar fin de descenso por altura y evaluar directamente
+          const isDescentFinished = h <= s.hTopReach - testDist;
+          if (isDescentFinished && !simTimersRef.current.finishedDesc) {
             const isSinCarga = currentStep === 2;
             const minElev = isSinCarga ? erpData?.tpo_elev_min_scarga : erpData?.tpo_elevac_min;
             const maxElev = isSinCarga ? erpData?.tpo_elev_max_scarga : erpData?.tpo_elevac_max;
@@ -649,17 +626,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
               setTestAlarm(null);
               setCameraTestState('ok');
             }
-          } else {
-            // PLC real: NO leer aquí — el valor puede ser el de la medición anterior.
-            // Marcar que la altura de descenso se alcanzó y esperar el flanco Ready.
-            setSimTimers(prev => ({ ...prev, pendingReadDesc: true }));
-            console.log('[DESCENSO] Altura alcanzada. Esperando flanco Ready para leer OR_Tiempo_Descenso...');
-          }
-        } else {
-          if (isSimulation && !s.tStartDesc) {
+          } else if (!s.tStartDesc) {
             s.tStartDesc = Date.now();
           }
         }
+        // PLC REAL: el fin del descenso lo detecta el flanco 0→1 de Ob_Ready_Temporizador.
+        // El useEffect del flanco lee OW_Tiempo_Descenso y evalúa el resultado.
       }
 
       reqId = requestAnimationFrame(loop);
@@ -931,6 +903,49 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       }
     }
   }, [currentStep, cameraTestState, stepStarted[2], stepStarted[3], telemetry?.mappedPlc?.Ob_Ready_Temporizador, plcState?.Ob_Ready_Temporizador, isSimulation]);
+
+  // ── Reset automático del temporizador fuera de etapas 3 y 4 (UI) ──────────
+  // Si el temporizador NO está ready y NO estamos en la etapa 3 o 4 (currentStep 2/3),
+  // mantener Ib_Restart_Temporizador = true hasta que Ob_Ready_Temporizador se confirme,
+  // y solo entonces enviarlo a false.
+  const timerResetHoldingRef = useRef(false); // true mientras mantenemos el reset activo
+  useEffect(() => {
+    // Solo actuar fuera de las etapas de test (currentStep 2 y 3 son etapas 3 y 4 en UI)
+    if (currentStep === 2 || currentStep === 3) {
+      // Si salimos del rango y había un reset en hold, asegurarse de limpiar la bandera
+      timerResetHoldingRef.current = false;
+      return;
+    }
+
+    const isReady = telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador;
+    const targetVar = (!isSimulation)
+      ? Object.keys(JSON.parse(localStorage.getItem('plcVarMapping') || '{}')).find(k => JSON.parse(localStorage.getItem('plcVarMapping'))[k].appVar === 'Ib_Restart_Temporizador')
+      : 'Ib_Restart_Temporizador';
+
+    if (!targetVar) return;
+
+    if (isReady === false && !timerResetHoldingRef.current) {
+      // Temporizador no listo → activar reset y marcar que estamos en hold
+      timerResetHoldingRef.current = true;
+      console.log(`[TEMPORIZADORES] Fuera de etapa 3/4, no ready (step ${currentStep + 1}). Manteniendo Restart=true...`);
+      fetch(`${API_BASE}/plc/write`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [targetVar]: true, is_force: isSimulation })
+      }).catch(err => console.error('[TEMPORIZADORES] Error activando reset:', err));
+    }
+
+    if (isReady === true && timerResetHoldingRef.current) {
+      // El PLC confirmó que ya está ready → liberar el reset
+      timerResetHoldingRef.current = false;
+      console.log(`[TEMPORIZADORES] Ready confirmado (step ${currentStep + 1}). Liberando Restart=false.`);
+      fetch(`${API_BASE}/plc/write`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [targetVar]: false, is_force: isSimulation })
+      }).catch(err => console.error('[TEMPORIZADORES] Error liberando reset:', err));
+    }
+  }, [currentStep, telemetry?.mappedPlc?.Ob_Ready_Temporizador, plcState?.Ob_Ready_Temporizador, isSimulation]);
 
   // ── Auto-Avanzar PASO 1 si se carga desde ERP Modal ───────────────
   useEffect(() => {
@@ -1570,7 +1585,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   const toleranciasRef = useRef(tolerancias);
   const simTimersRef = useRef(simTimers);
   const cameraTestStateRef = useRef(cameraTestState);
-  const prevReadyRef = useRef(null); // Para detección de flanco ascendente de Ob_Ready_Temporizador
+  const prevReadyRef = useRef(null);          // Para detección de flanco 0→1 de Ob_Ready_Temporizador
+  const readyFlancosRef = useRef(0);          // Contador de flancos 0→1 dentro del test activo
+  const isTimerReadyValRef = useRef(false);   // Valor actual de Ready (para closures de setTimeout)
+  const readyConfirmTimeoutRef = useRef(null);// setTimeout pendiente de confirmación de 2s
 
   useEffect(() => { stepStatusRef.current = stepStatus; }, [stepStatus]);
   useEffect(() => { stepStartedRef.current = stepStarted; }, [stepStarted]);
@@ -1580,62 +1598,151 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   useEffect(() => { toleranciasRef.current = tolerancias; }, [tolerancias]);
   useEffect(() => { simTimersRef.current = simTimers; }, [simTimers]);
   useEffect(() => { cameraTestStateRef.current = cameraTestState; }, [cameraTestState]);
+  // Resetear el contador de flancos cada vez que empieza un ciclo nuevo de prueba.
+  // Si la prueba se repite (standby en step 2/3) y Ready no está listo → enviar Restart.
+  useEffect(() => {
+    if (cameraTestState === 'esperando_1500' || cameraTestState === 'standby') {
+      readyFlancosRef.current = 0;
+      // Cancelar cualquier confirmación pendiente al reiniciar el ciclo
+      if (readyConfirmTimeoutRef.current) {
+        clearTimeout(readyConfirmTimeoutRef.current);
+        readyConfirmTimeoutRef.current = null;
+      }
+    }
 
-  // ── Detección de flanco ascendente de Ob_Ready_Temporizador (solo modo PLC real) ──
-  // Cuando Ready pasa de False a True, los valores OR_Tiempo_Elevacion/Descenso son estables.
+    // Al volver a standby (repetición de prueba) en etapas 2 o 3:
+    // si el temporizador no está ready, activar el reset y dejar que
+    // timerResetHoldingRef lo libere cuando el PLC confirme Ready=true.
+    if (cameraTestState === 'standby' && (currentStep === 2 || currentStep === 3) && !isSimulation) {
+      const isReady = isTimerReadyValRef.current;
+      if (isReady === false && !timerResetHoldingRef.current) {
+        timerResetHoldingRef.current = true;
+        const targetVar = (() => {
+          try {
+            const mapping = JSON.parse(localStorage.getItem('plcVarMapping') || '{}');
+            return Object.keys(mapping).find(k => mapping[k].appVar === 'Ib_Restart_Temporizador');
+          } catch { return null; }
+        })() ?? 'Ib_Restart_Temporizador';
+        console.log('[REPETIR] Temporizador no ready en standby — enviando Restart=true...');
+        fetch(`${API_BASE}/plc/write`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [targetVar]: true, is_force: false })
+        }).catch(err => console.error('[REPETIR] Error enviando Restart:', err));
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cameraTestState, currentStep]);
+
+
+  // ── Detección de flanco 0→1 de Ob_Ready_Temporizador con confirmación de 2s (solo PLC real) ──
+  // El PLC pone Ready=False al iniciar temporizador (ascenso/descenso) y True al acabar.
+  //   1er flanco → esperar 2s con Ready=True → leer OR_Tiempo_Elevacion → espera_arriba + countdown 3s
+  //   2º flanco  → esperar 2s con Ready=True → leer OR_Tiempo_Descenso → evaluar resultado
   const isTimerReadyVal = telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador ?? false;
+  // Mantener ref siempre actualizado (evita stale closure en setTimeout)
+  useEffect(() => { isTimerReadyValRef.current = isTimerReadyVal; }, [isTimerReadyVal]);
+
   useEffect(() => {
     if (isSimulation) {
       prevReadyRef.current = isTimerReadyVal;
-      return; // En simulación los tiempos se capturan por Date.now()
+      return;
     }
     const prevReady = prevReadyRef.current;
     prevReadyRef.current = isTimerReadyVal;
 
-    // Flanco ascendente: estaba False y ahora es True
-    if (prevReady === false && isTimerReadyVal === true) {
-      const testState = cameraTestStateRef.current;
-      const step = currentStepRef.current;
-      if (step !== 2 && step !== 3) return;
-
-      const timers = simTimersRef.current;
-      const erp = erpDataRef.current;
-      const isSinCarga = step === 2;
-
-      if ((testState === 'ascenso' || testState === 'espera_arriba') && !timers.finishedElev) {
-        // Leer tiempo de elevación estable del PLC
-        const finalElev = Math.floor((getPlcVal(plcStateRef.current, 'OW_Tiempo_Elevacion') ?? getPlcVal(plcStateRef.current, 'or_tiempo_elevacion') ?? 0) / 10);
-        console.log(`[FLANCO READY↑] Elevación capturada del PLC: ${finalElev} (×10 = ${finalElev * 10})`);
-        setSimTimers(prev => ({ ...prev, finishedElev: true, elev: finalElev }));
-        // Si aún estamos en 'ascenso', transicionar (puede que el height loop ya lo hizo)
-        if (testState === 'ascenso') {
-          setCameraTestState('espera_arriba');
-          setWaitCountdown(3);
-        }
-
-      } else if (timers.pendingReadDesc && !timers.finishedDesc) {
-        // Leer tiempo de descenso estable del PLC y evaluar tolerancia
-        const finalElev = timers.elev;
-        const finalDesc = Math.floor((getPlcVal(plcStateRef.current, 'OW_Tiempo_Descenso') ?? getPlcVal(plcStateRef.current, 'or_tiempo_descenso') ?? 0) / 10);
-        console.log(`[FLANCO READY↑] Descenso capturado del PLC: ${finalDesc} (×10 = ${finalDesc * 10})`);
-        const minElev = isSinCarga ? erp?.tpo_elev_min_scarga : erp?.tpo_elevac_min;
-        const maxElev = isSinCarga ? erp?.tpo_elev_max_scarga : erp?.tpo_elevac_max;
-        const minDesc = isSinCarga ? erp?.tpo_desc_min_scarga : erp?.tpo_descenso_min;
-        const maxDesc = isSinCarga ? erp?.tpo_desc_max_scarga : erp?.tpo_descenso_max;
-        setSimTimers(prev => ({ ...prev, finishedDesc: true, desc: finalDesc, pendingReadDesc: false }));
-        const isElevOk = Number(finalElev) >= Number(minElev) && Number(finalElev) <= Number(maxElev);
-        const isDescOk = Number(finalDesc) >= Number(minDesc) && Number(finalDesc) <= Number(maxDesc);
-        if (!isElevOk || !isDescOk) {
-          setTestAlarm('fuera_tolerancia');
-          setCameraTestState('nok');
-        } else {
-          setTestAlarm(null);
-          setCameraTestState('ok');
-        }
+    // ── Caída 1→0: cancelar la confirmación pendiente (flanco espúreo) ──
+    if (prevReady === true && isTimerReadyVal === false) {
+      if (readyConfirmTimeoutRef.current) {
+        clearTimeout(readyConfirmTimeoutRef.current);
+        readyConfirmTimeoutRef.current = null;
+        console.log('[FLANCO READY] Ready bajó antes de los 2s — confirmación cancelada');
       }
+      return;
+    }
+
+    // ── Flanco 0→1 detectado ──
+    if (prevReady === false && isTimerReadyVal === true) {
+      const step = currentStepRef.current;
+      if (step !== 2 && step !== 3) return;   // Solo en etapas sin/con carga
+
+      const testState = cameraTestStateRef.current;
+      // Ignorar flancos fuera del ciclo activo (standby, ok, nok)
+      if (!['esperando_1500', 'ascenso', 'espera_arriba', 'descenso'].includes(testState)) return;
+
+      // Incrementar contador de flancos del ciclo actual
+      readyFlancosRef.current += 1;
+      const flancoNum = readyFlancosRef.current;
+      console.log(`[FLANCO READY↑] Flanco #${flancoNum} en estado '${testState}' (step ${step + 1}) — esperando 2s confirmación...`);
+
+      // Cancelar cualquier timeout anterior antes de crear uno nuevo
+      if (readyConfirmTimeoutRef.current) {
+        clearTimeout(readyConfirmTimeoutRef.current);
+      }
+
+      // Esperar 2 segundos con Ready=True para confirmar que el valor es estable
+      readyConfirmTimeoutRef.current = setTimeout(() => {
+        readyConfirmTimeoutRef.current = null;
+
+        // Verificar que Ready sigue a True tras los 2 segundos
+        if (!isTimerReadyValRef.current) {
+          console.log(`[FLANCO READY↑] Flanco #${flancoNum} — Ready cayó durante los 2s, descartado`);
+          return;
+        }
+
+        const currentStep_ = currentStepRef.current;
+        const timers = simTimersRef.current;
+        const erp = erpDataRef.current;
+        const isSinCarga = currentStep_ === 2;
+        console.log(`[FLANCO READY↑] Flanco #${flancoNum} confirmado — leyendo valor...`);
+
+        if (flancoNum === 1) {
+          // ─ 1er flanco confirmado: fin del ascenso ─
+          if (timers.finishedElev) return;
+          const raw = getPlcVal(plcStateRef.current, 'OR_Tiempo_Elevacion')
+                   ?? getPlcVal(plcStateRef.current, 'OW_Tiempo_Elevacion')
+                   ?? 0;
+          const finalElev = Math.floor(raw / 10);
+          console.log(`[FLANCO READY↑] Elevación: ${finalElev} (raw=${raw})`);
+          setSimTimers(prev => ({ ...prev, finishedElev: true, elev: finalElev }));
+          // Iniciar cuenta atrás de 3 seg (estabilización en la cima)
+          const st = cameraTestStateRef.current;
+          if (st === 'ascenso' || st === 'esperando_1500') {
+            setCameraTestState('espera_arriba');
+            setWaitCountdown(3);
+          }
+
+        } else if (flancoNum === 2) {
+          // ─ 2º flanco confirmado: fin del descenso ─
+          if (timers.finishedDesc) return;
+          const rawDesc = getPlcVal(plcStateRef.current, 'OR_Tiempo_Descenso')
+                       ?? getPlcVal(plcStateRef.current, 'OW_Tiempo_Descenso')
+                       ?? 0;
+          const finalElev = timers.elev;
+          const finalDesc = Math.floor(rawDesc / 10);
+          console.log(`[FLANCO READY↑] Descenso: ${finalDesc} (raw=${rawDesc})`);
+          const minElev = isSinCarga ? erp?.tpo_elev_min_scarga : erp?.tpo_elevac_min;
+          const maxElev = isSinCarga ? erp?.tpo_elev_max_scarga : erp?.tpo_elevac_max;
+          const minDesc = isSinCarga ? erp?.tpo_desc_min_scarga : erp?.tpo_descenso_min;
+          const maxDesc = isSinCarga ? erp?.tpo_desc_max_scarga : erp?.tpo_descenso_max;
+          setSimTimers(prev => ({ ...prev, finishedDesc: true, desc: finalDesc, pendingReadDesc: false }));
+          const isElevOk = Number(finalElev) >= Number(minElev) && Number(finalElev) <= Number(maxElev);
+          const isDescOk = Number(finalDesc) >= Number(minDesc) && Number(finalDesc) <= Number(maxDesc);
+          if (!isElevOk || !isDescOk) {
+            setTestAlarm('fuera_tolerancia');
+            setCameraTestState('nok');
+          } else {
+            setTestAlarm(null);
+            setCameraTestState('ok');
+          }
+        }
+      }, 2000); // 2 segundos de confirmación
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTimerReadyVal, isSimulation]);
+
+
+
 
   // Registrar timestamp de inicio cuando un paso se activa
   useEffect(() => {
