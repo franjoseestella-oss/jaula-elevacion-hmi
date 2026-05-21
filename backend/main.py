@@ -929,6 +929,7 @@ def write_to_plc(payload: dict):
         return {"status": "ignored", "message": "Comando ignorado, el forzado manual está activo."}
         
     escrito = {k: v for k, v in payload.items() if k != 'is_force' and v is not None}
+    print(f"[API WRITE] Recibido payload de escritura: {escrito} (is_force={is_force})")
     
     # Si el cliente OPC UA está activo, escribimos en el PLC real
     if opcua_manager.active:
