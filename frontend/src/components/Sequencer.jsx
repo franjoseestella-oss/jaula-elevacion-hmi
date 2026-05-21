@@ -879,10 +879,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   // y solo entonces enviarlo a false.
   const timerResetHoldingRef = useRef(false); // true mientras mantenemos el reset activo
   useEffect(() => {
+    const currentResetVal = telemetry?.mappedPlc?.Ib_Restart_Temporizador ?? plcState?.Ib_Restart_Temporizador;
+
     // Solo actuar en las etapas de posicionamiento (pasos 1 y 2, que son index 0 y 1)
     if (currentStep !== 0 && currentStep !== 1) {
-      // Si salimos de ese rango y había un reset en hold, asegurarse de limpiar la bandera y liberarlo en el PLC
-      if (timerResetHoldingRef.current) {
+      // Si salimos de ese rango y el reset está activo (localmente o en el PLC), asegurarse de liberarlo
+      if (timerResetHoldingRef.current || currentResetVal === true) {
         timerResetHoldingRef.current = false;
         const targetVar = (!isSimulation)
           ? Object.keys(JSON.parse(localStorage.getItem('plcVarMapping') || '{}')).find(k => JSON.parse(localStorage.getItem('plcVarMapping'))[k].appVar === 'Ib_Restart_Temporizador')
@@ -917,17 +919,24 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       }).catch(err => console.error('[TEMPORIZADORES] Error activando reset:', err));
     }
 
-    if (isReady === true && timerResetHoldingRef.current) {
-      // El PLC confirmó que ya está ready → liberar el reset
+    if (isReady === true && (timerResetHoldingRef.current || currentResetVal === true)) {
+      // El PLC confirmó que ya está ready (o vemos que el restart está en true en el PLC) → liberar el reset
       timerResetHoldingRef.current = false;
-      console.log(`[TEMPORIZADORES] Ready confirmado (step ${currentStep + 1}). Liberando Restart=false.`);
+      console.log(`[TEMPORIZADORES] Ready es true (step ${currentStep + 1}). Liberando Restart=false.`);
       fetch(`${API_BASE}/plc/write`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [targetVar]: false, is_force: isSimulation })
       }).catch(err => console.error('[TEMPORIZADORES] Error liberando reset:', err));
     }
-  }, [currentStep, telemetry?.mappedPlc?.Ob_Ready_Temporizador, plcState?.Ob_Ready_Temporizador, isSimulation]);
+  }, [
+    currentStep,
+    telemetry?.mappedPlc?.Ob_Ready_Temporizador,
+    plcState?.Ob_Ready_Temporizador,
+    telemetry?.mappedPlc?.Ib_Restart_Temporizador,
+    plcState?.Ib_Restart_Temporizador,
+    isSimulation
+  ]);
 
   // ── Auto-Avanzar PASO 1 si se carga desde ERP Modal ───────────────
   useEffect(() => {
