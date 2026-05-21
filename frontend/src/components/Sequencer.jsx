@@ -1616,13 +1616,13 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       if (step !== 2 && step !== 3) return;   // Solo en etapas sin/con carga
 
       const testState = cameraTestStateRef.current;
-      // Ignorar flancos fuera del ciclo activo (standby, ok, nok)
-      if (!['esperando_1500', 'ascenso', 'espera_arriba', 'descenso'].includes(testState)) return;
+      // Ignorar flancos fuera del ascenso o descenso activo
+      if (testState !== 'ascenso' && testState !== 'descenso') {
+        console.log(`[FLANCO READY↑] Ignorado flanco 0→1 porque el estado actual es '${testState}'`);
+        return;
+      }
 
-      // Incrementar contador de flancos del ciclo actual
-      readyFlancosRef.current += 1;
-      const flancoNum = readyFlancosRef.current;
-      console.log(`[FLANCO READY↑] Flanco #${flancoNum} en estado '${testState}' (step ${step + 1}) — esperando 2s confirmación...`);
+      console.log(`[FLANCO READY↑] Detectado flanco 0→1 en estado '${testState}' (step ${step + 1}) — esperando 2s confirmación...`);
 
       // Cancelar cualquier timeout anterior antes de crear uno nuevo
       if (readyConfirmTimeoutRef.current) {
@@ -1635,7 +1635,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
         // Verificar que Ready sigue a True tras los 2 segundos
         if (!isTimerReadyValRef.current) {
-          console.log(`[FLANCO READY↑] Flanco #${flancoNum} — Ready cayó durante los 2s, descartado`);
+          console.log(`[FLANCO READY↑] Estado '${testState}' — Ready cayó durante los 2s, descartado`);
           return;
         }
 
@@ -1643,10 +1643,13 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         const timers = simTimersRef.current;
         const erp = erpDataRef.current;
         const isSinCarga = currentStep_ === 2;
-        console.log(`[FLANCO READY↑] Flanco #${flancoNum} confirmado — leyendo valor...`);
 
-        if (flancoNum === 1) {
-          // ─ 1er flanco confirmado: fin del ascenso ─
+        // Re-evaluar el estado actual por si cambió durante los 2 segundos
+        const currentTestState = cameraTestStateRef.current;
+        console.log(`[FLANCO READY↑] Flanco confirmado en estado '${currentTestState}' — leyendo valor...`);
+
+        if (currentTestState === 'ascenso') {
+          // ─ Fin del ascenso ─
           if (timers.finishedElev) return;
           const raw = getPlcVal(plcStateRef.current, 'OR_Tiempo_Elevacion')
                    ?? getPlcVal(plcStateRef.current, 'OW_Tiempo_Elevacion')
@@ -1654,15 +1657,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           const finalElev = Math.floor(raw / 10);
           console.log(`[FLANCO READY↑] Elevación: ${finalElev} (raw=${raw})`);
           setSimTimers(prev => ({ ...prev, finishedElev: true, elev: finalElev }));
-          // Iniciar cuenta atrás de 3 seg (estabilización en la cima)
-          const st = cameraTestStateRef.current;
-          if (st === 'ascenso' || st === 'esperando_1500') {
-            setCameraTestState('espera_arriba');
-            setWaitCountdown(3);
-          }
+          
+          setCameraTestState('espera_arriba');
+          setWaitCountdown(3);
 
-        } else if (flancoNum === 2) {
-          // ─ 2º flanco confirmado: fin del descenso ─
+        } else if (currentTestState === 'descenso') {
+          // ─ Fin del descenso ─
           if (timers.finishedDesc) return;
           const rawDesc = getPlcVal(plcStateRef.current, 'OR_Tiempo_Descenso')
                        ?? getPlcVal(plcStateRef.current, 'OW_Tiempo_Descenso')
