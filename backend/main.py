@@ -689,8 +689,8 @@ plc_sim_state = {
     "b_LUZ_VERDE": False,
     "b_LUZ_AZUL": False,
     "b_LUZ_ROJA": False,
-    "Ob_Subir_Vallas": False,
-    "Ob_Bajar_Vallas": False,
+    "Ib_EV_VALLA_REPOSO": False,
+    "Ib_EV_VALLA_TRABAJO": False,
 
     # Entradas Analógicas (Simuladas)
     "R_Altura_Carretilla": 0.0,
@@ -701,11 +701,9 @@ plc_sim_state = {
     "b_Poner_Pegatina": False,
     "b_Abortar_Secuencia": False,
     
-    "Ob_Dtec_Valla_1_trabajo_LH": False,
-    "Ob_Dtec_Valla_1_trabajo_RH": False,
-    
-    "Ob_Dtec_Valla_2_trabajo_LH": False,
-    "Ob_Dtec_Valla_2_trabajo_RH": False,
+    "Ob_Trabajo_Cilindro_Valla_1": False,
+    "Ob_Trabajo_Cilindro_Valla_2": False,
+    "Ob_Reposo_Cilindro_Valla_1": True,
 
     # Temporización y Consignas del PLC
     "or_tiempo_elevacion": 0,
@@ -731,8 +729,8 @@ class PlcWriteParams(BaseModel):
     b_LUZ_VERDE: bool | None = None
     b_LUZ_AZUL: bool | None = None
     b_LUZ_ROJA: bool | None = None
-    Ob_Subir_Vallas: bool | None = None
-    Ob_Bajar_Vallas: bool | None = None
+    Ib_EV_VALLA_REPOSO: bool | None = None
+    Ib_EV_VALLA_TRABAJO: bool | None = None
     R_Altura_Carretilla: float | None = None
     W_Numero_Pallets: float | None = None
     b_Iniciar_Secuencia: bool | None = None
@@ -969,21 +967,17 @@ def write_to_plc(payload: dict):
                 plc_sim_state["b_LUZ_ROJA"] = False
                 plc_sim_state["b_LUZ_VERDE"] = False
         
-        # Lógica de simulación de vallas
-        if key == "Ob_Subir_Vallas" and value is True:
-            plc_sim_state["Ob_Bajar_Vallas"] = False
+        if key == "Ib_EV_VALLA_REPOSO" and value is True:
+            plc_sim_state["Ib_EV_VALLA_TRABAJO"] = False
+            plc_sim_state["Ob_Trabajo_Cilindro_Valla_1"] = False
+            plc_sim_state["Ob_Trabajo_Cilindro_Valla_2"] = False
+            plc_sim_state["Ob_Reposo_Cilindro_Valla_1"] = True
             
-            plc_sim_state["Ob_Dtec_Valla_1_trabajo_LH"] = False
-            plc_sim_state["Ob_Dtec_Valla_1_trabajo_RH"] = False
-            plc_sim_state["Ob_Dtec_Valla_2_trabajo_LH"] = False
-            plc_sim_state["Ob_Dtec_Valla_2_trabajo_RH"] = False
-            
-        elif key == "Ob_Bajar_Vallas" and value is True:
-            plc_sim_state["Ob_Subir_Vallas"] = False
-            plc_sim_state["Ob_Dtec_Valla_1_trabajo_LH"] = True
-            plc_sim_state["Ob_Dtec_Valla_1_trabajo_RH"] = True
-            plc_sim_state["Ob_Dtec_Valla_2_trabajo_LH"] = True
-            plc_sim_state["Ob_Dtec_Valla_2_trabajo_RH"] = True
+        elif key == "Ib_EV_VALLA_TRABAJO" and value is True:
+            plc_sim_state["Ib_EV_VALLA_REPOSO"] = False
+            plc_sim_state["Ob_Reposo_Cilindro_Valla_1"] = False
+            plc_sim_state["Ob_Trabajo_Cilindro_Valla_1"] = True
+            plc_sim_state["Ob_Trabajo_Cilindro_Valla_2"] = True
                     
     print(f"[OPC UA SIM] Escribiendo salidas al PLC: {escrito}")
     return {"status": "ok", "message": "Valores enviados al PLC simulado", "data": escrito}

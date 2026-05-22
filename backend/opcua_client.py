@@ -47,7 +47,7 @@ class OpcUaConfig:
 PLC_WRITE_VARS = [
     "Ib_LUZ_VERDE", "Ib_LUZ_AZUL", "Ib_LUZ_ROJA",
     "Ib_LUZ_Pulsador_1", "Ib_LUZ_Pulsador_2",
-    "Ib_Bit_VIDA_APP_PLC", "Ob_Subir_Vallas", "Ob_Bajar_Vallas"
+    "Ib_Bit_VIDA_APP_PLC", "Ib_EV_VALLA_REPOSO", "Ib_EV_VALLA_TRABAJO"
 ]
 
 # Variables críticas leídas en cada ciclo rápido
@@ -61,8 +61,8 @@ FAST_VARS_SET = {
     "OW_Tiempo_Elevacion", "OW_Tiempo_Descenso",
     # Variables operativas y de estado adicionales para refresco rápido (evitar lag de 1.5s)
     "Ob_Estado_Automatico",
-    "Ob_Dtec_Valla_1_trabajo_LH", "Ob_Dtec_Valla_1_trabajo_RH",
-    "Ob_Dtec_Valla_2_trabajo_LH", "Ob_Dtec_Valla_2_trabajo_RH",
+    "Ob_Trabajo_Cilindro_Valla_1", "Ob_Trabajo_Cilindro_Valla_2",
+    "Ob_Reposo_Cilindro_Valla_1",
     "OW_Numero_Pallets", "Ob_Repetir_Secuencia"
 }
 

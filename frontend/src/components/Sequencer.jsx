@@ -164,7 +164,7 @@ const STitle = ({ icon, label }) => (
   </div>
 );
 
-const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime }) => {
+const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime, error }) => {
   const handleTrigger = () => {
     if (iniciarPlcTime === null) {
       onConfirm();
@@ -272,6 +272,12 @@ const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime }) => {
         >
           Cancelar
         </button>
+        {error && (
+          <div className="text-red-500 font-black text-xl px-6 py-3 border-2 border-red-500/30 bg-red-500/10 rounded-xl flex items-center gap-2 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.15)] shrink-0">
+            <span>⚠️</span>
+            <span>{error}</span>
+          </div>
+        )}
         <button
           onClick={handleTrigger}
           disabled={displayTime !== null && displayTime > 0}
@@ -350,7 +356,7 @@ const CameraLED = ({ state, blinkTick }) => {
 
 // ─── Componente principal ────────────────────────────────────────────────────
 
-const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState, plcState, setStep2Overlay, setTestHUDOverlay, setWaitingForIniciar, sequencerRef, onSequenceEnd, onStepChange, operario, isSimulation, isAnyModalOpen, iniciarPlcTime, telemetry }) => {
+const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState, plcState, setStep2Overlay, setTestHUDOverlay, setWaitingForIniciar, sequencerRef, onSequenceEnd, onStepChange, operario, isSimulation, isAnyModalOpen, iniciarPlcTime, telemetry, setFenceAlarmActive, setFenceReposoAlarmActive }) => {
   const [stepStatus, setStepStatus] = useState([
     STEP_STATUS.ACTIVE,
     STEP_STATUS.PENDING,
@@ -358,6 +364,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     STEP_STATUS.PENDING,
     STEP_STATUS.PENDING,
   ]);
+  const [fenceState, setFenceState] = useState('idle'); // idle | lowering | down | raising
+  const [fenceTimer, setFenceTimer] = useState(0);
   const [stepStarted, setStepStarted] = useState([true, false, false, false, false]);
   // Timestamps (ms) de cuando cada paso empieza y termina
   const [stepStartTime, setStepStartTime] = useState([null, null, null, null, null]);
@@ -791,7 +799,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     } catch (e) { console.error("Error guardando log global:", e); }
   };
 
-  const resetSequence = () => {
+  const resetSequence = (keepRaisingFences = false) => {
     // Si aborta o resetea secuencia, la altura relativa tiene que ser 0 en el PLC
     const payload = {
       altura_relativa: 0,
@@ -832,6 +840,14 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     if (onErpData) onErpData(null);
     setErpPreview(null);
     previewConfirmedRef.current = null;
+    
+    if (!keepRaisingFences) {
+      setFenceState('idle');
+      setFenceTimer(0);
+      if (setFenceAlarmActive) setFenceAlarmActive(false);
+      if (setFenceReposoAlarmActive) setFenceReposoAlarmActive(false);
+      writePlc({ Ib_EV_VALLA_TRABAJO: false, Ib_EV_VALLA_REPOSO: false });
+    }
   };
 
   const handleAbort = () => {
@@ -846,21 +862,33 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       body: JSON.stringify(translatePayload(payload, isSimulation))
     }).catch(err => console.error("Error setting relative height to 0 on abort:", err));
 
+    // Levantar vallas inmediatamente por seguridad al abortar si no están en reposo
+    const needsToRaise = plcStateRef.current ? plcStateRef.current.Ob_Reposo_Cilindro_Valla_1 !== true : false;
+
+    if (needsToRaise) {
+      console.log("Aborted sequence. Fences not in rest position, raising them.");
+      setFenceState('raising');
+      setFenceTimer(60);
+      if (setFenceReposoAlarmActive) setFenceReposoAlarmActive(false);
+      writePlc({ Ib_EV_VALLA_REPOSO: true, Ib_EV_VALLA_TRABAJO: false });
+    } else {
+      console.log("Aborted sequence. Fences already in rest position.");
+    }
+
     if (onSequenceEnd) onSequenceEnd();
-    resetSequence();
+    resetSequence(needsToRaise);
   };
 
-  // ── Auto-Reseteo cuando la prueba termina y las vallas se abren ────────────
+  // ── Auto-Reseteo cuando la prueba termina y las vallas vuelven a reposo ────
   useEffect(() => {
     if (isSequenceFinished && plcState) {
-      const valla1Trabajo = plcState.Ob_Dtec_Valla_1_trabajo_LH;
-      const valla2Trabajo = plcState.Ob_Dtec_Valla_2_trabajo_RH;
-      if (!valla1Trabajo && !valla2Trabajo) {
+      const vallaReposo = plcState.Ob_Reposo_Cilindro_Valla_1 === true;
+      if (vallaReposo) {
         if (onSequenceEnd) onSequenceEnd();
         resetSequence();
       }
     }
-  }, [isSequenceFinished, plcState?.Ob_Dtec_Valla_1_trabajo_LH, plcState?.Ob_Dtec_Valla_2_trabajo_RH]);
+  }, [isSequenceFinished, plcState?.Ob_Reposo_Cilindro_Valla_1]);
 
 
 
@@ -998,19 +1026,126 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     setRepeatModal({ ...repeatModal, show: false });
   };
 
+  // Helper for writing variables to PLC
+  const writePlc = (payload) => {
+    return fetch(`${API_BASE}/plc/write`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(translatePayload({ ...payload, is_force: isSimulation }, isSimulation))
+    }).catch(err => console.error("Error writing to PLC:", err));
+  };
+
   // ── Abortar prueba en curso si se abre la jaula ───────────────
   useEffect(() => {
-    // Solo abortar si las vallas se abren en la etapa 4 o 5 (índices 3 y 4) Y la etapa ya está iniciada
+    // Solo abortar si las vallas se abren en la etapa 4 o 5 (índices 3 y 4) Y la etapa ya está iniciada Y ya estaban en trabajo (down)
     if (erpData && (currentStep === 3 || currentStep === 4) && stepStarted[currentStep]) {
-      const isDownFront = plcState?.Ob_Dtec_Valla_1_trabajo_LH === true;
-      const isDownRear = plcState?.Ob_Dtec_Valla_2_trabajo_RH === true;
+      const isDownFront = plcState?.Ob_Trabajo_Cilindro_Valla_1 === true;
+      const isDownRear = plcState?.Ob_Trabajo_Cilindro_Valla_2 === true;
 
-      if (!isDownRear || !isDownFront) {
+      if (fenceState === 'down' && (!isDownRear || !isDownFront)) {
         console.warn("Seguridad Comprometida: Vallas abiertas durante el test. Abortando...");
         handleAbort();
       }
     }
-  }, [plcState, erpData, currentStep, stepStarted]);
+  }, [plcState, erpData, currentStep, stepStarted, fenceState]);
+
+  // ── Control de Temporizadores y watchdog de vallas ───────────
+  useEffect(() => {
+    if (fenceState === 'idle') return;
+    
+    const intervalId = setInterval(() => {
+      setFenceTimer(prev => {
+        if (prev <= 1) {
+          clearInterval(intervalId);
+          if (fenceState === 'lowering') {
+            console.warn("Watchdog timeout: Vallas no alcanzaron posición de trabajo en 60 segundos.");
+            writePlc({ Ib_EV_VALLA_TRABAJO: false });
+            if (setFenceAlarmActive) {
+              setFenceAlarmActive(true);
+            }
+            setFenceState('idle');
+          } else if (fenceState === 'raising') {
+            console.warn("Watchdog timeout: Vallas no alcanzaron posición de reposo en 60 segundos.");
+            writePlc({ Ib_EV_VALLA_REPOSO: false });
+            if (setFenceReposoAlarmActive) {
+              setFenceReposoAlarmActive(true);
+            }
+            setFenceState('idle');
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(intervalId);
+  }, [fenceState]);
+
+  // ── Trigger bajar vallas al iniciar Etapa 4 o 5 ──────────────
+  useEffect(() => {
+    const isStage4or5 = currentStep === 3 || currentStep === 4;
+    if (isStage4or5 && stepStarted[currentStep]) {
+      if (fenceState === 'idle') {
+        const valla1Trabajo = plcState?.Ob_Trabajo_Cilindro_Valla_1 === true;
+        const valla2Trabajo = plcState?.Ob_Trabajo_Cilindro_Valla_2 === true;
+        
+        // Si los detectores ya están en posición de trabajo, no enviamos la orden al PLC
+        if (valla1Trabajo && valla2Trabajo) {
+          console.log("Fences already in work position. Setting fenceState to down without PLC action.");
+          setFenceState('down');
+          return;
+        }
+
+        console.log(`Starting fence lowering for step ${currentStep}`);
+        setFenceState('lowering');
+        setFenceTimer(60);
+        if (setFenceAlarmActive) setFenceAlarmActive(false);
+        if (setFenceReposoAlarmActive) setFenceReposoAlarmActive(false);
+        writePlc({ Ib_EV_VALLA_TRABAJO: true, Ib_EV_VALLA_REPOSO: false });
+      }
+    }
+  }, [currentStep, stepStarted, fenceState, plcState?.Ob_Trabajo_Cilindro_Valla_1, plcState?.Ob_Trabajo_Cilindro_Valla_2]);
+
+  // ── Detección de vallas abajo (trabajo) ─────────────────────
+  useEffect(() => {
+    if (fenceState === 'lowering') {
+      const valla1 = plcState?.Ob_Trabajo_Cilindro_Valla_1 === true;
+      const valla2 = plcState?.Ob_Trabajo_Cilindro_Valla_2 === true;
+      if (valla1 && valla2) {
+        console.log("Both fences detected in work position. Deactivating Ib_EV_VALLA_TRABAJO.");
+        setFenceState('down');
+        writePlc({ Ib_EV_VALLA_TRABAJO: false });
+      }
+    }
+  }, [plcState?.Ob_Trabajo_Cilindro_Valla_1, plcState?.Ob_Trabajo_Cilindro_Valla_2, fenceState]);
+
+  // ── Detección de vallas arriba (reposo) ──────────────────────
+  useEffect(() => {
+    if (fenceState === 'raising') {
+      const valla = plcState?.Ob_Reposo_Cilindro_Valla_1 === true;
+      if (valla) {
+        console.log("Fences detected in rest position. Deactivating Ib_EV_VALLA_REPOSO.");
+        setFenceState('idle');
+        writePlc({ Ib_EV_VALLA_REPOSO: false });
+      }
+    }
+  }, [plcState?.Ob_Reposo_Cilindro_Valla_1, fenceState]);
+
+  // ── Trigger subir vallas al finalizar Etapa 4 o 5 ────────────
+  useEffect(() => {
+    // Subir vallas solo cuando finalice el último proceso de etapas a realizar.
+    // Si la Etapa 5 (índice 4) está marcada como SKIP, la última etapa activa será la Etapa 4 (índice 3).
+    // Si no está omitida, las vallas permanecerán bajadas y se subirán al terminar la Etapa 5.
+    const step3OkAndLast = stepStatus[3] === STEP_STATUS.OK && stepStatus[4] === STEP_STATUS.SKIP;
+    const step4Ok = stepStatus[4] === STEP_STATUS.OK;
+    if ((step3OkAndLast || step4Ok) && (fenceState === 'down' || fenceState === 'lowering')) {
+      console.log("Test finished. Raising fences (watchdog 60s).");
+      setFenceState('raising');
+      setFenceTimer(60);
+      if (setFenceReposoAlarmActive) setFenceReposoAlarmActive(false);
+      writePlc({ Ib_EV_VALLA_REPOSO: true, Ib_EV_VALLA_TRABAJO: false });
+    }
+  }, [stepStatus[3], stepStatus[4], fenceState]);
 
   // ── Controles de PLC (Botones físicos) ────────────────────────────────────
 
@@ -1040,6 +1175,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
       // Permitir confirmación de secuencia (paso 1 / index 0)
       if (currentStep === 0 && erpPreview) {
+        const isReposo = plcState ? plcState.Ob_Reposo_Cilindro_Valla_1 === true : true;
+        if (!isReposo) {
+          console.warn("[INICIAR] Bloqueado: Vallas no están en posición de reposo para iniciar.");
+          setSeqError("Error: Las vallas deben estar en reposo para iniciar.");
+          return;
+        }
         onErpData(erpPreview);
         setErpPreview(null);
         setInputMode('scanner');
@@ -1054,16 +1195,6 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           const isTimerReady = telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador ?? false;
           if (!isTimerReady) {
             console.warn("[INICIAR] Bloqueado: Temporizadores no están listos (Ob_Ready_Temporizador es False)");
-            return;
-          }
-        }
-
-        // Bloquear el inicio de etapas 4 y 5 si las vallas no están en trabajo
-        if (currentStep === 3 || currentStep === 4) {
-          const isDownFront = plcState?.Ob_Dtec_Valla_1_trabajo_LH === true;
-          const isDownRear = plcState?.Ob_Dtec_Valla_2_trabajo_RH === true;
-          if (!isDownRear || !isDownFront) {
-            console.warn("[INICIAR] Bloqueado: Vallas no en posición para etapa", currentStep);
             return;
           }
         }
@@ -1124,6 +1255,13 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             return;
           }
           if (cameraTestState === 'standby') {
+            // Validar que las vallas estén realmente bajadas para iniciar el movimiento del test
+            const isDownFront = plcState?.Ob_Trabajo_Cilindro_Valla_1 === true;
+            const isDownRear = plcState?.Ob_Trabajo_Cilindro_Valla_2 === true;
+            if (!isDownRear || !isDownFront) {
+              console.warn("[INICIAR] Bloqueado: Vallas no en posición de trabajo para realizar la prueba.");
+              return;
+            }
             setCameraTestState('esperando_1500');
             setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
           } else if (cameraTestState === 'ok') {
@@ -1150,6 +1288,13 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           if (test5mState === 'ok') {
             markOk(4);
           } else if (test5mState === 'idle') {
+            // Validar que las vallas estén realmente bajadas para iniciar el movimiento del test
+            const isDownFront = plcState?.Ob_Trabajo_Cilindro_Valla_1 === true;
+            const isDownRear = plcState?.Ob_Trabajo_Cilindro_Valla_2 === true;
+            if (!isDownRear || !isDownFront) {
+              console.warn("[INICIAR] Bloqueado: Vallas no en posición de trabajo para realizar la prueba.");
+              return;
+            }
             setTest5mState('esperando_elevacion');
           }
         }
@@ -1739,16 +1884,6 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
       }
 
-      // Bloquear el inicio de etapas 4 y 5 si las vallas no están en trabajo
-      if (step === 3 || step === 4) {
-        const isDownFront = pState?.Ob_Dtec_Valla_1_trabajo_LH === true;
-        const isDownRear = pState?.Ob_Dtec_Valla_2_trabajo_RH === true;
-        if (!isDownRear || !isDownFront) {
-          console.warn("[DIRECTO] Bloqueado: Vallas no en posición para etapa", step);
-          return;
-        }
-      }
-
       // Desbloquear etapa
       console.log('[DIRECTO] Desbloqueando paso', step);
       setStepStarted(prev => {
@@ -1801,6 +1936,13 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           return;
         }
         if (cameraTestState === 'standby') {
+          // Validar que las vallas estén realmente bajadas para iniciar el movimiento del test
+          const isDownFront = pState?.Ob_Trabajo_Cilindro_Valla_1 === true;
+          const isDownRear = pState?.Ob_Trabajo_Cilindro_Valla_2 === true;
+          if (!isDownRear || !isDownFront) {
+            console.warn("[DIRECTO] Bloqueado: Vallas no en posición de trabajo para realizar la prueba.");
+            return;
+          }
           setCameraTestState('esperando_1500');
           setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
         } else if (cameraTestState === 'ok') markOk(3);
@@ -1811,7 +1953,18 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           setTimer5min(null);
           return;
         }
-        if (test5mState === 'ok') markOk(4);
+        if (test5mState === 'ok') {
+          markOk(4);
+        } else if (test5mState === 'idle') {
+          // Validar que las vallas estén realmente bajadas para iniciar el movimiento del test
+          const isDownFront = pState?.Ob_Trabajo_Cilindro_Valla_1 === true;
+          const isDownRear = pState?.Ob_Trabajo_Cilindro_Valla_2 === true;
+          if (!isDownRear || !isDownFront) {
+            console.warn("[DIRECTO] Bloqueado: Vallas no en posición de trabajo para realizar la prueba.");
+            return;
+          }
+          setTest5mState('esperando_elevacion');
+        }
       }
     }
   };
@@ -1892,6 +2045,15 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   // ── PASO 1B: Confirmar preview → cargar en ERP data y avanzar
   const handleConfirmPreview = () => {
     if (!erpPreview) return;
+
+    // Para iniciar la carga de la secuencia, las vallas tienen que estar en reposo
+    const isReposo = plcStateRef.current ? plcStateRef.current.Ob_Reposo_Cilindro_Valla_1 === true : true;
+    if (!isReposo) {
+      setSeqError("Error: Las vallas deben estar en reposo para iniciar.");
+      console.warn("Bloqueado: Intento de confirmación de secuencia con vallas fuera de reposo.");
+      return;
+    }
+
     const data = erpPreview;
     previewConfirmedRef.current = data.bastidor; // marcar como confirmado ANTES de limpiar
     setErpPreview(null);
@@ -1995,7 +2157,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       saveLog('OK');
       if (onSequenceEnd) onSequenceEnd();
       
-      const vallaTrabajo = plcStateRef.current?.Ob_Dtec_Valla_1_trabajo_LH || plcStateRef.current?.Ob_Dtec_Valla_2_trabajo_RH;
+      const vallaTrabajo = plcStateRef.current?.Ob_Trabajo_Cilindro_Valla_1 || plcStateRef.current?.Ob_Trabajo_Cilindro_Valla_2;
       if (vallaTrabajo) {
         fetch('http://localhost:8001/plc/write', {
           method: 'POST',
@@ -2352,7 +2514,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
 
         {/* Banner de seguridad: Vallas no en posición */}
-        {(erpData && (currentStep === 3 || currentStep === 4) && (!plcState?.Ob_Dtec_Valla_1_trabajo_LH || !plcState?.Ob_Dtec_Valla_2_trabajo_RH)) && (
+        {(erpData && (currentStep === 3 || currentStep === 4) && (!plcState?.Ob_Trabajo_Cilindro_Valla_1 || !plcState?.Ob_Trabajo_Cilindro_Valla_2)) && (
           <div className="bg-red-500/10 border border-red-500/50 text-red-500 px-3 py-2 rounded-lg flex items-center justify-center gap-2 font-black tracking-widest text-xs shadow-[0_0_15px_rgba(239,68,68,0.2)]">
             <AlertTriangle size={16} className="text-red-500" />
             VALLAS NO EN POSICIÓN
@@ -2366,6 +2528,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             iniciarPlcTime={iniciarPlcTime}
             onConfirm={handleConfirmPreview}
             onCancel={handleCancelarLectura}
+            error={seqError}
           />
         )}
 

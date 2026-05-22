@@ -27,12 +27,15 @@ const PROJECT_VARS = [
   "Ib_LUZ_VERDE",
   "Ib_LUZ_AZUL",
   "Ib_LUZ_ROJA",
+  "Ib_EV_VALLA_REPOSO",
+  "Ib_EV_VALLA_TRABAJO",
   "OW_Numero_Pallets",
   "Ob_Bit_VIDA_PLC_APP",
   "Ib_Bit_VIDA_APP_PLC",
   "OR_Altura_Carretilla",
-  "Ob_Dtec_Valla_1_trabajo_LH",
-  "Ob_Dtec_Valla_2_trabajo_RH",
+  "Ob_Trabajo_Cilindro_Valla_1",
+  "Ob_Trabajo_Cilindro_Valla_2",
+  "Ob_Reposo_Cilindro_Valla_1",
   "Ob_Estado_Automatico",
   "OW_Tiempo_Elevacion",
   "OW_Tiempo_Descenso",
@@ -53,12 +56,15 @@ const PROJECT_VAR_LABELS = {
   Ib_LUZ_VERDE: "Baliza Verde",
   Ib_LUZ_AZUL: "Baliza Azul",
   Ib_LUZ_ROJA: "Baliza Roja",
+  Ib_EV_VALLA_REPOSO: "Electro Válvula Reposo",
+  Ib_EV_VALLA_TRABAJO: "Electro Válvula Trabajo",
   OW_Numero_Pallets: "Número de Pallets",
   Ob_Bit_VIDA_PLC_APP: "Bit Vida (PLC → APP)",
   Ib_Bit_VIDA_APP_PLC: "Bit Vida (APP → PLC)",
   OR_Altura_Carretilla: "Láser Altura Elevación",
-  Ob_Dtec_Valla_1_trabajo_LH: "Detector Valla 1 Trabajo (LH)",
-  Ob_Dtec_Valla_2_trabajo_RH: "Detector Valla 2 Trabajo (RH)",
+  Ob_Trabajo_Cilindro_Valla_1: "Detector Cilindro Valla 1 Trabajo",
+  Ob_Trabajo_Cilindro_Valla_2: "Detector Cilindro Valla 2 Trabajo",
+  Ob_Reposo_Cilindro_Valla_1: "Detector Cilindro Valla Reposo",
   Ob_Estado_Automatico: "Estado Automático (Auto/Manual)",
   OW_Tiempo_Elevacion: "Tiempo Elevación",
   OW_Tiempo_Descenso: "Tiempo Descenso",
@@ -83,11 +89,12 @@ const PROJECT_VAR_DEFAULT_DIR = {
   Ob_Bit_VIDA_PLC_APP: "OUT",
   Ib_Bit_VIDA_APP_PLC: "IN",
   OR_Altura_Carretilla: "OUT",
-  Ob_Dtec_Valla_1_trabajo_LH: "OUT",
-  Ob_Dtec_Valla_2_trabajo_RH: "OUT",
+  Ob_Trabajo_Cilindro_Valla_1: "IN",
+  Ob_Trabajo_Cilindro_Valla_2: "IN",
+  Ob_Reposo_Cilindro_Valla_1: "IN",
   Ob_Estado_Automatico: "OUT",
-  Ob_Subir_Vallas: "OUT",
-  Ob_Bajar_Vallas: "OUT",
+  Ib_EV_VALLA_REPOSO: "OUT",
+  Ib_EV_VALLA_TRABAJO: "OUT",
   OW_Tiempo_Elevacion: "IN",
   OW_Tiempo_Descenso: "IN",
   inicia_temporizador_ascenso: "OUT",
@@ -113,8 +120,8 @@ const PlcModal = ({
     Ib_LUZ_Pulsador_1: false,
     Ib_LUZ_Pulsador_2: false,
     Ib_Bit_VIDA_APP_PLC: false,
-    Ob_Subir_Vallas: false,
-    Ob_Bajar_Vallas: false,
+    Ib_EV_VALLA_REPOSO: false,
+    Ib_EV_VALLA_TRABAJO: false,
   });
   const [analogs, setAnalogs] = useState({
     OR_Altura_Carretilla: 0,
@@ -332,8 +339,8 @@ const PlcModal = ({
         Ib_LUZ_Pulsador_1: !!telemetry.mappedPlc.Ib_LUZ_Pulsador_1,
         Ib_LUZ_Pulsador_2: !!telemetry.mappedPlc.Ib_LUZ_Pulsador_2,
         Ib_Bit_VIDA_APP_PLC: !!telemetry.mappedPlc.Ib_Bit_VIDA_APP_PLC,
-        Ob_Subir_Vallas: !!telemetry.mappedPlc.Ob_Subir_Vallas,
-        Ob_Bajar_Vallas: !!telemetry.mappedPlc.Ob_Bajar_Vallas,
+        Ib_EV_VALLA_REPOSO: !!telemetry.mappedPlc.Ib_EV_VALLA_REPOSO,
+        Ib_EV_VALLA_TRABAJO: !!telemetry.mappedPlc.Ib_EV_VALLA_TRABAJO,
       }));
       setAnalogs({
         OR_Altura_Carretilla: telemetry.mappedPlc.OR_Altura_Carretilla || 0,
@@ -548,10 +555,10 @@ const PlcModal = ({
                       [appVar]: !currentValue,
                       is_force: true,
                     };
-                    if (appVar === "Ob_Subir_Vallas")
-                      payload.Ob_Bajar_Vallas = false;
-                    if (appVar === "Ob_Bajar_Vallas")
-                      payload.Ob_Subir_Vallas = false;
+                    if (appVar === "Ib_EV_VALLA_REPOSO")
+                      payload.Ib_EV_VALLA_TRABAJO = false;
+                    if (appVar === "Ib_EV_VALLA_TRABAJO")
+                      payload.Ib_EV_VALLA_REPOSO = false;
                     sendWrite(payload);
                     lastWriteTime.current = Date.now();
                   }

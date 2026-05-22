@@ -44,6 +44,8 @@ function App() {
   const [pulseActive, setPulseActive] = useState(null); // { varName: string, timeLeft: number }
 
   const [alarms, setAlarms] = useState([]);
+  const [fenceAlarmActive, setFenceAlarmActive] = useState(false);
+  const [fenceReposoAlarmActive, setFenceReposoAlarmActive] = useState(false);
   const [showAlarmsHistory, setShowAlarmsHistory] = useState(false);
   const [showActiveAlarms, setShowActiveAlarms] = useState(false);
   const [hasUnreadAlarms, setHasUnreadAlarms] = useState(false);
@@ -288,6 +290,22 @@ function App() {
       list.push(...plcList);
     }
 
+    if (fenceAlarmActive) {
+      list.push({
+        id: 'SYS_FENCE_NOT_IN_WORK',
+        description: '[ALARMA CRÍTICA] Valla no está en trabajo.',
+        type: 'Alarma'
+      });
+    }
+
+    if (fenceReposoAlarmActive) {
+      list.push({
+        id: 'SYS_FENCE_NOT_IN_REPOSO',
+        description: '[ALARMA CRÍTICA] Valla no está en reposo.',
+        type: 'Alarma'
+      });
+    }
+
     if (!isSimulation && telemetry?.opcua_connected && !telemetry.mappedPlc?.Ob_Estado_Automatico && !telemetry.plc?.Ob_Estado_Automatico) {
       list.push({
         id: 'SYS_MODO_MANUAL',
@@ -297,18 +315,88 @@ function App() {
     }
 
     return list;
-  }, [telemetry?.plc, telemetry?.mappedPlc, telemetry?.opcua_connected, alarmConfig?.in, networkStatus.opc, networkStatus.lectorqr, isSimulation]);
+  }, [telemetry?.plc, telemetry?.mappedPlc, telemetry?.opcua_connected, alarmConfig?.in, networkStatus.opc, networkStatus.lectorqr, isSimulation, fenceAlarmActive, fenceReposoAlarmActive]);
+
+  // Sincronizar alarma de valla con el histórico (Trabajo)
+  useEffect(() => {
+    if (fenceAlarmActive) {
+      const now = new Date();
+      setAlarms(prev => {
+        if (prev.length > 0 && prev[0].description === '[ALARMA CRÍTICA] Valla no está en trabajo.') return prev;
+        setHasUnreadAlarms(true);
+        return [{
+          id: `SYS_FENCE_NOT_IN_WORK-${now.getTime()}`,
+          plcVar: 'SYS_FENCE_NOT_IN_WORK',
+          description: '[ALARMA CRÍTICA] Valla no está en trabajo.',
+          type: 'Alarma',
+          timestamp: now.toLocaleTimeString(),
+          startTime: now.getTime(),
+          endTime: null,
+          duration: 'Activa'
+        }, ...prev].slice(0, 5000);
+      });
+      setShowActiveAlarms(true);
+    } else {
+      const nowTime = Date.now();
+      setAlarms(prev => prev.map(alarm => {
+        if (alarm.plcVar === 'SYS_FENCE_NOT_IN_WORK' && !alarm.endTime) {
+          const durationMs = nowTime - alarm.startTime;
+          const secs = Math.floor(durationMs / 1000);
+          const mins = Math.floor(secs / 60);
+          const durationStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
+          return { ...alarm, endTime: nowTime, duration: durationStr };
+        }
+        return alarm;
+      }));
+    }
+  }, [fenceAlarmActive]);
+
+  // Sincronizar alarma de valla con el histórico (Reposo)
+  useEffect(() => {
+    if (fenceReposoAlarmActive) {
+      const now = new Date();
+      setAlarms(prev => {
+        if (prev.length > 0 && prev[0].description === '[ALARMA CRÍTICA] Valla no está en reposo.') return prev;
+        setHasUnreadAlarms(true);
+        return [{
+          id: `SYS_FENCE_NOT_IN_REPOSO-${now.getTime()}`,
+          plcVar: 'SYS_FENCE_NOT_IN_REPOSO',
+          description: '[ALARMA CRÍTICA] Valla no está en reposo.',
+          type: 'Alarma',
+          timestamp: now.toLocaleTimeString(),
+          startTime: now.getTime(),
+          endTime: null,
+          duration: 'Activa'
+        }, ...prev].slice(0, 5000);
+      });
+      setShowActiveAlarms(true);
+    } else {
+      const nowTime = Date.now();
+      setAlarms(prev => prev.map(alarm => {
+        if (alarm.plcVar === 'SYS_FENCE_NOT_IN_REPOSO' && !alarm.endTime) {
+          const durationMs = nowTime - alarm.startTime;
+          const secs = Math.floor(durationMs / 1000);
+          const mins = Math.floor(secs / 60);
+          const durationStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
+          return { ...alarm, endTime: nowTime, duration: durationStr };
+        }
+        return alarm;
+      }));
+    }
+  }, [fenceReposoAlarmActive]);
 
   useEffect(() => {
-    if (!networkStatus.opc || telemetry?.opcua_connected === false || networkStatus.lectorqr === false) {
+    if (!networkStatus.opc || telemetry?.opcua_connected === false || networkStatus.lectorqr === false || fenceAlarmActive || fenceReposoAlarmActive) {
       setShowActiveAlarms(true);
     }
-  }, [networkStatus.opc, telemetry?.opcua_connected, networkStatus.lectorqr]);
+  }, [networkStatus.opc, telemetry?.opcua_connected, networkStatus.lectorqr, fenceAlarmActive, fenceReposoAlarmActive]);
 
   // Reset de alarmas: solo pulso al PLC, se conserva el histórico
   const handleResetAlarms = useCallback(() => {
     pulsePlc('Ob_Reset_Alarmas', 0.5);
     setHasUnreadAlarms(false);
+    setFenceAlarmActive(false);
+    setFenceReposoAlarmActive(false);
 
     // Si la alarma es persistente (no se limpia tras el reset),
     // tras 1.5 segundos forzamos que se vuelva a detectar como "nueva"
@@ -1024,7 +1112,7 @@ function App() {
           )}
 
           {/* BANNER GIGANTE DE SEGURIDAD: FALTAN VALLAS */}
-          {isMainScreen && erpData && (currentStep === 3 || currentStep === 4) && (!appPlc?.Ob_Dtec_Valla_1_trabajo_LH || !appPlc?.Ob_Dtec_Valla_2_trabajo_RH) && (
+          {isMainScreen && erpData && (currentStep === 3 || currentStep === 4) && (!appPlc?.Ob_Trabajo_Cilindro_Valla_1 || !appPlc?.Ob_Trabajo_Cilindro_Valla_2) && (
             <div className="absolute top-28 left-1/2 -translate-x-1/2 z-50 bg-red-600/90 border-4 border-red-500 text-white px-8 py-4 rounded-xl shadow-[0_0_50px_rgba(220,38,38,0.8)] flex items-center gap-6 backdrop-blur-md">
               <AlertTriangle size={56} className="text-white drop-shadow-lg" />
               <div className="flex flex-col">
@@ -1035,7 +1123,7 @@ function App() {
           )}
 
           {/* BANNER FIJO: VALLAS ABAJO (EN TRABAJO) */}
-          {isMainScreen && (appPlc?.Ob_Dtec_Valla_1_trabajo_LH || appPlc?.Ob_Dtec_Valla_2_trabajo_RH) && (
+          {isMainScreen && (appPlc?.Ob_Trabajo_Cilindro_Valla_1 || appPlc?.Ob_Trabajo_Cilindro_Valla_2) && (
             <div className="absolute top-0 left-1/2 -translate-x-1/2 z-[60] bg-yellow-400 text-black px-10 py-2 rounded-b-3xl border-4 border-t-0 border-black shadow-[0_15px_40px_rgba(234,179,8,0.6)] flex items-center gap-6" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(0,0,0,0.2) 20px, rgba(0,0,0,0.2) 40px)' }}>
               <AlertTriangle size={36} className="text-black drop-shadow-sm animate-pulse" />
               <div className="flex flex-col text-center">
@@ -1554,16 +1642,16 @@ function App() {
                 <div className="flex gap-2">
                   <button
                     onClick={async () => {
-                      const newVal = !appPlc.Ob_Subir_Vallas;
+                      const newVal = !appPlc.Ib_EV_VALLA_REPOSO;
                       try {
                         await fetch('http://localhost:8001/plc/write', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ Ob_Subir_Vallas: newVal, Ob_Bajar_Vallas: false, is_force: true })
+                          body: JSON.stringify({ Ib_EV_VALLA_REPOSO: newVal, Ib_EV_VALLA_TRABAJO: false, is_force: true })
                         });
                       } catch (e) { }
                     }}
-                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${appPlc.Ob_Subir_Vallas
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${appPlc.Ib_EV_VALLA_REPOSO
                       ? 'bg-indigo-500 border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.6)] text-white scale-105'
                       : 'bg-[#1d2930] border-[#2e404a] text-gray-400 hover:bg-indigo-900/50 hover:text-indigo-300'
                       } border-2`}
@@ -1573,16 +1661,16 @@ function App() {
                   </button>
                   <button
                     onClick={async () => {
-                      const newVal = !appPlc.Ob_Bajar_Vallas;
+                      const newVal = !appPlc.Ib_EV_VALLA_TRABAJO;
                       try {
                         await fetch('http://localhost:8001/plc/write', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ Ob_Bajar_Vallas: newVal, Ob_Subir_Vallas: false, is_force: true })
+                          body: JSON.stringify({ Ib_EV_VALLA_TRABAJO: newVal, Ib_EV_VALLA_REPOSO: false, is_force: true })
                         });
                       } catch (e) { }
                     }}
-                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${appPlc.Ob_Bajar_Vallas
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${appPlc.Ib_EV_VALLA_TRABAJO
                       ? 'bg-orange-500 border-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.6)] text-white scale-105'
                       : 'bg-[#1d2930] border-[#2e404a] text-gray-400 hover:bg-orange-900/50 hover:text-orange-300'
                       } border-2`}
@@ -1674,6 +1762,8 @@ function App() {
             setWaitingForIniciar={setWaitingForIniciar}
             onSequenceEnd={resetCycleTimer}
             isAnyModalOpen={!isMainScreen || !operario}
+            setFenceAlarmActive={setFenceAlarmActive}
+            setFenceReposoAlarmActive={setFenceReposoAlarmActive}
           />
         </div>
       </div>

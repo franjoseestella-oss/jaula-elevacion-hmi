@@ -195,19 +195,39 @@ const CageAssembly = ({ plcState, currentStep, erpData }) => {
 
   useFrame((state, delta) => {
     // Determine target height based on plcState
-    // Default up if nothing specified, or UP if Ob_Subir_Vallas
-    // Leer el estado de los detectores de trabajo (Valla 1 = Adelante, Valla 2 = Atras)
-    const isDownFront = plcRef.current?.Ob_Dtec_Valla_1_trabajo_LH === true;
-    const isUpFront = !isDownFront;
+    // Leer el estado de los detectores de trabajo y reposo (Valla 1 = Adelante, Valla 2 = Atras)
+    const isDownFront = plcRef.current?.Ob_Trabajo_Cilindro_Valla_1 === true;
+    const isUpFront = plcRef.current?.Ob_Reposo_Cilindro_Valla_1 === true;
     
-    const isDownRear = plcRef.current?.Ob_Dtec_Valla_2_trabajo_RH === true;
-    const isUpRear = !isDownRear;
+    const isDownRear = plcRef.current?.Ob_Trabajo_Cilindro_Valla_2 === true;
+    const isUpRear = plcRef.current?.Ob_Reposo_Cilindro_Valla_1 === true;
+
+    const commandDown = plcRef.current?.Ib_EV_VALLA_TRABAJO === true;
+    const commandUp = plcRef.current?.Ib_EV_VALLA_REPOSO === true;
     
-    // La posición original de la valla trasera (Valla 2) en reposo es Y=4.0
-    // La valla frontal (Valla 1) no debe bajar tanto para no chocar con los pallets (Y=5.4)
-    // Al subir, ambas se elevan a Y=7.1 (tope de la jaula es 8.7, la valla mide 3.0, 7.1 + 1.5 = 8.6)
-    const targetRearY = isDownRear ? 4.0 : (isUpRear ? 7.1 : 4.0);
-    const targetFrontY = isDownFront ? 5.4 : (isUpFront ? 7.1 : 5.4);
+    // La posición original de la valla trasera (Valla 2) en reposo es Y=4.0 (abajo/trabajo) o 7.1 (reposo)
+    // La valla frontal (Valla 1) no debe bajar tanto para no chocar con los pallets (Y=5.4 trabajo) o 7.1 (reposo)
+    let targetFrontY = 7.1;
+    if (isDownFront) {
+      targetFrontY = 5.4;
+    } else if (isUpFront) {
+      targetFrontY = 7.1;
+    } else if (commandDown) {
+      targetFrontY = 5.4;
+    } else if (commandUp) {
+      targetFrontY = 7.1;
+    }
+
+    let targetRearY = 7.1;
+    if (isDownRear) {
+      targetRearY = 4.0;
+    } else if (isUpRear) {
+      targetRearY = 7.1;
+    } else if (commandDown) {
+      targetRearY = 4.0;
+    } else if (commandUp) {
+      targetRearY = 7.1;
+    }
 
     if (gateRef.current) {
       gateRef.current.position.y += (targetRearY - gateRef.current.position.y) * delta * 5;
