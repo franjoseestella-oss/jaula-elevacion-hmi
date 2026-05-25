@@ -1222,6 +1222,14 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           }
         }
 
+        // Bloquear si es etapa 4 o 5 (index 3 y 4) y la carretilla no está por debajo de la cota inicial
+        if (currentStep === 3 || currentStep === 4) {
+          if (!isCarriageBelowCota) {
+            console.warn("[INICIAR] Bloqueado: La carretilla debe estar por debajo de la cota inicial para comenzar la secuencia.");
+            return;
+          }
+        }
+
         console.log('[INICIAR] Desbloqueando paso', currentStep);
         setStepStarted(prev => {
           const next = [...prev];
@@ -1903,6 +1911,14 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         const isTimerReady = telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? pState?.Ob_Ready_Temporizador ?? false;
         if (!isTimerReady) {
           console.warn("[DIRECTO] Bloqueado: Temporizadores no están ready");
+          return;
+        }
+      }
+
+      // Bloquear si es etapa 4 o 5 (index 3 y 4) y la carretilla no está por debajo de la cota inicial
+      if (step === 3 || step === 4) {
+        if (!isCarriageBelowCota) {
+          console.warn("[DIRECTO] Bloqueado: La carretilla debe estar por debajo de la cota inicial para comenzar la secuencia.");
           return;
         }
       }
@@ -3068,8 +3084,19 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                 </div>
 
                 {!stepStarted[3] ? (
-                  <div className="flex items-center gap-2 text-yellow-400 font-bold bg-yellow-400/10 p-2 mt-1 rounded border border-yellow-400/20 text-[9px]">
-                    <AlertTriangle size={12} /> ESPERANDO: Pulse INICIAR SECUENCIA
+                  <div className="flex flex-col gap-2">
+                    {!isCarriageBelowCota && (
+                      <div className="flex items-center justify-between p-2 mt-1 rounded-lg border text-[9px] bg-red-900/20 border-red-500/40 text-red-400">
+                        <span className="font-bold uppercase tracking-wider flex items-center gap-1">
+                          <AlertTriangle size={11}/>
+                          Baje por debajo de {cotaInicial} mm para iniciar
+                        </span>
+                        <span className="font-mono font-black">{currentHeightMm} mm</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 text-yellow-400 font-bold bg-yellow-400/10 p-2 mt-1 rounded border border-yellow-400/20 text-[9px]">
+                      <AlertTriangle size={12} /> ESPERANDO: Pulse INICIAR SECUENCIA
+                    </div>
                   </div>
                 ) : (
                   <>
@@ -3121,8 +3148,19 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
               <DataLine label="Altura mástil" value={`${erpData.altura_max_interm ?? '—'} mm`} />
 
               {!stepStarted[4] ? (
-                <div className="flex items-center gap-2 text-yellow-400 font-bold bg-yellow-400/10 p-2 mt-1 mb-2 rounded border border-yellow-400/20 text-[9px]">
-                  <AlertTriangle size={12} /> ESPERANDO: Pulse INICIAR SECUENCIA
+                <div className="flex flex-col gap-2">
+                  {!isCarriageBelowCota && (
+                    <div className="flex items-center justify-between p-2 mt-1 rounded-lg border text-[9px] bg-red-900/20 border-red-500/40 text-red-400">
+                      <span className="font-bold uppercase tracking-wider flex items-center gap-1">
+                        <AlertTriangle size={11}/>
+                        Baje por debajo de {cotaInicial} mm para iniciar
+                      </span>
+                      <span className="font-mono font-black">{currentHeightMm} mm</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 text-yellow-400 font-bold bg-yellow-400/10 p-2 mt-1 mb-2 rounded border border-yellow-400/20 text-[9px]">
+                    <AlertTriangle size={12} /> ESPERANDO: Pulse INICIAR SECUENCIA
+                  </div>
                 </div>
               ) : test5mState === 'esperando_elevacion' ? (
                 <div className="flex items-center justify-between p-2 mt-1 mb-2 rounded-lg border text-[9px] bg-amber-900/20 border-amber-500/40 text-amber-400">
