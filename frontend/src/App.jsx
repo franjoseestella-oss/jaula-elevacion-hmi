@@ -1136,14 +1136,14 @@ function App() {
 
           {/* BANNER GIGANTE DE CARGA (Para Test con Carga) */}
           {erpData && (currentStep === 3 || currentStep === 4) && (
-            <div className={`absolute top-10 right-10 z-50 px-6 py-4 rounded-2xl border-2 backdrop-blur-md shadow-2xl flex flex-col gap-3 ${(appPlc?.OW_Numero_Pallets || 0) * 250 === erpData.capac_interm_1
+            <div className={`absolute top-10 right-10 z-50 px-6 py-4 rounded-2xl border-2 backdrop-blur-md shadow-2xl flex flex-col gap-3 ${(appPlc?.OW_Numero_Pallets || 0) * 250 === erpData.peso_pruebas
               ? 'bg-green-600/80 border-green-400'
               : 'bg-[#0a0f12]/90 border-logisnext-magenta'
               }`}>
               <h3 className="text-xs font-black uppercase tracking-widest text-gray-300 border-b border-white/20 pb-2">Control de Carga</h3>
               <div className="flex justify-between items-center gap-8">
                 <span className="text-sm font-bold text-gray-400 tracking-wider">CARGA REQUERIDA (ERP)</span>
-                <span className="text-xl font-black text-logisnext-magenta">{erpData.capac_interm_1 || 0} kg</span>
+                <span className="text-xl font-black text-logisnext-magenta">{erpData.peso_pruebas || 0} kg</span>
               </div>
               <div className="flex justify-between items-end gap-8">
                 <span className="text-sm font-bold text-gray-400 tracking-wider">CARGA ACTUAL (PLC)</span>

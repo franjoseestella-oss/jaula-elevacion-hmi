@@ -24,7 +24,7 @@ a = Analysis(
         # Módulo database completo
         ('database', 'database'),
         # Fichero de configuración de BD
-        ('database.config', '.'),
+        ('../database.config', '.'),
         # erp_sync (por si PyInstaller no lo detecta automáticamente)
         ('erp_sync.py', '.'),
     ],

@@ -3,9 +3,25 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-# Leer el archivo .config
+# Obtener la ruta del archivo .config de forma robusta (desarrollo y producción)
+def get_config_path():
+    import sys
+    candidates = [
+        os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'database.config'),
+        os.path.join(os.getcwd(), 'database.config'),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'database.config'),
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'database.config'),
+    ]
+    if hasattr(sys, '_MEIPASS'):
+        candidates.append(os.path.join(sys._MEIPASS, 'database.config'))
+        
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return 'database.config'
+
 config = configparser.ConfigParser()
-config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'database.config')
+config_path = get_config_path()
 config.read(config_path)
 
 # Extraer la URL de la base de datos

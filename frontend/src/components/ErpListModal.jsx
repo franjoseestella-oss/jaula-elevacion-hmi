@@ -205,7 +205,7 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
           <div className="flex-1 overflow-auto custom-scrollbar">
             {/* Cabecera */}
             <div className="sticky top-0 z-10 grid gap-4 px-6 py-4 bg-[#0a0f12] border-b border-[#2e404a] items-center"
-              style={{ gridTemplateColumns: '1.6fr 0.8fr 0.7fr 1.2fr 0.9fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 40px' }}>
+              style={{ gridTemplateColumns: '1.6fr 0.8fr 0.7fr 1.2fr 0.9fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.9fr 40px' }}>
               <ColHeader label="Bastidor" field="bastidor" />
               <ColHeader label="F.montaje" field="fecha_montaje" />
               <ColHeader label="Sec." field="secuencia" />
@@ -218,9 +218,10 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
               <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">↑max c</span>
               <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">↓min c</span>
               <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">↓max c</span>
+              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">P.Pruebas</span>
               <span />
             </div>
-
+ 
             {/* Filas */}
             {loading ? (
               <div className="flex flex-col items-center justify-center py-20 gap-3 text-logisnext-slate">
@@ -245,7 +246,7 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
                         ? 'bg-red-600/30 border-red-500/80 hover:bg-red-500/50 shadow-[inset_4px_0_0_rgba(239,68,68,1)]'
                         : 'border-[#1a262d]/60 hover:bg-logisnext-magenta/5 hover:border-logisnext-magenta/20'
                     }`}
-                  style={{ gridTemplateColumns: '1.6fr 0.8fr 0.7fr 1.2fr 0.9fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 40px' }}
+                  style={{ gridTemplateColumns: '1.6fr 0.8fr 0.7fr 1.2fr 0.9fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.9fr 40px' }}
                 >
                   {/* Bastidor */}
                   <span className="font-mono text-sm text-logisnext-magenta font-bold tracking-wide group-hover:text-white transition-colors truncate">
@@ -294,6 +295,10 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
                   {/* Tpo descenso max c/carga */}
                   <span className="font-mono text-sm text-violet-400/60">
                     {cs2s(item.tpo_descenso_max)}
+                  </span>
+                  {/* Peso pruebas */}
+                  <span className="font-mono text-sm text-logisnext-magenta font-bold">
+                    {item.peso_pruebas != null ? Math.round(item.peso_pruebas) : '—'}
                   </span>
                   {/* Detalle */}
                   <div className="flex items-center justify-end">

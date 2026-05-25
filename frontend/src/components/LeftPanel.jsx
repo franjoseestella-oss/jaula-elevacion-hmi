@@ -81,6 +81,7 @@ const LeftPanel = ({ data, onErpData }) => {
                 <h3 className="text-[10px] text-logisnext-lightslate font-black uppercase tracking-widest">Parámetros</h3>
               </div>
               <DataRow label="ALT. MAX INTERM." value={data.altura_max_interm != null ? `${data.altura_max_interm} mm` : null} highlight />
+              <DataRow label="PESO PRUEBAS" value={data.peso_pruebas != null ? `${data.peso_pruebas} kg` : null} highlight />
               <DataRow label="CAPAC. INTERM. 1" value={data.capac_interm_1 != null ? `${data.capac_interm_1} kg` : null} />
               <DataRow label="CAPAC. INTERM. 2" value={data.capac_interm_2 != null ? `${data.capac_interm_2} kg` : null} />
               <DataRow label="CAPAC. INTERM. 3" value={data.capac_interm_3 != null ? `${data.capac_interm_3} kg` : null} />

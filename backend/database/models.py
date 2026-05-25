@@ -23,6 +23,7 @@ class ErpCarretilla(Base):
     capac_interm_1      = Column(Float, nullable=True)  # kg
     capac_interm_2      = Column(Float, nullable=True)
     capac_interm_3      = Column(Float, nullable=True)
+    peso_pruebas        = Column(Float, nullable=True)  # kg (peso de pruebas)
 
     # Tiempos CON CARGA (segundos)
     tpo_elevac_min      = Column(Float, nullable=True)

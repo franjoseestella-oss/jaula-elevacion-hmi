@@ -1,8 +1,15 @@
+import os
+import sys
 import configparser
 from sqlalchemy import create_engine, text
 
+# Añadir la carpeta backend al path para poder importar database.database
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from database.database import get_config_path
+
 config = configparser.ConfigParser()
-config.read('database.config')
+config_path = get_config_path()
+config.read(config_path)
 url = config.get('DATABASE', 'url')
 
 engine = create_engine(url)
@@ -32,9 +39,9 @@ with engine.connect() as conn:
         print('Add AVG_ELEVACION_CARGA failed:', e)
 
     try:
-        conn.execute(text("ALTER TABLE LOG_TABLA ADD AVG_DESCENSO_CARGA FLOAT NULL;"))
-        print('Added AVG_DESCENSO_CARGA')
+        conn.execute(text("ALTER TABLE JAULA_ERP ADD peso_pruebas FLOAT NULL;"))
+        print('Added peso_pruebas to JAULA_ERP')
     except Exception as e:
-        print('Add AVG_DESCENSO_CARGA failed:', e)
+        print('Add peso_pruebas failed:', e)
         
     conn.commit()

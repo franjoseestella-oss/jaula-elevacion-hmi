@@ -219,10 +219,13 @@ const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime, error }) =>
               </div>
             </div>
           )}
-          {(data.capac_interm_1 != null || data.capac_interm_2 != null) && (
+          {(data.peso_pruebas != null || data.capac_interm_1 != null || data.capac_interm_2 != null) && (
             <div>
-              <STitle icon="⚖" label="Capacidades" />
+              <STitle icon="⚖" label="Cargas y Capacidades" />
               <div className="flex flex-col gap-7">
+                {data.peso_pruebas != null && (
+                  <MF label="Peso Pruebas" value={data.peso_pruebas} unit="kg" size="lg" highlight />
+                )}
                 <MF label="Capac. Interm. 1" value={data.capac_interm_1 ?? 0} unit="kg" size="lg" />
                 <MF label="Capac. Interm. 2" value={data.capac_interm_2 ?? 0} unit="kg" size="lg" />
                 {data.capac_interm_3 != null && (
@@ -771,7 +774,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       FECHA_HORA_INICIO_CARGA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_INICIO_CARGA : (stepStartTime[3] ? new Date(stepStartTime[3]).toISOString() : null),
       FECHA_HORA_FIN_CARGA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.FECHA_HORA_FIN_CARGA : (stepStartTime[3] && stepDurations[3] ? new Date(stepStartTime[3] + stepDurations[3] * 1000).toISOString() : null),
       ESTADO_CARGA: estadoConCarga,
-      CARGA_CONSIGNADA: erp?.capac_interm_1,
+      CARGA_CONSIGNADA: erp?.peso_pruebas,
       CARGA_GET: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.CARGA_GET : sData[4].cargaGet,
 
       // Etapa 4: 5 Minutos
@@ -1232,7 +1235,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         } else if (stepStatus[3] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
           // Validación de carga
           const currentPallets = plcState?.OW_Numero_Pallets || 0;
-          const targetLoad = erpData?.capac_interm_1 || 0;
+          const targetLoad = erpData?.peso_pruebas || 0;
           const currentLoad = currentPallets * 250;
 
           if (currentLoad !== targetLoad) {
@@ -1269,7 +1272,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           }
         } else if (stepStatus[4] === STEP_STATUS.ACTIVE) {
           const currentPallets = isSimulation ? (window.__simPallets || 0) : (plcStateRef.current?.OW_Numero_Pallets || 0);
-          const targetLoad = erpData?.capac_interm_1 || 0;
+          const targetLoad = erpData?.peso_pruebas || 0;
           const currentLoad = currentPallets * 250;
 
           if (currentLoad !== targetLoad) {
@@ -1913,7 +1916,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         } else if (cameraTestState === 'ok') markOk(2);
       } else if (statuses[3] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') {
         const currentPallets = pState?.OW_Numero_Pallets || 0;
-        const targetLoad = erpDataRef.current?.capac_interm_1 || 0;
+        const targetLoad = erpDataRef.current?.peso_pruebas || 0;
         const currentLoad = currentPallets * 250;
 
         if (currentLoad !== targetLoad) {
@@ -2231,7 +2234,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
         setTestHUDOverlay({
           title: isSinCarga ? 'TEST SIN CARGA' : 'TEST CON CARGA',
-          subtitle: `PRUEBA ${is1mTest ? '1m' : '2m'}${!isSinCarga ? ` | ${erpData.capac_interm_1 ?? '—'} kg` : ''}`,
+          subtitle: `PRUEBA ${is1mTest ? '1m' : '2m'}${!isSinCarga ? ` | ${erpData.peso_pruebas ?? '—'} kg` : ''}`,
           cameraTestState,
           ledState,
           minElev: ds2s(minElev),
@@ -2362,7 +2365,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         : parseFloat(Number(plcStateRef.current?.OR_Altura_Carretilla || 0).toFixed(2));
 
       const currentPallets = plcStateRef.current?.OW_Numero_Pallets || 0;
-      const targetLoad = erpDataRef.current?.capac_interm_1 || 0;
+      const targetLoad = erpDataRef.current?.peso_pruebas || 0;
       const currentLoad = currentPallets * 250;
 
       setTest5mState(prevState => {
@@ -2947,7 +2950,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             return (
               <>
                 <div className="flex flex-col gap-1 border border-[#2e404a] p-2 rounded-lg bg-[#0a0f12]">
-                  <DataLine label="Carga Requerida ERP" value={erpData.capac_interm_1 != null ? `${erpData.capac_interm_1} kg` : '—'} highlight />
+                  <DataLine label="Carga Requerida ERP" value={erpData.peso_pruebas != null ? `${erpData.peso_pruebas} kg` : '—'} highlight />
                   <DataLine label="Carga Actual (PLC)" value={plcState?.OW_Numero_Pallets ? `${plcState.OW_Numero_Pallets * 250} kg` : '0 kg'} highlight={false} />
                   {plcState?.OW_Numero_Pallets > 0 && (
                     <span className="text-[8px] text-logisnext-slate ml-auto -mt-1 mb-1 block">
@@ -3065,7 +3068,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                       </div>
                     )}
                     <p className="text-[9px] text-logisnext-slate leading-relaxed mt-1">
-                      Carga la carretilla con la capacidad indicada ({erpData.capac_interm_1} kg) y ejecuta la prueba. La cámara registrará los tiempos de ciclo.
+                      Carga la carretilla con la capacidad indicada ({erpData.peso_pruebas} kg) y ejecuta la prueba. La cámara registrará los tiempos de ciclo.
                     </p>
                     {palletState === 'animating' && (
                       <div className="flex items-center gap-2 mt-2 py-1.5 px-2 bg-logisnext-magenta/10 border border-logisnext-magenta/30 rounded text-[9px] text-logisnext-magenta">
@@ -3084,7 +3087,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           )}
           {stepStatus[3] === STEP_STATUS.OK && erpData && (
             <div className="flex flex-col gap-1">
-              <DataLine label="Carga" value={`${erpData.capac_interm_1 ?? '—'} kg ✓`} highlight />
+              <DataLine label="Carga" value={`${erpData.peso_pruebas ?? '—'} kg ✓`} highlight />
               <DataLine label="Duración" value={formatDuration(stepDurations[3])} />
             </div>
           )}

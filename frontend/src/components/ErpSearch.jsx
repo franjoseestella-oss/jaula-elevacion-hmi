@@ -5,8 +5,8 @@ const API_BASE = 'http://127.0.0.1:8001';
 
 const ErpSearch = ({ onErpData }) => {
   const [secuencia, setSecuencia] = useState('');
-  const [status, setStatus]       = useState('idle');
-  const [message, setMessage]     = useState('');
+  const [status, setStatus] = useState('idle');
+  const [message, setMessage] = useState('');
   const [syncLoading, setSyncLoading] = useState(false);
   const inputRef = useRef(null);
 
@@ -19,7 +19,7 @@ const ErpSearch = ({ onErpData }) => {
     setMessage('');
 
     try {
-      const res  = await fetch(`${API_BASE}/erp/secuencia/${encodeURIComponent(query)}`);
+      const res = await fetch(`${API_BASE}/erp/secuencia/${encodeURIComponent(query)}`);
       const data = await res.json();
 
       if (res.ok) {
@@ -43,7 +43,7 @@ const ErpSearch = ({ onErpData }) => {
   const handleSync = async () => {
     setSyncLoading(true);
     try {
-      const res  = await fetch(`${API_BASE}/erp/sync`, { method: 'POST' });
+      const res = await fetch(`${API_BASE}/erp/sync`, { method: 'POST' });
       const data = await res.json();
       setStatus(res.ok ? 'found' : 'error');
       setMessage(data.message || data.detail || (res.ok ? 'Sync OK' : 'Error.'));
@@ -56,11 +56,11 @@ const ErpSearch = ({ onErpData }) => {
   };
 
   const statusConfig = {
-    idle:      { border: 'border-[#2e404a]',            icon: null,                                                   textColor: 'text-logisnext-lightslate' },
-    loading:   { border: 'border-logisnext-magenta/60', icon: <Loader2 size={14} className="animate-spin text-logisnext-magenta" />, textColor: 'text-logisnext-magenta' },
-    found:     { border: 'border-green-500/60',         icon: <CheckCircle2 size={14} className="text-green-400" />, textColor: 'text-green-400' },
-    not_found: { border: 'border-yellow-500/60',        icon: <AlertTriangle size={14} className="text-yellow-400" />, textColor: 'text-yellow-400' },
-    error:     { border: 'border-red-500/60',           icon: <AlertTriangle size={14} className="text-red-400" />,  textColor: 'text-red-400' },
+    idle: { border: 'border-[#2e404a]', icon: null, textColor: 'text-logisnext-lightslate' },
+    loading: { border: 'border-logisnext-magenta/60', icon: <Loader2 size={14} className="animate-spin text-logisnext-magenta" />, textColor: 'text-logisnext-magenta' },
+    found: { border: 'border-green-500/60', icon: <CheckCircle2 size={14} className="text-green-400" />, textColor: 'text-green-400' },
+    not_found: { border: 'border-yellow-500/60', icon: <AlertTriangle size={14} className="text-yellow-400" />, textColor: 'text-yellow-400' },
+    error: { border: 'border-red-500/60', icon: <AlertTriangle size={14} className="text-red-400" />, textColor: 'text-red-400' },
   };
   const cfg = statusConfig[status];
 

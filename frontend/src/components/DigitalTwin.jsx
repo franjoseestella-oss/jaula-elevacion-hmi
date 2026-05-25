@@ -342,7 +342,7 @@ const CageAssembly = ({ plcState, currentStep, erpData }) => {
       <group position={[0, 0, 2.2]}>
         {(() => {
           const showWhitePallets = currentStep === 3 || currentStep === 4;
-          const targetWeight = erpData?.capac_interm_1 || 0;
+          const targetWeight = erpData?.peso_pruebas || 0;
           const pickedUpCount = (showWhitePallets && typeof window !== 'undefined' && window.__hasPalletOnForks) 
             ? Math.max(0, Math.floor(targetWeight / 250)) : 0;
           
@@ -362,7 +362,7 @@ const CageAssembly = ({ plcState, currentStep, erpData }) => {
           if (typeof window !== 'undefined') window.__hasPalletOnStack = hasPallet;
           
           const showWhitePallets = currentStep === 3 || currentStep === 4;
-          const targetWeight = erpData?.capac_interm_1 || 0;
+          const targetWeight = erpData?.peso_pruebas || 0;
           const pickedUpCount = (showWhitePallets && window.__hasPalletOnForks) ? Math.max(0, Math.floor(targetWeight / 250)) : 0;
           const remainingCount = Math.max(0, 18 - pickedUpCount);
 
@@ -829,7 +829,7 @@ const ForkliftAssembly = ({ currentStep, erpData, distance, palletState, onPalle
             if (typeof window !== 'undefined') window.__hasPalletOnForks = isPickedUp;
             
             const showWhitePallets = currentStep === 3 || currentStep === 4;
-            const targetWeight = erpData?.capac_interm_1 || 0;
+            const targetWeight = erpData?.peso_pruebas || 0;
             const whitePalletCount = showWhitePallets ? Math.max(0, Math.floor(targetWeight / 250)) : 0;
             
             return isPickedUp && (

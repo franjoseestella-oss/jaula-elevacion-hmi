@@ -1,6 +1,7 @@
 import os
+import configparser
 from sqlalchemy.orm import Session
-from database.database import SessionLocal
+from database.database import SessionLocal, get_config_path
 from database.models import ErpCarretilla
 
 # ─── Offsets reales del fichero DATOSMAST.DAT ───────────────
@@ -38,9 +39,25 @@ def _safe_str(s: str):
 
 
 def parse_and_sync_dat():
-    dat_path = r"C:\Users\franj\OneDrive\Escritorio\COSAS  FRAN\PROYECTOS\JAULA ELEVACION\FICHEROS JAULA\DATOSMAST.DAT"
+    # Leer el archivo database.config para obtener la ruta del ERP
+    config = configparser.ConfigParser()
+    config_path = get_config_path()
+    config.read(config_path)
+    
+    # Obtener el path del ERP configurado (con fallback al valor por defecto)
+    default_path = r"C:\Users\franj\OneDrive\Escritorio\COSAS  FRAN\PROYECTOS\JAULA ELEVACION\FICHEROS JAULA\DATOSMAST.DAT"
+    dat_path = config.get('ERP', 'file_path', fallback=default_path)
+    
+    # Si la ruta no existe de manera absoluta o relativa directa,
+    # intentamos buscarlo en el directorio de ficheros por defecto.
     if not os.path.exists(dat_path):
-        return {"status": "error", "message": f"Archivo DATOSMAST.DAT no encontrado en {dat_path}"}
+        default_dir = r"C:\Users\franj\OneDrive\Escritorio\COSAS  FRAN\PROYECTOS\JAULA ELEVACION\FICHEROS JAULA"
+        alternative_path = os.path.join(default_dir, os.path.basename(dat_path))
+        if os.path.exists(alternative_path):
+            dat_path = alternative_path
+
+    if not os.path.exists(dat_path):
+        return {"status": "error", "message": f"Archivo ERP no encontrado en: {dat_path}"}
 
     db: Session = SessionLocal()
     count_new = 0
@@ -67,20 +84,21 @@ def parse_and_sync_dat():
                     continue
 
                 # Parámetros numéricos (pueden estar vacíos en líneas cortas)
-                altura      = _safe_float(line[46:50]) if len(line) > 50 else None
-                capac_1     = _safe_float(line[50:54]) if len(line) > 54 else None
-                capac_2     = _safe_float(line[54:58]) if len(line) > 58 else None
-                capac_3     = _safe_float(line[58:62]) if len(line) > 62 else None
-                tpo_elev_min    = _safe_float(line[62:66]) if len(line) > 66 else None
-                tpo_elev_max    = _safe_float(line[66:70]) if len(line) > 70 else None
-                tpo_desc_min    = _safe_float(line[70:74]) if len(line) > 74 else None
-                tpo_desc_max    = _safe_float(line[74:78]) if len(line) > 78 else None
-                tpo_incl_adel   = _safe_float(line[78:82]) if len(line) > 82 else None
-                tpo_incl_atras  = _safe_float(line[82:86]) if len(line) > 86 else None
-                tpo_elev_min_sc = _safe_float(line[86:90]) if len(line) > 90 else None
-                tpo_elev_max_sc = _safe_float(line[90:94]) if len(line) > 94 else None
-                tpo_desc_min_sc = _safe_float(line[94:98]) if len(line) > 98 else None
-                tpo_desc_max_sc = _safe_float(line[98:102]) if len(line) > 102 else None
+                altura      = _safe_float(line[46:50]) if len(line) >= 50 else None
+                capac_1     = _safe_float(line[50:54]) if len(line) >= 54 else None
+                capac_2     = _safe_float(line[54:58]) if len(line) >= 58 else None
+                capac_3     = _safe_float(line[58:62]) if len(line) >= 62 else None
+                tpo_elev_min    = _safe_float(line[62:66]) if len(line) >= 66 else None
+                tpo_elev_max    = _safe_float(line[66:70]) if len(line) >= 70 else None
+                tpo_desc_min    = _safe_float(line[70:74]) if len(line) >= 74 else None
+                tpo_desc_max    = _safe_float(line[74:78]) if len(line) >= 78 else None
+                tpo_incl_adel   = _safe_float(line[78:82]) if len(line) >= 82 else None
+                tpo_incl_atras  = _safe_float(line[82:86]) if len(line) >= 86 else None
+                tpo_elev_min_sc = _safe_float(line[86:90]) if len(line) >= 90 else None
+                tpo_elev_max_sc = _safe_float(line[90:94]) if len(line) >= 94 else None
+                tpo_desc_min_sc = _safe_float(line[94:98]) if len(line) >= 98 else None
+                tpo_desc_max_sc = _safe_float(line[98:102]) if len(line) >= 102 else None
+                peso_pruebas    = _safe_float(line[102:107]) if len(line) >= 107 else None
 
                 # Upsert por bastidor
                 existing = db.query(ErpCarretilla).filter(ErpCarretilla.bastidor == bast).first()
@@ -91,6 +109,7 @@ def parse_and_sync_dat():
                         bastidor=bast, mastil=mastil,
                         altura_max_interm=altura,
                         capac_interm_1=capac_1, capac_interm_2=capac_2, capac_interm_3=capac_3,
+                        peso_pruebas=peso_pruebas,
                         tpo_elevac_min=tpo_elev_min, tpo_elevac_max=tpo_elev_max,
                         tpo_descenso_min=tpo_desc_min, tpo_descenso_max=tpo_desc_max,
                         tpo_incl_adel_max=tpo_incl_adel, tpo_incl_atras_max=tpo_incl_atras,
@@ -108,6 +127,7 @@ def parse_and_sync_dat():
                     existing.capac_interm_1 = capac_1
                     existing.capac_interm_2 = capac_2
                     existing.capac_interm_3 = capac_3
+                    existing.peso_pruebas = peso_pruebas
                     existing.tpo_elevac_min = tpo_elev_min
                     existing.tpo_elevac_max = tpo_elev_max
                     existing.tpo_descenso_min = tpo_desc_min
