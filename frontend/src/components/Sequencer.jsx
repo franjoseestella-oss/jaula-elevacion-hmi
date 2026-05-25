@@ -534,7 +534,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
       // ── ESTADO: esperando_1500 — detectar inicio del test ──
       if (cameraTestState === 'esperando_1500') {
-        if (h > cotaM) {
+        // Para empezar el temporizador, siempre tenemos que estar por debajo de la cota
+        // y detectar el cruce hacia arriba (h > cotaM y el valor anterior estaba por debajo o igual)
+        if (h > cotaM && s.prevH !== null && s.prevH <= cotaM) {
           setCameraTestState('ascenso');
           s.prevH = h;
           reqId = requestAnimationFrame(loop);
@@ -1133,6 +1135,24 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       }
     }
   }, [plcState?.Ob_Reposo_Cilindro_Valla_1, fenceState]);
+
+  // ── Auto-iniciar la prueba en Etapa 4 o 5 una vez las vallas están abajo ──
+  useEffect(() => {
+    if (fenceState === 'down') {
+      if (currentStep === 3 && stepStarted[3]) {
+        if (cameraTestState === 'standby') {
+          console.log("Auto-starting Stage 4 (Con Carga) test since fences are down.");
+          setCameraTestState('esperando_1500');
+          setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
+        }
+      } else if (currentStep === 4 && stepStarted[4]) {
+        if (test5mState === 'idle') {
+          console.log("Auto-starting Stage 5 (5 Minutos) test since fences are down.");
+          setTest5mState('esperando_elevacion');
+        }
+      }
+    }
+  }, [fenceState, currentStep, stepStarted, cameraTestState, test5mState]);
 
   // ── Trigger subir vallas al finalizar Etapa 4 o 5 ────────────
   useEffect(() => {
