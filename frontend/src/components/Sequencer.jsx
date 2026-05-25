@@ -1222,8 +1222,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           }
         }
 
-        // Bloquear si es etapa 4 o 5 (index 3 y 4) y la carretilla no está por debajo de la cota inicial
-        if (currentStep === 3 || currentStep === 4) {
+        // Bloquear si es etapa 3, 4 o 5 (index 2, 3 y 4) y la carretilla no está por debajo de la cota inicial
+        if (currentStep === 2 || currentStep === 3 || currentStep === 4) {
           if (!isCarriageBelowCota) {
             console.warn("[INICIAR] Bloqueado: La carretilla debe estar por debajo de la cota inicial para comenzar la secuencia.");
             return;
@@ -1822,11 +1822,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         if (currentTestState === 'ascenso') {
           // ─ Fin del ascenso ─
           if (timers.finishedElev) return;
-          const targetHeight = cotaM + testDist - 0.08; // 80mm de margen
-          if (hAct < targetHeight) {
-            console.warn(`[FLANCO READY↑] Ascenso NO confirmado: Altura actual (${hAct.toFixed(3)}m) no supera la cota mínima de ascenso (${targetHeight.toFixed(3)}m)`);
-            return;
-          }
+          // Se desactiva la comprobación estricta de altura para evitar bloqueos por lag o jitter
+          // const targetHeight = cotaM + testDist - 0.08; // 80mm de margen
+          // if (hAct < targetHeight) {
+          //   console.warn(`[FLANCO READY↑] Ascenso NO confirmado: Altura actual (${hAct.toFixed(3)}m) no supera la cota mínima de ascenso (${targetHeight.toFixed(3)}m)`);
+          //   return;
+          // }
 
           const raw = getPlcVal(plcStateRef.current, 'OR_Tiempo_Elevacion')
                    ?? getPlcVal(plcStateRef.current, 'OW_Tiempo_Elevacion')
@@ -1841,11 +1842,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         } else if (currentTestState === 'descenso') {
           // ─ Fin del descenso ─
           if (timers.finishedDesc) return;
-          const targetHeight = cotaM + 0.08; // 80mm de margen
-          if (hAct > targetHeight) {
-            console.warn(`[FLANCO READY↑] Descenso NO confirmado: Altura actual (${hAct.toFixed(3)}m) está por encima de la cota inicial máxima (${targetHeight.toFixed(3)}m)`);
-            return;
-          }
+          // Se desactiva la comprobación estricta de altura para evitar bloqueos por lag o jitter
+          // const targetHeight = cotaM + 0.08; // 80mm de margen
+          // if (hAct > targetHeight) {
+          //   console.warn(`[FLANCO READY↑] Descenso NO confirmado: Altura actual (${hAct.toFixed(3)}m) está por encima de la cota inicial máxima (${targetHeight.toFixed(3)}m)`);
+          //   return;
+          // }
 
           const rawDesc = getPlcVal(plcStateRef.current, 'OR_Tiempo_Descenso')
                        ?? getPlcVal(plcStateRef.current, 'OW_Tiempo_Descenso')
@@ -1915,8 +1917,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
       }
 
-      // Bloquear si es etapa 4 o 5 (index 3 y 4) y la carretilla no está por debajo de la cota inicial
-      if (step === 3 || step === 4) {
+      // Bloquear si es etapa 3, 4 o 5 (index 2, 3 y 4) y la carretilla no está por debajo de la cota inicial
+      if (step === 2 || step === 3 || step === 4) {
         if (!isCarriageBelowCota) {
           console.warn("[DIRECTO] Bloqueado: La carretilla debe estar por debajo de la cota inicial para comenzar la secuencia.");
           return;
@@ -2912,8 +2914,19 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                 </div>
 
                 {!stepStarted[2] ? (
-                  <div className="flex items-center gap-2 text-yellow-400 font-bold bg-yellow-400/10 p-2 mt-1 rounded border border-yellow-400/20 text-[9px]">
-                    <AlertTriangle size={12} /> ESPERANDO: Pulse INICIAR SECUENCIA
+                  <div className="flex flex-col gap-2">
+                    {!isCarriageBelowCota && (
+                      <div className="flex items-center justify-between p-2 mt-1 rounded-lg border text-[9px] bg-red-900/20 border-red-500/40 text-red-400">
+                        <span className="font-bold uppercase tracking-wider flex items-center gap-1">
+                          <AlertTriangle size={11}/>
+                          Baje por debajo de {cotaInicial} mm para iniciar
+                        </span>
+                        <span className="font-mono font-black">{currentHeightMm} mm</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 text-yellow-400 font-bold bg-yellow-400/10 p-2 mt-1 rounded border border-yellow-400/20 text-[9px]">
+                      <AlertTriangle size={12} /> ESPERANDO: Pulse INICIAR SECUENCIA
+                    </div>
                   </div>
                 ) : (
                   <>
