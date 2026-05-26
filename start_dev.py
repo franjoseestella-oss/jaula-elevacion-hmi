@@ -59,6 +59,42 @@ def log_startup(message, log_file_path):
     except Exception:
         pass
 
+def free_port_windows(port, startup_log):
+    """Detecta y mata procesos que estén escuchando en el puerto especificado (Solo Windows)."""
+    if sys.platform != "win32":
+        return
+    try:
+        # Buscar el PID del proceso escuchando en el puerto
+        output = subprocess.check_output(
+            f"netstat -ano | findstr LISTENING | findstr :{port}",
+            shell=True,
+            text=True
+        )
+        pids = set()
+        for line in output.strip().split('\n'):
+            parts = line.strip().split()
+            if len(parts) >= 5:
+                pid = parts[-1]
+                if pid.isdigit() and int(pid) > 0:
+                    pids.add(pid)
+                    
+        for pid in pids:
+            log_startup(f"[!] Puerto {port} ocupado por PID {pid}. Terminando proceso...", startup_log)
+            # Intentar matar el proceso de forma forzada
+            subprocess.run(
+                f"taskkill /F /PID {pid}", 
+                shell=True, 
+                stdout=subprocess.DEVNULL, 
+                stderr=subprocess.DEVNULL
+            )
+        if pids:
+            time.sleep(1.5) # Esperar a que el puerto se libere en el SO
+    except subprocess.CalledProcessError:
+        # Coincidencia no encontrada, puerto libre
+        pass
+    except Exception as e:
+        log_startup(f"[WARN] No se pudo liberar el puerto {port}: {e}", startup_log)
+
 def main():
     root_dir = os.path.dirname(os.path.abspath(__file__))
     backend_dir = os.path.join(root_dir, "backend")
@@ -72,6 +108,9 @@ def main():
     log_startup("========================================", startup_log)
     log_startup(" Iniciando HMI Jaula de Elevación (Dev) ", startup_log)
     log_startup("========================================", startup_log)
+
+    # Liberar el puerto del backend si está en uso por alguna ejecución previa colgada
+    free_port_windows(8001, startup_log)
 
     # 1. Iniciar el Backend
     log_startup("\n[+] Iniciando Backend (FastAPI)...", startup_log)
