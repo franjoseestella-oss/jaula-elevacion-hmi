@@ -401,6 +401,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   });
 
   const stepInitRef = useRef({});
+  const step4PalletTriggeredRef = useRef(false); // evita bucle animating→picked_up→animating en etapa 4
 
   useEffect(() => {
     if (onStepChange) onStepChange(currentStep);
@@ -828,6 +829,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       5: { altura_inicial: null, altura_final: null, diff: null }
     };
     stepInitRef.current = {};
+    step4PalletTriggeredRef.current = false;
     setPegatinaPosicion(null);
     setSeqInput('');
     setSeqError('');
@@ -1230,6 +1232,31 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           }
         }
 
+        // ── VALIDACIÓN DE PESO: Etapa 4 (Con Carga, index 3) y Etapa 5 (5 min, index 4) ──
+        // Solo en modo real — en simulación el Digital Twin gestiona el peso automáticamente
+        if (!isSimulation && (currentStep === 3 || currentStep === 4)) {
+          const currentPallets = isSimulation
+            ? (window.__simPallets || 0)
+            : (plcState?.OW_Numero_Pallets || 0);
+          const targetLoad = erpData?.peso_pruebas || 0;
+          const currentLoad = currentPallets * 250;
+
+          if (targetLoad === 0) {
+            console.warn("[INICIAR] Bloqueado: No hay peso de pruebas definido en el ERP para esta carretilla.");
+            setTestAlarm("No hay peso de pruebas definido en el ERP. Compruebe los datos de la carretilla.");
+            return;
+          }
+
+          if (currentLoad !== targetLoad) {
+            console.warn(`[INICIAR] Bloqueado: Carga incorrecta — ${currentLoad}kg actual vs ${targetLoad}kg requerido (ERP).`);
+            setTestAlarm(`Carga incorrecta: ${currentLoad} kg cargados, se requieren ${targetLoad} kg (ERP). Ajuste los pallets antes de iniciar.`);
+            return;
+          }
+
+          // Peso correcto → limpiar alarma previa
+          setTestAlarm(null);
+        }
+
         console.log('[INICIAR] Desbloqueando paso', currentStep);
         setStepStarted(prev => {
           const next = [...prev];
@@ -1238,6 +1265,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         });
         return; // en el mismo pulso no avanzamos, solo desbloqueamos
       }
+
 
       // Si ya estaba desbloqueado → ejecutar acción de avance
       if (currentStep >= 1 && currentStep <= 4 && stepStarted[currentStep]) {
@@ -1351,14 +1379,28 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       const isTimerReady = (currentStep === 2 || currentStep === 3)
         ? (telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador ?? false)
         : true;
-      const blockByHeight = (isTestStep && 
-        ((currentStep === 2 || currentStep === 3) ? cameraTestState === 'standby' : test5mState === 'idle') 
+      const blockByHeight = (isTestStep &&
+        ((currentStep === 2 || currentStep === 3) ? cameraTestState === 'standby' : test5mState === 'idle')
         && !isCarriageBelowCota) || !isTimerReady;
       if (blockByHeight) {
-        // No iniciar cuenta atrás, cancelar si la había
         if (iniciarCountdown !== null) setIniciarCountdown(null);
         return;
       }
+
+      // ── VALIDACIÓN DE PESO (trigger PLC): Etapas 4 y 5 ──────────────────
+      // Solo en modo real — en simulación el peso se gestiona automáticamente
+      if (!isSimulation && (currentStep === 3 || currentStep === 4) && !stepStarted[currentStep]) {
+        const currentPallets = isSimulation
+          ? (window.__simPallets || 0)
+          : (plcState?.OW_Numero_Pallets || 0);
+        const targetLoad = erpData?.peso_pruebas || 0;
+        const currentLoad = currentPallets * 250;
+        if (targetLoad === 0 || currentLoad !== targetLoad) {
+          if (iniciarCountdown !== null) setIniciarCountdown(null);
+          return;
+        }
+      }
+
 
       if (iniciarCountdown === null) {
         setIniciarCountdown(3);
@@ -2164,15 +2206,22 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
   // ── PASO 4: Test con carga ────────────────────────────────────────────
   useEffect(() => {
-    if (currentStep === 3 && stepStatus[3] === STEP_STATUS.ACTIVE && erpData && !stepInitRef.current[3]) {
-      stepInitRef.current[3] = true;
-      setCameraTestState('standby');
-      if (isSimulation) {
-        // Recoger la carga (pallets pesados) - Repetir animación si ya tenía el de madera
-        if (palletState === 'idle' || palletState === 'picked_up') setPalletState('animating');
+    if (currentStep === 3 && stepStatus[3] === STEP_STATUS.ACTIVE && erpData) {
+      // Init de cámara: solo una vez al activar el paso
+      if (!stepInitRef.current[3]) {
+        stepInitRef.current[3] = true;
+        step4PalletTriggeredRef.current = false; // reset guardia del pallet al entrar
+        setCameraTestState('standby');
+      }
+      // Animación de recogida de carga pesada: disparar solo una vez por activación
+      // Se dispara cuando el pallet está listo (idle o picked_up del paso anterior)
+      if (!step4PalletTriggeredRef.current && (palletState === 'idle' || palletState === 'picked_up')) {
+        step4PalletTriggeredRef.current = true;
+        setPalletState('animating');
       }
     }
-  }, [currentStep, stepStatus, erpData, isSimulation, palletState, setPalletState]);
+  }, [currentStep, stepStatus, erpData, palletState, setPalletState]);
+
 
 
 
