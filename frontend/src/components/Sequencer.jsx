@@ -2204,12 +2204,16 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
   // ── PASO 4: Test con carga ────────────────────────────────────────────
   useEffect(() => {
-    if (currentStep === 3 && stepStatus[3] === STEP_STATUS.ACTIVE && erpData && !stepInitRef.current[3]) {
-      stepInitRef.current[3] = true;
-      setCameraTestState('standby');
-      if (isSimulation) {
-        // Recoger la carga (pallets pesados) - Repetir animación si ya tenía el de madera
-        if (palletState === 'idle' || palletState === 'picked_up') setPalletState('animating');
+    if (currentStep === 3 && stepStatus[3] === STEP_STATUS.ACTIVE && erpData) {
+      // Init de cámara solo una vez
+      if (!stepInitRef.current[3]) {
+        stepInitRef.current[3] = true;
+        setCameraTestState('standby');
+      }
+      // Animación de pallet: disparar en simulación cuando el pallet NO está ya en la carretilla con carga
+      // Se activa tanto si viene de 'idle', 'picked_up' (pallet de madera sin carga) o 'animating' aún
+      if (isSimulation && (palletState === 'idle' || palletState === 'picked_up')) {
+        setPalletState('animating');
       }
     }
   }, [currentStep, stepStatus, erpData, isSimulation, palletState, setPalletState]);
