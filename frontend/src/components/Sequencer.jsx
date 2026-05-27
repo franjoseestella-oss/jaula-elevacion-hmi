@@ -401,6 +401,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   });
 
   const stepInitRef = useRef({});
+  const step3PalletTriggeredRef = useRef(false); // evita bucle animating→picked_up→animating en etapa 3
   const step4PalletTriggeredRef = useRef(false); // evita bucle animating→picked_up→animating en etapa 4
 
   useEffect(() => {
@@ -829,6 +830,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       5: { altura_inicial: null, altura_final: null, diff: null }
     };
     stepInitRef.current = {};
+    step3PalletTriggeredRef.current = false;
     step4PalletTriggeredRef.current = false;
     setPegatinaPosicion(null);
     setSeqInput('');
@@ -2198,11 +2200,24 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           body: JSON.stringify({ OR_Altura_Carretilla: 0 })
         }).catch(console.error);
 
-        // Recoger la carga (pallet de madera) si no la tiene ya
-        if (palletState === 'idle') setPalletState('animating');
+        // Recoger la carga (pallet de madera) si no la tiene ya o viene de Multiload (una sola vez)
+        if (!step3PalletTriggeredRef.current && (palletState === 'idle' || palletState === 'picked_up')) {
+          step3PalletTriggeredRef.current = true;
+          setPalletState('animating');
+        }
       }
     }
   }, [currentStep, stepStatus, erpData, isSimulation, palletState, setPalletState]);
+
+  // ── PASO 3: Auto-arrancar cámara cuando el operario pulsa INICIAR (stepStarted[2]=true) ──
+  useEffect(() => {
+    if (currentStep === 2 && stepStatus[2] === STEP_STATUS.ACTIVE && stepStarted[2]) {
+      if (cameraTestState === 'standby') {
+        setCameraTestState('esperando_1500');
+        setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
+      }
+    }
+  }, [currentStep, stepStatus, stepStarted, cameraTestState]);
 
   // ── PASO 4: Test con carga ────────────────────────────────────────────
   useEffect(() => {
