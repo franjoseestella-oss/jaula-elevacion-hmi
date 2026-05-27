@@ -3,11 +3,10 @@ from sqlalchemy.sql import func
 from .database import Base, engine
 
 
-
 class ErpCarretilla(Base):
     """
-    Caché local de los datos del ERP importados desde DATOSMAST.DAT.
-    Esquema NG6OF1 — offsets fijos de caracteres.
+    Caché de los datos del ERP importados desde DATOSMAST.DAT / NI46SF.DAT.
+    Se almacena en DAFEED (SQL Server), tabla dbo.JAULA_ERP.
     """
     __tablename__ = "JAULA_ERP"
 
@@ -23,9 +22,8 @@ class ErpCarretilla(Base):
     capac_interm_1      = Column(Float, nullable=True)  # kg
     capac_interm_2      = Column(Float, nullable=True)
     capac_interm_3      = Column(Float, nullable=True)
-    peso_pruebas        = Column(Float, nullable=True)  # kg (peso de pruebas)
 
-    # Tiempos CON CARGA (segundos)
+    # Tiempos CON CARGA
     tpo_elevac_min      = Column(Float, nullable=True)
     tpo_elevac_max      = Column(Float, nullable=True)
     tpo_descenso_min    = Column(Float, nullable=True)
@@ -33,22 +31,23 @@ class ErpCarretilla(Base):
     tpo_incl_adel_max   = Column(Float, nullable=True)
     tpo_incl_atras_max  = Column(Float, nullable=True)
 
-    # Tiempos SIN CARGA (segundos)
+    # Tiempos SIN CARGA
     tpo_elev_min_scarga     = Column(Float, nullable=True)
     tpo_elev_max_scarga     = Column(Float, nullable=True)
     tpo_desc_min_scarga     = Column(Float, nullable=True)
     tpo_desc_max_scarga     = Column(Float, nullable=True)
 
-    fecha_importacion = Column(DateTime(timezone=True), server_default=func.now())
+    # Peso de pruebas — al final, como en la tabla original de DAFEED
+    peso_pruebas        = Column(Float, nullable=True)
 
-
+    fecha_importacion = Column(DateTime, server_default=func.now(), nullable=True)
 
 
 class LogTabla(Base):
     __tablename__ = "LOG_TABLA"
 
     id = Column(Integer, primary_key=True, index=True)
-    
+
     # 1. Identificación y Generales
     OPERARIO = Column(String(100), nullable=True)
     FECHA_MONTAJE = Column(String(20), nullable=True)
@@ -107,8 +106,14 @@ class LogTabla(Base):
     DURACION_SEC = Column(String(50), nullable=True)
     OK_NOK = Column(String(20), nullable=True)
 
-    fecha_creacion = Column(DateTime(timezone=True), server_default=func.now())
+    fecha_creacion = Column(DateTime, server_default=func.now(), nullable=True)
+
 
 def init_db():
-    Base.metadata.create_all(bind=engine)
-    print("Tablas de base de datos creadas/sincronizadas correctamente.")
+    """Crea las tablas de la aplicación en DAFEED (SQL Server) si no existen."""
+    try:
+        Base.metadata.create_all(bind=engine)
+        print("[OK] Tablas creadas/verificadas en DAFEED (JAULA_ERP, LOG_TABLA).")
+    except Exception as e:
+        print(f"[ERROR] No se pudieron crear las tablas en DAFEED: {e}")
+        raise

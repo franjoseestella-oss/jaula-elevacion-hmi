@@ -12,10 +12,10 @@ import time
 import os
 import sys
 
-from database.database import engine, get_db
+from database.database import engine, get_db, get_local_db
 from database.models import init_db, ErpCarretilla
 from database.crud import create_log, get_logs
-from erp_sync import parse_and_sync_dat
+from erp_sync import parse_and_sync_dat, start_dat_watcher
 from opcua_client import opcua_manager
 from fastapi.responses import Response
 import basler_camera
@@ -50,7 +50,21 @@ def on_startup():
     except Exception as e:
         print(f"[WARN] No se pudo inicializar la BD: {e}")
         print("   El servidor arrancara en modo solo-simulacion.")
-        
+
+    # ─── Sincronización inicial del DAT ─────────────────────────────
+    try:
+        resultado = parse_and_sync_dat()
+        print(f"[OK] Sync ERP al arrancar: {resultado.get('message', resultado)}")
+    except Exception as e:
+        print(f"[WARN] No se pudo sincronizar el DAT al arrancar: {e}")
+
+    # ─── Watcher: re-sincroniza si el fichero cambia en disco ────────────
+    try:
+        start_dat_watcher(interval_seconds=10)
+        print("[OK] DAT file-watcher activo (comprueba cambios cada 10s).")
+    except Exception as e:
+        print(f"[WARN] No se pudo iniciar el watcher del DAT: {e}")
+
     # Cargar la configuración guardada del PLC
     try:
         import json
@@ -99,7 +113,7 @@ app.add_middleware(
 # ─────────────────────────────────────────────────────────────
 
 @app.get("/erp/bastidor/{bastidor}")
-def buscar_bastidor(bastidor: str, db: Session = Depends(get_db)):
+def buscar_bastidor(bastidor: str, db: Session = Depends(get_local_db)):
     """
     Busca una carretilla por BASTIDOR.
     Prioridad: JAULA_ERP (datos completos del DAT) -> Secuencia_Mastiles (DAFEED live).
@@ -257,7 +271,7 @@ def _erp_row_to_dict(erp) -> dict:
 
 
 @app.get("/erp/secuencia/{secuencia}")
-def buscar_secuencia(secuencia: str, db: Session = Depends(get_db)):
+def buscar_secuencia(secuencia: str, db: Session = Depends(get_local_db)):
     """
     Busca una carretilla por número de SECUENCIA (4 dígitos) en JAULA_ERP.
     Acepta búsqueda parcial — p.ej. '210' encuentra '0210'.
@@ -278,7 +292,7 @@ def buscar_secuencia(secuencia: str, db: Session = Depends(get_db)):
 
 
 @app.get("/erp/qr/{qr_raw}")
-def buscar_por_qr(qr_raw: str, db: Session = Depends(get_db)):
+def buscar_por_qr(qr_raw: str, db: Session = Depends(get_local_db)):
     """
     Busca una carretilla a partir del contenido bruto de un código QR.
     El formato esperado es DDMMYY + NNNN  (ej. '260501' + '0138' → fecha 26/05 y secuencia 0138).
@@ -377,7 +391,7 @@ def buscar_operario(query: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/erp/carretillas")
-def listar_carretillas(limit: int = 500, db: Session = Depends(get_db)):
+def listar_carretillas(limit: int = 500, db: Session = Depends(get_local_db)):
     """
     Lista todas las carretillas de JAULA_ERP con todos sus campos técnicos.
     Fallback: Secuencia_Mastiles en DAFEED si está disponible.
@@ -1023,7 +1037,23 @@ async def websocket_endpoint(websocket: WebSocket):
             await asyncio.sleep(0.01)
 
     except WebSocketDisconnect:
+        # Desconexión limpia del cliente (cierre normal)
         print("[WS] Cliente desconectado.")
+    except (ConnectionResetError, ConnectionAbortedError):
+        # En Windows (WinError 10054/10053): el cliente cerró la conexión abruptamente
+        print("[WS] Cliente desconectado (cierre forzado por el cliente).")
+    except RuntimeError as e:
+        # FastAPI/Starlette lanza RuntimeError cuando el WebSocket ya está cerrado
+        if "disconnect" in str(e).lower() or "closed" in str(e).lower():
+            print("[WS] Cliente desconectado (WebSocket cerrado).")
+        else:
+            print(f"[WS] Error inesperado en WebSocket: {e}")
+    except asyncio.CancelledError:
+        # Cancelación del task (p.ej. al reiniciar el servidor)
+        print("[WS] Conexión WebSocket cancelada.")
+    except Exception as e:
+        # Cualquier otro error de red — log silencioso para no llenar la consola
+        print(f"[WS] Cliente desconectado (error de red: {type(e).__name__}).")
 
 
 
@@ -1035,7 +1065,7 @@ async def websocket_endpoint(websocket: WebSocket):
 # ─────────────────────────────────────────────────────────────
 
 @app.post("/api/logs")
-def save_log(log_data: dict, db: Session = Depends(get_db)):
+def save_log(log_data: dict, db: Session = Depends(get_local_db)):
     try:
         log = create_log(db, log_data)
         return {"status": "success", "id": log.id}
@@ -1043,7 +1073,7 @@ def save_log(log_data: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/logs")
-def read_logs(skip: int = 0, limit: int = 200, db: Session = Depends(get_db)):
+def read_logs(skip: int = 0, limit: int = 200, db: Session = Depends(get_local_db)):
     try:
         logs = get_logs(db, skip=skip, limit=limit)
         return logs
@@ -1051,7 +1081,7 @@ def read_logs(skip: int = 0, limit: int = 200, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/logs/bastidor/{bastidor}")
-def read_last_log_for_bastidor(bastidor: str, db: Session = Depends(get_db)):
+def read_last_log_for_bastidor(bastidor: str, db: Session = Depends(get_local_db)):
     try:
         from database.crud import get_last_log_for_bastidor
         log = get_last_log_for_bastidor(db, bastidor)
