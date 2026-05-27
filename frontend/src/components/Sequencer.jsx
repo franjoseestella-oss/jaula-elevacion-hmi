@@ -1178,7 +1178,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   useEffect(() => {
     if (plcState?.Ob_Abortar_Secuencia === true && stepStatus.some(s => s !== STEP_STATUS.PENDING)) {
       if (abortarCountdown === null) {
-        setAbortarCountdown(3);
+        setAbortarCountdown(1);
       } else if (abortarCountdown > 0) {
         const timer = setTimeout(() => setAbortarCountdown(abortarCountdown - 1), 1000);
         return () => clearTimeout(timer);
@@ -1403,7 +1403,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
 
       if (iniciarCountdown === null) {
-        setIniciarCountdown(3);
+        setIniciarCountdown(1);
       } else if (iniciarCountdown > 0) {
         interval = setTimeout(() => {
           setIniciarCountdown(prev => prev - 1);
@@ -1471,7 +1471,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     if (plcState?.Ob_Poner_Pegatina === true) {
       if (pegatinaCountdown === null) {
         if (isPegatinaActionValidRef.current && isPegatinaActionValidRef.current()) {
-          setPegatinaCountdown(3);
+          setPegatinaCountdown(1);
         }
       } else if (pegatinaCountdown > 0) {
         const timer = setTimeout(() => setPegatinaCountdown(pegatinaCountdown - 1), 1000);
@@ -1653,7 +1653,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     if (plcState?.Ob_Repetir_Secuencia === true) {
       if (repetirCountdown === null) {
         if (isRepetirActionValidRef.current && isRepetirActionValidRef.current()) {
-          setRepetirCountdown(3);
+          setRepetirCountdown(1);
         }
       } else if (repetirCountdown > 0) {
         const timer = setTimeout(() => setRepetirCountdown(repetirCountdown - 1), 1000);
