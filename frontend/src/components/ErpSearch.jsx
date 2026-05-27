@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Search, RefreshCw, CheckCircle2, AlertTriangle, Loader2, Hash } from 'lucide-react';
+import { Search, RefreshCw, CheckCircle2, AlertTriangle, Loader2, Hash, FileText } from 'lucide-react';
 
 const API_BASE = 'http://127.0.0.1:8001';
 
@@ -112,10 +112,11 @@ const ErpSearch = ({ onErpData }) => {
           type="button"
           onClick={handleSync}
           disabled={syncLoading}
-          title="Reimportar DATOSMAST.DAT"
-          className="px-3 py-2 bg-[#1d2930] hover:bg-[#2e404a] text-logisnext-lightslate hover:text-white rounded-lg text-xs transition-all duration-200 disabled:opacity-40 border border-[#2e404a] hover:border-[#5d7a8a] active:scale-95"
+          title="Lee el fichero DAT del ERP e importa los datos a la base de datos local"
+          className="flex items-center gap-1.5 px-3 py-2 bg-logisnext-magenta hover:bg-logisnext-magenta/80 text-white rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-200 disabled:opacity-40 shadow-[0_0_12px_rgba(221,40,118,0.3)] hover:shadow-[0_0_20px_rgba(221,40,118,0.5)] active:scale-95 whitespace-nowrap"
         >
-          {syncLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+          {syncLoading ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />}
+          {syncLoading ? 'Leyendo…' : 'Leer ERP'}
         </button>
       </form>
 

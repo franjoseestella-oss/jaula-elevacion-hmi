@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   X, Server, RefreshCw, Search, CheckCircle2, Loader2,
   AlertTriangle, ChevronRight, Database, ChevronDown,
-  Clock, Weight, Ruler, Calendar, ArrowUp, ArrowDown, RotateCcw
+  Clock, Weight, Ruler, Calendar, ArrowUp, ArrowDown, RotateCcw, FileText
 } from 'lucide-react';
 
 const API_BASE = 'http://127.0.0.1:8001';
@@ -183,12 +183,15 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
             <button
               onClick={handleSync}
               disabled={syncLoading}
-              className="flex items-center gap-2 px-4 py-2 bg-[#1d2930] hover:bg-[#2e404a] border border-[#2e404a] hover:border-[#5d7a8a] text-logisnext-lightslate hover:text-white rounded-lg text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-5 py-2 bg-logisnext-magenta hover:bg-logisnext-magenta/80 border border-logisnext-magenta/60 text-white rounded-lg text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-[0_0_18px_rgba(221,40,118,0.35)] hover:shadow-[0_0_28px_rgba(221,40,118,0.55)] active:scale-95"
+              title="Lee el fichero DAT del ERP e importa los datos a la base de datos local"
             >
-              {syncLoading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-              Sync DAT
+              {syncLoading
+                ? <Loader2 size={14} className="animate-spin" />
+                : <FileText size={14} />}
+              {syncLoading ? 'Leyendo ERP…' : 'Leer ERP'}
             </button>
-            <button onClick={fetchList} disabled={loading} className="p-2 bg-[#1d2930] hover:bg-[#2e404a] border border-[#2e404a] rounded-lg text-logisnext-lightslate hover:text-white transition-all disabled:opacity-50" title="Recargar">
+            <button onClick={fetchList} disabled={loading} className="p-2 bg-[#1d2930] hover:bg-[#2e404a] border border-[#2e404a] rounded-lg text-logisnext-lightslate hover:text-white transition-all disabled:opacity-50" title="Recargar tabla">
               {loading ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
             </button>
           </div>
@@ -232,7 +235,7 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
               <div className="flex flex-col items-center justify-center py-20 gap-3 text-logisnext-slate">
                 <AlertTriangle size={32} className="opacity-30" />
                 <span className="text-xs font-bold uppercase tracking-widest opacity-40">
-                  {filter ? 'Sin resultados para ese filtro' : 'No hay registros en JAULA_ERP — usa SYNC DAT'}
+                  {filter ? 'Sin resultados para ese filtro' : 'No hay datos — pulsa LEER ERP para importar el fichero DAT'}
                 </span>
               </div>
             ) : (
