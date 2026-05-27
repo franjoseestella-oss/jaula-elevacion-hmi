@@ -1231,7 +1231,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
 
         // ── VALIDACIÓN DE PESO: Etapa 4 (Con Carga, index 3) y Etapa 5 (5 min, index 4) ──
-        if (currentStep === 3 || currentStep === 4) {
+        // Solo en modo real — en simulación el Digital Twin gestiona el peso automáticamente
+        if (!isSimulation && (currentStep === 3 || currentStep === 4)) {
           const currentPallets = isSimulation
             ? (window.__simPallets || 0)
             : (plcState?.OW_Numero_Pallets || 0);
@@ -1385,7 +1386,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       }
 
       // ── VALIDACIÓN DE PESO (trigger PLC): Etapas 4 y 5 ──────────────────
-      if ((currentStep === 3 || currentStep === 4) && !stepStarted[currentStep]) {
+      // Solo en modo real — en simulación el peso se gestiona automáticamente
+      if (!isSimulation && (currentStep === 3 || currentStep === 4) && !stepStarted[currentStep]) {
         const currentPallets = isSimulation
           ? (window.__simPallets || 0)
           : (plcState?.OW_Numero_Pallets || 0);
