@@ -401,6 +401,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   });
 
   const stepInitRef = useRef({});
+  const step4PalletTriggeredRef = useRef(false); // evita bucle animating→picked_up→animating en etapa 4
 
   useEffect(() => {
     if (onStepChange) onStepChange(currentStep);
@@ -828,6 +829,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       5: { altura_inicial: null, altura_final: null, diff: null }
     };
     stepInitRef.current = {};
+    step4PalletTriggeredRef.current = false;
     setPegatinaPosicion(null);
     setSeqInput('');
     setSeqError('');
@@ -2205,18 +2207,21 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   // ── PASO 4: Test con carga ────────────────────────────────────────────
   useEffect(() => {
     if (currentStep === 3 && stepStatus[3] === STEP_STATUS.ACTIVE && erpData) {
-      // Init de cámara solo una vez
+      // Init de cámara: solo una vez al activar el paso
       if (!stepInitRef.current[3]) {
         stepInitRef.current[3] = true;
+        step4PalletTriggeredRef.current = false; // reset guardia del pallet al entrar
         setCameraTestState('standby');
       }
-      // Animación de pallet: disparar en simulación cuando el pallet NO está ya en la carretilla con carga
-      // Se activa tanto si viene de 'idle', 'picked_up' (pallet de madera sin carga) o 'animating' aún
-      if (isSimulation && (palletState === 'idle' || palletState === 'picked_up')) {
+      // Animación de recogida de carga pesada: disparar solo una vez por activación
+      // Se dispara cuando el pallet está listo (idle o picked_up del paso anterior)
+      if (!step4PalletTriggeredRef.current && (palletState === 'idle' || palletState === 'picked_up')) {
+        step4PalletTriggeredRef.current = true;
         setPalletState('animating');
       }
     }
-  }, [currentStep, stepStatus, erpData, isSimulation, palletState, setPalletState]);
+  }, [currentStep, stepStatus, erpData, palletState, setPalletState]);
+
 
 
 
