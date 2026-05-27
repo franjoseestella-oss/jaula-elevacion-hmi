@@ -1230,6 +1230,30 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           }
         }
 
+        // ── VALIDACIÓN DE PESO: Etapa 4 (Con Carga, index 3) y Etapa 5 (5 min, index 4) ──
+        if (currentStep === 3 || currentStep === 4) {
+          const currentPallets = isSimulation
+            ? (window.__simPallets || 0)
+            : (plcState?.OW_Numero_Pallets || 0);
+          const targetLoad = erpData?.peso_pruebas || 0;
+          const currentLoad = currentPallets * 250;
+
+          if (targetLoad === 0) {
+            console.warn("[INICIAR] Bloqueado: No hay peso de pruebas definido en el ERP para esta carretilla.");
+            setTestAlarm("No hay peso de pruebas definido en el ERP. Compruebe los datos de la carretilla.");
+            return;
+          }
+
+          if (currentLoad !== targetLoad) {
+            console.warn(`[INICIAR] Bloqueado: Carga incorrecta — ${currentLoad}kg actual vs ${targetLoad}kg requerido (ERP).`);
+            setTestAlarm(`Carga incorrecta: ${currentLoad} kg cargados, se requieren ${targetLoad} kg (ERP). Ajuste los pallets antes de iniciar.`);
+            return;
+          }
+
+          // Peso correcto → limpiar alarma previa
+          setTestAlarm(null);
+        }
+
         console.log('[INICIAR] Desbloqueando paso', currentStep);
         setStepStarted(prev => {
           const next = [...prev];
@@ -1238,6 +1262,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         });
         return; // en el mismo pulso no avanzamos, solo desbloqueamos
       }
+
 
       // Si ya estaba desbloqueado → ejecutar acción de avance
       if (currentStep >= 1 && currentStep <= 4 && stepStarted[currentStep]) {
@@ -1351,14 +1376,27 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       const isTimerReady = (currentStep === 2 || currentStep === 3)
         ? (telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? plcState?.Ob_Ready_Temporizador ?? false)
         : true;
-      const blockByHeight = (isTestStep && 
-        ((currentStep === 2 || currentStep === 3) ? cameraTestState === 'standby' : test5mState === 'idle') 
+      const blockByHeight = (isTestStep &&
+        ((currentStep === 2 || currentStep === 3) ? cameraTestState === 'standby' : test5mState === 'idle')
         && !isCarriageBelowCota) || !isTimerReady;
       if (blockByHeight) {
-        // No iniciar cuenta atrás, cancelar si la había
         if (iniciarCountdown !== null) setIniciarCountdown(null);
         return;
       }
+
+      // ── VALIDACIÓN DE PESO (trigger PLC): Etapas 4 y 5 ──────────────────
+      if ((currentStep === 3 || currentStep === 4) && !stepStarted[currentStep]) {
+        const currentPallets = isSimulation
+          ? (window.__simPallets || 0)
+          : (plcState?.OW_Numero_Pallets || 0);
+        const targetLoad = erpData?.peso_pruebas || 0;
+        const currentLoad = currentPallets * 250;
+        if (targetLoad === 0 || currentLoad !== targetLoad) {
+          if (iniciarCountdown !== null) setIniciarCountdown(null);
+          return;
+        }
+      }
+
 
       if (iniciarCountdown === null) {
         setIniciarCountdown(3);
