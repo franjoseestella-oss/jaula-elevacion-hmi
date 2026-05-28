@@ -745,6 +745,19 @@ function App() {
   useEffect(() => {
     let ws;
     let reconnectTimeout;
+    // Throttle: React state se actualiza máximo cada 100ms (10 Hz)
+    // El DOM directo y los globals siguen a velocidad total
+    let lastReactUpdate = 0;
+    let pendingTelemetry = null;
+    let rafId = null;
+
+    const flushTelemetry = () => {
+      if (pendingTelemetry) {
+        setTelemetry(pendingTelemetry);
+        pendingTelemetry = null;
+      }
+      rafId = null;
+    };
 
     const connect = () => {
       try {
@@ -767,6 +780,20 @@ function App() {
                 } catch (e) { console.error('[WS] Error parsing plcVarMapping:', e); }
               }
 
+              // ── Actualización INMEDIATA (sin React) ─────────────────────
+              // Globals para Sequencer y Laser a velocidad total (100+ Hz)
+              window.__fastPlcState = mappedPlc;
+              window.__fastRawPlcState = data.plc || {};
+              window.__lastTelemetryTime = Date.now();
+
+              // DOM directo para el display del láser (sin pasar por React)
+              const laserSpan = document.getElementById('laser-distance-display');
+              if (laserSpan && mappedPlc.OR_Altura_Carretilla !== undefined) {
+                laserSpan.innerText = Number(mappedPlc.OR_Altura_Carretilla).toFixed(2);
+              }
+
+              // ── Actualización de React con THROTTLE 100ms (10 Hz) ───────
+              // Evita el Out of Memory causado por 100+ re-renders/segundo
               const newTelemetry = {
                 distance: data.distance,
                 timer: data.timer,
@@ -777,16 +804,23 @@ function App() {
                 opcua_error: data.opcua_error
               };
 
-              window.__fastPlcState = mappedPlc;
-              window.__fastRawPlcState = data.plc || {};
+              const now = Date.now();
+              pendingTelemetry = newTelemetry;
 
-              const laserSpan = document.getElementById('laser-distance-display');
-              if (laserSpan && mappedPlc.OR_Altura_Carretilla !== undefined) {
-                laserSpan.innerText = Number(mappedPlc.OR_Altura_Carretilla).toFixed(2);
+              if (now - lastReactUpdate >= 100) {
+                // Más de 100ms desde el último update → actualizar ya
+                lastReactUpdate = now;
+                if (rafId) cancelAnimationFrame(rafId);
+                rafId = null;
+                setTelemetry(newTelemetry);
+                pendingTelemetry = null;
+              } else if (!rafId) {
+                // Dentro del throttle → programar update en el próximo frame disponible
+                rafId = requestAnimationFrame(() => {
+                  lastReactUpdate = Date.now();
+                  flushTelemetry();
+                });
               }
-
-              window.__lastTelemetryTime = Date.now();
-              setTelemetry(newTelemetry);
             }
           } catch (parseErr) {
             console.error('[WS] Error procesando mensaje WebSocket:', parseErr);
@@ -814,9 +848,11 @@ function App() {
     connect();
     return () => {
       clearTimeout(reconnectTimeout);
+      if (rafId) cancelAnimationFrame(rafId);
       if (ws) ws.close();
     };
   }, []);
+
 
   const appPlc = isSimulation ? { ...(telemetry?.plc || {}), Ob_Estado_Automatico: true } : (telemetry?.mappedPlc || {});
 
