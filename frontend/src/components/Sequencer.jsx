@@ -2199,15 +2199,25 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ OR_Altura_Carretilla: 0 })
         }).catch(console.error);
-
-        // Recoger la carga (pallet de madera) si no la tiene ya o viene de Multiload (una sola vez)
-        if (!step3PalletTriggeredRef.current && (palletState === 'idle' || palletState === 'picked_up')) {
-          step3PalletTriggeredRef.current = true;
-          setPalletState('animating');
-        }
       }
     }
-  }, [currentStep, stepStatus, erpData, isSimulation, palletState, setPalletState]);
+  }, [currentStep, stepStatus, erpData, isSimulation]);
+
+  // ── PASO 3: Recoger pallet (sin carga) — se dispara en cuanto el palletState es válido ──
+  // Separado del init para que funcione aunque el palletState llegue tarde (ej. al saltar multiload)
+  // Sin condición isSimulation: la animación del Digital Twin es visual y funciona en ambos modos
+  useEffect(() => {
+    if (
+      currentStep === 2 &&
+      stepStatus[2] === STEP_STATUS.ACTIVE &&
+      erpData &&
+      !step3PalletTriggeredRef.current &&
+      (palletState === 'idle' || palletState === 'picked_up')
+    ) {
+      step3PalletTriggeredRef.current = true;
+      setPalletState('animating');
+    }
+  }, [currentStep, stepStatus, erpData, palletState, setPalletState]);
 
   // ── PASO 3: Auto-arrancar cámara cuando el operario pulsa INICIAR (stepStarted[2]=true) ──
   useEffect(() => {
