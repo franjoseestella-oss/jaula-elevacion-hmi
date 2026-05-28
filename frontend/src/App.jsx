@@ -14,6 +14,7 @@ import OperatorLoginModal from './components/OperatorLoginModal';
 import PlcModal from './components/PlcModal';
 import BaslerModal from './components/BaslerModal';
 import LogViewer from './components/LogViewer';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const API_BASE = 'http://127.0.0.1:8001';
 
@@ -1512,17 +1513,29 @@ function App() {
             isSimulation={isSimulation}
             distance={appPlc?.OR_Altura_Carretilla !== undefined ? appPlc.OR_Altura_Carretilla : telemetry.distance}
           />
-          <DigitalTwin
-            currentStep={currentStep}
-            distance={appPlc?.OR_Altura_Carretilla !== undefined ? appPlc.OR_Altura_Carretilla : telemetry.distance}
-            plcState={appPlc}
-            palletState={palletState}
-            erpData={erpData}
-            onPalletAnimComplete={() => setPalletState('picked_up')}
-            showStickers={appPlc.Ob_Poner_Pegatina || currentStep > 1}
-            zoomToStickers={currentStep === 1}
-            zoomOutMultiload={currentStep > 1}
-          />
+          <ErrorBoundary
+            name="Digital Twin 3D"
+            fallback={
+              <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-[#0a0f12]">
+                <span className="text-4xl">⚠</span>
+                <p className="text-red-400 font-black uppercase tracking-widest text-sm">Error en el visor 3D</p>
+                <p className="text-gray-500 text-xs text-center max-w-xs">El motor 3D ha fallado. Recargue la página para restaurar la visualización.</p>
+                <button onClick={() => window.location.reload()} className="mt-2 px-6 py-2 bg-logisnext-magenta/80 text-white text-xs font-black uppercase tracking-widest rounded-lg hover:bg-logisnext-magenta transition-colors">🔄 Recargar</button>
+              </div>
+            }
+          >
+            <DigitalTwin
+              currentStep={currentStep}
+              distance={appPlc?.OR_Altura_Carretilla !== undefined ? appPlc.OR_Altura_Carretilla : telemetry.distance}
+              plcState={appPlc}
+              palletState={palletState}
+              erpData={erpData}
+              onPalletAnimComplete={() => setPalletState('picked_up')}
+              showStickers={appPlc.Ob_Poner_Pegatina || currentStep > 1}
+              zoomToStickers={currentStep === 1}
+              zoomOutMultiload={currentStep > 1}
+            />
+          </ErrorBoundary>
 
 
 
@@ -1744,27 +1757,29 @@ function App() {
         </div>
 
         <div className="w-96 border-l border-[#2e404a] bg-[#0a0f12] flex flex-col z-30 shadow-[-10px_0_30px_rgba(0,0,0,0.5)]">
-          <Sequencer
-            iniciarPlcTime={iniciarPlcTime}
-            erpData={erpData}
-            telemetry={telemetry}
-            palletState={palletState}
-            setPalletState={setPalletState}
-            onStepChange={setCurrentStep}
-            operario={operario}
-            sequencerRef={sequencerRef}
-            onErpData={setErpData}
-            onOpenErp={() => setErpModalOpen(true)}
-            plcState={appPlc}
-            isSimulation={isSimulation}
-            setStep2Overlay={setStep2Overlay}
-            setTestHUDOverlay={setTestHUDOverlay}
-            setWaitingForIniciar={setWaitingForIniciar}
-            onSequenceEnd={resetCycleTimer}
-            isAnyModalOpen={!isMainScreen || !operario}
-            setFenceAlarmActive={setFenceAlarmActive}
-            setFenceReposoAlarmActive={setFenceReposoAlarmActive}
-          />
+          <ErrorBoundary name="Secuenciador">
+            <Sequencer
+              iniciarPlcTime={iniciarPlcTime}
+              erpData={erpData}
+              telemetry={telemetry}
+              palletState={palletState}
+              setPalletState={setPalletState}
+              onStepChange={setCurrentStep}
+              operario={operario}
+              sequencerRef={sequencerRef}
+              onErpData={setErpData}
+              onOpenErp={() => setErpModalOpen(true)}
+              plcState={appPlc}
+              isSimulation={isSimulation}
+              setStep2Overlay={setStep2Overlay}
+              setTestHUDOverlay={setTestHUDOverlay}
+              setWaitingForIniciar={setWaitingForIniciar}
+              onSequenceEnd={resetCycleTimer}
+              isAnyModalOpen={!isMainScreen || !operario}
+              setFenceAlarmActive={setFenceAlarmActive}
+              setFenceReposoAlarmActive={setFenceReposoAlarmActive}
+            />
+          </ErrorBoundary>
         </div>
       </div>
 
