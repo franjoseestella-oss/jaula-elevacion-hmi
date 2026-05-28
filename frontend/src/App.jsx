@@ -14,11 +14,52 @@ import OperatorLoginModal from './components/OperatorLoginModal';
 import PlcModal from './components/PlcModal';
 import BaslerModal from './components/BaslerModal';
 import LogViewer from './components/LogViewer';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const API_BASE = 'http://127.0.0.1:8001';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// usePlcCountdown — hook definido FUERA del componente App para no violar
+// las reglas de hooks (no se puede definir un hook dentro de otro componente)
+// ─────────────────────────────────────────────────────────────────────────────
+function usePlcCountdown(varValue, onComplete) {
+  const [timeLeft, setTimeLeft] = useState(null);
+  const onCompleteRef = useRef(onComplete);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  useEffect(() => {
+    let interval;
+    let triggered = false;
+    let currentLeft = 3;
+    if (varValue) {
+      setTimeLeft(3);
+      interval = setInterval(() => {
+        currentLeft -= 1;
+        if (currentLeft <= 0) {
+          setTimeLeft(0);
+          if (!triggered) {
+            triggered = true;
+            if (onCompleteRef.current) onCompleteRef.current();
+          }
+        } else {
+          setTimeLeft(currentLeft);
+        }
+      }, 1000);
+    } else {
+      setTimeLeft(null);
+    }
+    return () => clearInterval(interval);
+  }, [varValue]);
+
+  return timeLeft;
+}
+
 function App() {
   const [erpData, setErpData] = useState(null);
+
   const [erpModalOpen, setErpModalOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [plcModalOpen, setPlcModalOpen] = useState(false);
@@ -454,41 +495,6 @@ function App() {
   }, []);
 
 
-  const usePlcCountdown = (varValue, onComplete) => {
-    const [timeLeft, setTimeLeft] = useState(null);
-    const onCompleteRef = useRef(onComplete);
-
-    useEffect(() => {
-      onCompleteRef.current = onComplete;
-    }, [onComplete]);
-
-    useEffect(() => {
-      let interval;
-      let triggered = false;
-      let currentLeft = 3;
-      if (varValue) {
-        setTimeLeft(3);
-        interval = setInterval(() => {
-          currentLeft -= 1;
-          if (currentLeft <= 0) {
-            setTimeLeft(0);
-            if (!triggered) {
-              triggered = true;
-              if (onCompleteRef.current) onCompleteRef.current();
-            }
-          } else {
-            setTimeLeft(currentLeft);
-          }
-        }, 1000);
-      } else {
-        setTimeLeft(null);
-      }
-      return () => clearInterval(interval);
-    }, [varValue]);
-
-    return timeLeft;
-  };
-
 
   const handleHoldStart = (varName) => {
     if (varName === 'Ob_Iniciar_Secuencia' && !appPlc?.Ob_Estado_Automatico) {
@@ -737,52 +743,116 @@ function App() {
   }, [testHUDOverlay?.cameraTestState, waitingForIniciar, isSimulation]);
 
   useEffect(() => {
-    const ws = new WebSocket('ws://127.0.0.1:8001/ws');
-    ws.onopen = () => setNetworkStatus(prev => ({ ...prev, opc: true, basler: true }));
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === 'telemetry') {
-        const mappingStr = localStorage.getItem('plcVarMapping');
-        let mappedPlc = {};
-        if (mappingStr && data.plc) {
+    let ws;
+    let reconnectTimeout;
+    // Throttle: React state se actualiza máximo cada 100ms (10 Hz)
+    // El DOM directo y los globals siguen a velocidad total
+    let lastReactUpdate = 0;
+    let pendingTelemetry = null;
+    let rafId = null;
+
+    const flushTelemetry = () => {
+      if (pendingTelemetry) {
+        setTelemetry(pendingTelemetry);
+        pendingTelemetry = null;
+      }
+      rafId = null;
+    };
+
+    const connect = () => {
+      try {
+        ws = new WebSocket('ws://127.0.0.1:8001/ws');
+        ws.onopen = () => setNetworkStatus(prev => ({ ...prev, opc: true, basler: true }));
+        ws.onmessage = (event) => {
           try {
-            const mapping = JSON.parse(mappingStr);
-            Object.entries(mapping).forEach(([plcKey, mapData]) => {
-              if (mapData.appVar && data.plc[plcKey] !== undefined) {
-                mappedPlc[mapData.appVar] = data.plc[plcKey];
+            const data = JSON.parse(event.data);
+            if (data.type === 'telemetry') {
+              const mappingStr = localStorage.getItem('plcVarMapping');
+              let mappedPlc = {};
+              if (mappingStr && data.plc) {
+                try {
+                  const mapping = JSON.parse(mappingStr);
+                  Object.entries(mapping).forEach(([plcKey, mapData]) => {
+                    if (mapData.appVar && data.plc[plcKey] !== undefined) {
+                      mappedPlc[mapData.appVar] = data.plc[plcKey];
+                    }
+                  });
+                } catch (e) { console.error('[WS] Error parsing plcVarMapping:', e); }
               }
-            });
-          } catch (e) { }
-        }
 
-        const newTelemetry = {
-          distance: data.distance,
-          timer: data.timer,
-          state: data.state,
-          plc: data.plc || {},
-          mappedPlc: mappedPlc,
-          opcua_connected: data.opcua_connected,
-          opcua_error: data.opcua_error
+              // ── Actualización INMEDIATA (sin React) ─────────────────────
+              // Globals para Sequencer y Laser a velocidad total (100+ Hz)
+              window.__fastPlcState = mappedPlc;
+              window.__fastRawPlcState = data.plc || {};
+              window.__lastTelemetryTime = Date.now();
+
+              // DOM directo para el display del láser (sin pasar por React)
+              const laserSpan = document.getElementById('laser-distance-display');
+              if (laserSpan && mappedPlc.OR_Altura_Carretilla !== undefined) {
+                laserSpan.innerText = Number(mappedPlc.OR_Altura_Carretilla).toFixed(2);
+              }
+
+              // ── Actualización de React con THROTTLE 100ms (10 Hz) ───────
+              // Evita el Out of Memory causado por 100+ re-renders/segundo
+              const newTelemetry = {
+                distance: data.distance,
+                timer: data.timer,
+                state: data.state,
+                plc: data.plc || {},
+                mappedPlc: mappedPlc,
+                opcua_connected: data.opcua_connected,
+                opcua_error: data.opcua_error
+              };
+
+              const now = Date.now();
+              pendingTelemetry = newTelemetry;
+
+              if (now - lastReactUpdate >= 100) {
+                // Más de 100ms desde el último update → actualizar ya
+                lastReactUpdate = now;
+                if (rafId) cancelAnimationFrame(rafId);
+                rafId = null;
+                setTelemetry(newTelemetry);
+                pendingTelemetry = null;
+              } else if (!rafId) {
+                // Dentro del throttle → programar update en el próximo frame disponible
+                rafId = requestAnimationFrame(() => {
+                  lastReactUpdate = Date.now();
+                  flushTelemetry();
+                });
+              }
+            }
+          } catch (parseErr) {
+            console.error('[WS] Error procesando mensaje WebSocket:', parseErr);
+          }
         };
-
-        // Guardamos el estado rápido globalmente para Sequencer (100 Hz)
-        window.__fastPlcState = mappedPlc;
-        window.__fastRawPlcState = data.plc || {};
-
-        // 1. ACTUALIZACIÓN GRÁFICA DIRECTA (Bypass de React para el Láser) a 500 Hz
-        const laserSpan = document.getElementById('laser-distance-display');
-        if (laserSpan && mappedPlc.OR_Altura_Carretilla !== undefined) {
-          laserSpan.innerText = Number(mappedPlc.OR_Altura_Carretilla).toFixed(2);
-        }
-
-        // Actualización directa al estado sin límites para máxima velocidad en toda la UI
-        window.__lastTelemetryTime = Date.now();
-        setTelemetry(newTelemetry);
+        ws.onerror = (err) => {
+          console.error('[WS] Error WebSocket:', err);
+          setNetworkStatus(prev => ({ ...prev, opc: false, basler: false }));
+        };
+        ws.onclose = () => {
+          setNetworkStatus(prev => ({ ...prev, opc: false, basler: false }));
+          // Reconexión automática tras 3 segundos
+          reconnectTimeout = setTimeout(() => {
+            console.log('[WS] Intentando reconexión WebSocket...');
+            connect();
+          }, 3000);
+        };
+      } catch (err) {
+        console.error('[WS] No se pudo crear WebSocket:', err);
+        setNetworkStatus(prev => ({ ...prev, opc: false, basler: false }));
+        reconnectTimeout = setTimeout(connect, 3000);
       }
     };
-    ws.onclose = () => setNetworkStatus(prev => ({ ...prev, opc: false, basler: false }));
-    return () => ws.close();
+
+    connect();
+    return () => {
+      clearTimeout(reconnectTimeout);
+      if (rafId) cancelAnimationFrame(rafId);
+      if (ws) ws.close();
+    };
   }, []);
+
 
   const appPlc = isSimulation ? { ...(telemetry?.plc || {}), Ob_Estado_Automatico: true } : (telemetry?.mappedPlc || {});
 
@@ -1512,17 +1582,29 @@ function App() {
             isSimulation={isSimulation}
             distance={appPlc?.OR_Altura_Carretilla !== undefined ? appPlc.OR_Altura_Carretilla : telemetry.distance}
           />
-          <DigitalTwin
-            currentStep={currentStep}
-            distance={appPlc?.OR_Altura_Carretilla !== undefined ? appPlc.OR_Altura_Carretilla : telemetry.distance}
-            plcState={appPlc}
-            palletState={palletState}
-            erpData={erpData}
-            onPalletAnimComplete={() => setPalletState('picked_up')}
-            showStickers={appPlc.Ob_Poner_Pegatina || currentStep > 1}
-            zoomToStickers={currentStep === 1}
-            zoomOutMultiload={currentStep > 1}
-          />
+          <ErrorBoundary
+            name="Digital Twin 3D"
+            fallback={
+              <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-[#0a0f12]">
+                <span className="text-4xl">⚠</span>
+                <p className="text-red-400 font-black uppercase tracking-widest text-sm">Error en el visor 3D</p>
+                <p className="text-gray-500 text-xs text-center max-w-xs">El motor 3D ha fallado. Recargue la página para restaurar la visualización.</p>
+                <button onClick={() => window.location.reload()} className="mt-2 px-6 py-2 bg-logisnext-magenta/80 text-white text-xs font-black uppercase tracking-widest rounded-lg hover:bg-logisnext-magenta transition-colors">🔄 Recargar</button>
+              </div>
+            }
+          >
+            <DigitalTwin
+              currentStep={currentStep}
+              distance={appPlc?.OR_Altura_Carretilla !== undefined ? appPlc.OR_Altura_Carretilla : telemetry.distance}
+              plcState={appPlc}
+              palletState={palletState}
+              erpData={erpData}
+              onPalletAnimComplete={() => setPalletState('picked_up')}
+              showStickers={appPlc.Ob_Poner_Pegatina || currentStep > 1}
+              zoomToStickers={currentStep === 1}
+              zoomOutMultiload={currentStep > 1}
+            />
+          </ErrorBoundary>
 
 
 
@@ -1744,27 +1826,29 @@ function App() {
         </div>
 
         <div className="w-96 border-l border-[#2e404a] bg-[#0a0f12] flex flex-col z-30 shadow-[-10px_0_30px_rgba(0,0,0,0.5)]">
-          <Sequencer
-            iniciarPlcTime={iniciarPlcTime}
-            erpData={erpData}
-            telemetry={telemetry}
-            palletState={palletState}
-            setPalletState={setPalletState}
-            onStepChange={setCurrentStep}
-            operario={operario}
-            sequencerRef={sequencerRef}
-            onErpData={setErpData}
-            onOpenErp={() => setErpModalOpen(true)}
-            plcState={appPlc}
-            isSimulation={isSimulation}
-            setStep2Overlay={setStep2Overlay}
-            setTestHUDOverlay={setTestHUDOverlay}
-            setWaitingForIniciar={setWaitingForIniciar}
-            onSequenceEnd={resetCycleTimer}
-            isAnyModalOpen={!isMainScreen || !operario}
-            setFenceAlarmActive={setFenceAlarmActive}
-            setFenceReposoAlarmActive={setFenceReposoAlarmActive}
-          />
+          <ErrorBoundary name="Secuenciador">
+            <Sequencer
+              iniciarPlcTime={iniciarPlcTime}
+              erpData={erpData}
+              telemetry={telemetry}
+              palletState={palletState}
+              setPalletState={setPalletState}
+              onStepChange={setCurrentStep}
+              operario={operario}
+              sequencerRef={sequencerRef}
+              onErpData={setErpData}
+              onOpenErp={() => setErpModalOpen(true)}
+              plcState={appPlc}
+              isSimulation={isSimulation}
+              setStep2Overlay={setStep2Overlay}
+              setTestHUDOverlay={setTestHUDOverlay}
+              setWaitingForIniciar={setWaitingForIniciar}
+              onSequenceEnd={resetCycleTimer}
+              isAnyModalOpen={!isMainScreen || !operario}
+              setFenceAlarmActive={setFenceAlarmActive}
+              setFenceReposoAlarmActive={setFenceReposoAlarmActive}
+            />
+          </ErrorBoundary>
         </div>
       </div>
 
