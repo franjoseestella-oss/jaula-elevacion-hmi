@@ -279,6 +279,7 @@ const LogViewer = ({ isOpen, onClose }) => {
                     {renderTh("Est. C/Carga", "ESTADO_CARGA")}
                     {renderTh("Carga ERP", "CARGA_CONSIGNADA")}
                     {renderTh("Carga Get", "CARGA_GET")}
+                    {renderTh("Peso Prueba", "PESO_PRUEBA")}
                     {renderTh("Alt. Inicial 5M", "ALTURA_INICIAL")}
                     {renderTh("Alt. Final 5M", "ALTURA_FINAL")}
                     {renderTh("Caída 5M", "DIFERENCIA_ALTURAS")}
@@ -345,6 +346,7 @@ const LogViewer = ({ isOpen, onClose }) => {
                       <td className="px-4 py-3"><StatusBadge status={log.ESTADO_CARGA} /></td>
                       <td className="px-4 py-3 font-mono">{formatNumber(log.CARGA_CONSIGNADA)}</td>
                       <td className="px-4 py-3 font-mono">{formatNumber(log.CARGA_GET)}</td>
+                      <td className="px-4 py-3 font-mono">{formatNumber(log.PESO_PRUEBA)}</td>
                       <td className="px-4 py-3 font-mono">{formatNumber(log.ALTURA_INICIAL)}</td>
                       <td className="px-4 py-3 font-mono">{formatNumber(log.ALTURA_FINAL)}</td>
                       <td className="px-4 py-3 font-mono text-yellow-500">{formatNumber(log.DIFERENCIA_ALTURAS)}</td>

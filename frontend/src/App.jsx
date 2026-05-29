@@ -1205,25 +1205,35 @@ function App() {
           )}
 
           {/* BANNER GIGANTE DE CARGA (Para Test con Carga) */}
-          {erpData && (currentStep === 3 || currentStep === 4) && (
-            <div className={`absolute top-10 right-10 z-50 px-6 py-4 rounded-2xl border-2 backdrop-blur-md shadow-2xl flex flex-col gap-3 ${(appPlc?.OW_Numero_Pallets || 0) * 250 === erpData.peso_pruebas
-              ? 'bg-green-600/80 border-green-400'
-              : 'bg-[#0a0f12]/90 border-logisnext-magenta'
+          {erpData && (currentStep === 3 || currentStep === 4) && (() => {
+            const pesoErp = erpData.peso_pruebas || 0;
+            const pesoPrueba = Math.floor(pesoErp / 250) * 250;
+            const cargaActual = (appPlc?.OW_Numero_Pallets || 0) * 250;
+            const isCorrect = cargaActual === pesoPrueba;
+            
+            return (
+              <div className={`absolute top-10 right-10 z-50 px-6 py-4 rounded-2xl border-2 backdrop-blur-md shadow-2xl flex flex-col gap-3 ${
+                isCorrect ? 'bg-green-600/80 border-green-400' : 'bg-[#0a0f12]/90 border-logisnext-magenta'
               }`}>
-              <h3 className="text-xs font-black uppercase tracking-widest text-gray-300 border-b border-white/20 pb-2">Control de Carga</h3>
-              <div className="flex justify-between items-center gap-8">
-                <span className="text-sm font-bold text-gray-400 tracking-wider">CARGA REQUERIDA (ERP)</span>
-                <span className="text-xl font-black text-logisnext-magenta">{erpData.peso_pruebas || 0} kg</span>
-              </div>
-              <div className="flex justify-between items-end gap-8">
-                <span className="text-sm font-bold text-gray-400 tracking-wider">CARGA ACTUAL (PLC)</span>
-                <div className="flex flex-col items-end">
-                  <span className="text-2xl font-black text-white">{(appPlc?.OW_Numero_Pallets || 0) * 250} kg</span>
-                  <span className="text-[10px] text-gray-400">({appPlc?.OW_Numero_Pallets || 0} pallets × 250kg)</span>
+                <h3 className="text-xs font-black uppercase tracking-widest text-gray-300 border-b border-white/20 pb-2">Control de Carga</h3>
+                <div className="flex justify-between items-center gap-8">
+                  <span className="text-sm font-bold text-gray-400 tracking-wider">PESO ERP</span>
+                  <span className="text-xl font-black text-logisnext-magenta">{pesoErp} kg</span>
+                </div>
+                <div className="flex justify-between items-center gap-8">
+                  <span className="text-sm font-bold text-gray-400 tracking-wider">PESO PRUEBA</span>
+                  <span className="text-xl font-black text-yellow-400">{pesoPrueba} kg</span>
+                </div>
+                <div className="flex justify-between items-end gap-8">
+                  <span className="text-sm font-bold text-gray-400 tracking-wider">CARGA ACTUAL</span>
+                  <div className="flex flex-col items-end">
+                    <span className="text-2xl font-black text-white">{cargaActual} kg</span>
+                    <span className="text-[10px] text-gray-400">({appPlc?.OW_Numero_Pallets || 0} pallets × 250kg)</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* OVERLAY DE COMPARATIVA DE TIEMPOS Y CÁMARA (Para pasos 3 y 4) */}
           {testHUDOverlay && !testHUDOverlay.is5mTest && (

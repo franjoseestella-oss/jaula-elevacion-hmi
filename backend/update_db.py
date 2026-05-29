@@ -43,5 +43,11 @@ with engine.connect() as conn:
         print('Added peso_pruebas to JAULA_ERP')
     except Exception as e:
         print('Add peso_pruebas failed:', e)
-        
+
+    try:
+        conn.execute(text("ALTER TABLE LOG_TABLA ADD PESO_PRUEBA FLOAT NULL;"))
+        print('Added PESO_PRUEBA to LOG_TABLA')
+    except Exception as e:
+        print('Add PESO_PRUEBA failed:', e)
+
     conn.commit()

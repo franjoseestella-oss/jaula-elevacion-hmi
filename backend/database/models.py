@@ -90,6 +90,7 @@ class LogTabla(Base):
     ESTADO_CARGA = Column(String(20), nullable=True)
     CARGA_CONSIGNADA = Column(Float, nullable=True)
     CARGA_GET = Column(Float, nullable=True)
+    PESO_PRUEBA = Column(Float, nullable=True)
 
     # 5. 5 Minutos
     ALTURA_INICIAL = Column(Float, nullable=True)

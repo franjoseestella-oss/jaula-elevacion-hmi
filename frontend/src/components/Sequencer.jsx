@@ -780,6 +780,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       ESTADO_CARGA: estadoConCarga,
       CARGA_CONSIGNADA: erp?.peso_pruebas,
       CARGA_GET: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.CARGA_GET : sData[4].cargaGet,
+      PESO_PRUEBA: stepStatus[3] === STEP_STATUS.SKIP ? prevLog.PESO_PRUEBA : (erp?.peso_pruebas != null ? Math.floor(erp.peso_pruebas / 250) * 250 : null),
 
       // Etapa 4: 5 Minutos
       ALTURA_INICIAL: stepStatus[4] === STEP_STATUS.SKIP ? prevLog.ALTURA_INICIAL : sData[5].altura_inicial,
@@ -1241,6 +1242,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             ? (window.__simPallets || 0)
             : (plcState?.OW_Numero_Pallets || 0);
           const targetLoad = erpData?.peso_pruebas || 0;
+          const pesoPrueba = Math.floor(targetLoad / 250) * 250;
           const currentLoad = currentPallets * 250;
 
           if (targetLoad === 0) {
@@ -1249,9 +1251,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             return;
           }
 
-          if (currentLoad !== targetLoad) {
-            console.warn(`[INICIAR] Bloqueado: Carga incorrecta — ${currentLoad}kg actual vs ${targetLoad}kg requerido (ERP).`);
-            setTestAlarm(`Carga incorrecta: ${currentLoad} kg cargados, se requieren ${targetLoad} kg (ERP). Ajuste los pallets antes de iniciar.`);
+          if (currentLoad !== pesoPrueba) {
+            console.warn(`[INICIAR] Bloqueado: Carga incorrecta — ${currentLoad}kg actual vs ${pesoPrueba}kg peso de prueba (ERP: ${targetLoad}kg).`);
+            setTestAlarm(`Carga incorrecta: ${currentLoad} kg cargados, se requieren ${pesoPrueba} kg (Peso Prueba). Ajuste los pallets antes de iniciar.`);
             return;
           }
 
@@ -1294,10 +1296,11 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           // Validación de carga
           const currentPallets = plcState?.OW_Numero_Pallets || 0;
           const targetLoad = erpData?.peso_pruebas || 0;
+          const pesoPrueba = Math.floor(targetLoad / 250) * 250;
           const currentLoad = currentPallets * 250;
 
-          if (currentLoad !== targetLoad) {
-            setTestAlarm(`Carga incorrecta: ${currentLoad}kg actual vs ${targetLoad}kg requerido (ERP). Compruebe los pallets.`);
+          if (currentLoad !== pesoPrueba) {
+            setTestAlarm(`Carga incorrecta: ${currentLoad}kg actual vs ${pesoPrueba}kg peso de prueba (ERP: ${targetLoad}kg). Compruebe los pallets.`);
             return;
           } else {
             setTestAlarm(null);
@@ -1331,10 +1334,11 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         } else if (stepStatus[4] === STEP_STATUS.ACTIVE) {
           const currentPallets = isSimulation ? (window.__simPallets || 0) : (plcStateRef.current?.OW_Numero_Pallets || 0);
           const targetLoad = erpData?.peso_pruebas || 0;
+          const pesoPrueba = Math.floor(targetLoad / 250) * 250;
           const currentLoad = currentPallets * 250;
 
-          if (currentLoad !== targetLoad) {
-            setTestAlarm(`Carga incorrecta: ${currentLoad}kg actual vs ${targetLoad}kg requerido (ERP). Compruebe los pallets.`);
+          if (currentLoad !== pesoPrueba) {
+            setTestAlarm(`Carga incorrecta: ${currentLoad}kg actual vs ${pesoPrueba}kg peso de prueba (ERP: ${targetLoad}kg). Compruebe los pallets.`);
             return;
           } else {
             setTestAlarm(null);
@@ -1396,8 +1400,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           ? (window.__simPallets || 0)
           : (plcState?.OW_Numero_Pallets || 0);
         const targetLoad = erpData?.peso_pruebas || 0;
+        const pesoPrueba = Math.floor(targetLoad / 250) * 250;
         const currentLoad = currentPallets * 250;
-        if (targetLoad === 0 || currentLoad !== targetLoad) {
+        if (targetLoad === 0 || currentLoad !== pesoPrueba) {
           if (iniciarCountdown !== null) setIniciarCountdown(null);
           return;
         }
@@ -1999,10 +2004,11 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       } else if (statuses[3] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') {
         const currentPallets = pState?.OW_Numero_Pallets || 0;
         const targetLoad = erpDataRef.current?.peso_pruebas || 0;
+        const pesoPrueba = Math.floor(targetLoad / 250) * 250;
         const currentLoad = currentPallets * 250;
 
-        if (currentLoad !== targetLoad) {
-          setTestAlarm(`Carga incorrecta: ${currentLoad}kg actual vs ${targetLoad}kg requerido (ERP). Compruebe los pallets.`);
+        if (currentLoad !== pesoPrueba) {
+          setTestAlarm(`Carga incorrecta: ${currentLoad}kg actual vs ${pesoPrueba}kg peso de prueba (ERP: ${targetLoad}kg). Compruebe los pallets.`);
           setCameraTestState('nok');
           return;
         } else {
@@ -2478,6 +2484,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
       const currentPallets = plcStateRef.current?.OW_Numero_Pallets || 0;
       const targetLoad = erpDataRef.current?.peso_pruebas || 0;
+      const pesoPrueba = Math.floor(targetLoad / 250) * 250;
       const currentLoad = currentPallets * 250;
 
       setTest5mState(prevState => {
@@ -2487,7 +2494,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         if (prevState === 'esperando_elevacion') {
           // cotaInicial está en mm, currentHeight en mm. 
           // Esperamos que esté por encima de cotaInicial.
-          if (currentHeight >= cotaInicial && currentLoad === targetLoad) {
+          if (currentHeight >= cotaInicial && currentLoad === pesoPrueba) {
             nextState = 'stabilizing';
             stage5StableStartRef.current = Date.now();
             stage5InitialHeightRef.current = currentHeight;
@@ -3073,8 +3080,9 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             return (
               <>
                 <div className="flex flex-col gap-1 border border-[#2e404a] p-2 rounded-lg bg-[#0a0f12]">
-                  <DataLine label="Carga Requerida ERP" value={erpData.peso_pruebas != null ? `${erpData.peso_pruebas} kg` : '—'} highlight />
-                  <DataLine label="Carga Actual (PLC)" value={plcState?.OW_Numero_Pallets ? `${plcState.OW_Numero_Pallets * 250} kg` : '0 kg'} highlight={false} />
+                  <DataLine label="PESO ERP" value={erpData.peso_pruebas != null ? `${erpData.peso_pruebas} kg` : '—'} highlight />
+                  <DataLine label="PESO PRUEBA" value={erpData.peso_pruebas != null ? `${Math.floor(erpData.peso_pruebas / 250) * 250} kg` : '—'} highlight />
+                  <DataLine label="CARGA ACTUAL" value={plcState?.OW_Numero_Pallets ? `${plcState.OW_Numero_Pallets * 250} kg` : '0 kg'} highlight={false} />
                   {plcState?.OW_Numero_Pallets > 0 && (
                     <span className="text-[8px] text-logisnext-slate ml-auto -mt-1 mb-1 block">
                       ({plcState.OW_Numero_Pallets} pallet{plcState.OW_Numero_Pallets !== 1 ? 's' : ''} × 250kg)
@@ -3221,7 +3229,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           )}
           {stepStatus[3] === STEP_STATUS.OK && erpData && (
             <div className="flex flex-col gap-1">
-              <DataLine label="Carga" value={`${erpData.peso_pruebas ?? '—'} kg ✓`} highlight />
+              <DataLine label="PESO ERP" value={`${erpData.peso_pruebas ?? '—'} kg`} />
+              <DataLine label="PESO PRUEBA" value={`${Math.floor((erpData.peso_pruebas ?? 0) / 250) * 250} kg ✓`} highlight />
               <DataLine label="Duración" value={formatDuration(stepDurations[3])} />
             </div>
           )}
@@ -3233,6 +3242,17 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             <>
               <DataLine label="Modelo" value={erpData.modelo} highlight />
               <DataLine label="Altura mástil" value={`${erpData.altura_max_interm ?? '—'} mm`} />
+
+              <div className="flex flex-col gap-1 border border-[#2e404a] p-2 rounded-lg bg-[#0a0f12] mt-2 mb-2">
+                <DataLine label="PESO ERP" value={erpData.peso_pruebas != null ? `${erpData.peso_pruebas} kg` : '—'} highlight />
+                <DataLine label="PESO PRUEBA" value={erpData.peso_pruebas != null ? `${Math.floor(erpData.peso_pruebas / 250) * 250} kg` : '—'} highlight />
+                <DataLine label="CARGA ACTUAL" value={plcState?.OW_Numero_Pallets ? `${plcState.OW_Numero_Pallets * 250} kg` : '0 kg'} highlight={false} />
+                {plcState?.OW_Numero_Pallets > 0 && (
+                  <span className="text-[8px] text-logisnext-slate ml-auto -mt-1 mb-1 block">
+                    ({plcState.OW_Numero_Pallets} pallet{plcState.OW_Numero_Pallets !== 1 ? 's' : ''} × 250kg)
+                  </span>
+                )}
+              </div>
 
               {!stepStarted[4] ? (
                 <div className="flex flex-col gap-2">
@@ -3335,9 +3355,11 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
               Modelo <strong>{erpData?.modelo}</strong> → no es Mx/XL. Paso omitido.
             </p>
           )}
-          {stepStatus[4] === STEP_STATUS.OK && (
+          {stepStatus[4] === STEP_STATUS.OK && erpData && (
             <div className="flex flex-col gap-1">
               <p className="text-[9px] text-green-400">Prueba de 5 minutos superada ✓</p>
+              <DataLine label="PESO ERP" value={`${erpData.peso_pruebas ?? '—'} kg`} />
+              <DataLine label="PESO PRUEBA" value={`${Math.floor((erpData.peso_pruebas ?? 0) / 250) * 250} kg ✓`} highlight />
               <DataLine label="Duración" value={formatDuration(stepDurations[4])} />
             </div>
           )}
