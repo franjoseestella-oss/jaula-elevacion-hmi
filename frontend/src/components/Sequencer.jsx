@@ -1987,6 +1987,22 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
       }
 
+      // Bloquear si es etapa 4 o 5 (index 3 y 4) y la carga no coincide
+      if (step === 3 || step === 4) {
+        const currentPallets = pState?.OW_Numero_Pallets || 0;
+        const targetLoad = erpDataRef.current?.peso_pruebas || 0;
+        const pesoPrueba = Math.floor(targetLoad / 250) * 250;
+        const currentLoad = currentPallets * 250;
+
+        if (currentLoad !== pesoPrueba) {
+          console.warn(`[DIRECTO] Bloqueado: Carga incorrecta (${currentLoad}kg vs ${pesoPrueba}kg).`);
+          setTestAlarm(`Carga incorrecta: ${currentLoad}kg actual vs ${pesoPrueba}kg peso de prueba (ERP: ${targetLoad}kg). Compruebe los pallets.`);
+          return;
+        } else {
+          setTestAlarm(null);
+        }
+      }
+
       // Desbloquear etapa
       console.log('[DIRECTO] Desbloqueando paso', step);
       setStepStarted(prev => {
