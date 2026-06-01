@@ -439,12 +439,16 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   const stage5StableStartRef = useRef(null);
   const stage5TimerStartRef = useRef(null);
 
+  const timer5minRef = useRef(null);
+
   // Estado para la prueba de cámara
   // Estados: 'standby' | 'esperando_1500' | 'ascenso' | 'espera_arriba' | 'descenso' | 'ok' | 'nok'
   const [cameraTestState, setCameraTestState] = useState('standby');
   const [testAlarm, setTestAlarm] = useState(null); // 'ascenso_incompleto', 'descenso_incompleto'
   const [simTimers, setSimTimers] = useState({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
+
   const [waitCountdown, setWaitCountdown] = useState(null); // cuenta atrás 3-2-1 en espera_arriba
+  const waitCountdownRef = useRef(null);
 
   // Modal para repetir prueba
   const [repeatModal, setRepeatModal] = useState({
@@ -585,7 +589,6 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
 
         const waited = Date.now() - s.tTopReachTime;
-
         if (waited < 3000) {
           // Antes de los 3s: si la carretilla varía más de 10mm (+/- 0.01m), reiniciar el contador
           if (Math.abs(h - s.hTopReach) > 0.01) {
@@ -593,13 +596,23 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             s.hTopReach = h;
           }
           const remaining = Math.ceil((3000 - (Date.now() - s.tTopReachTime)) / 1000);
-          setWaitCountdown(Math.max(1, remaining));
+          const val = Math.max(1, remaining);
+          if (waitCountdownRef.current !== val) {
+            waitCountdownRef.current = val;
+            setWaitCountdown(val);
+          }
         } else {
           // 3 segundos completados — mostrar GO! hasta que el operario baje
-          setWaitCountdown(0);
+          if (waitCountdownRef.current !== 0) {
+            waitCountdownRef.current = 0;
+            setWaitCountdown(0);
+          }
           // Arrancar descenso solo si notamos variación real de bajada > 10mm (0.01m)
           if (h <= s.hTopReach - 0.01) {
-            setWaitCountdown(null);
+            if (waitCountdownRef.current !== null) {
+              waitCountdownRef.current = null;
+              setWaitCountdown(null);
+            }
             setCameraTestState('descenso');
             s.tStartDesc = null;
           }
@@ -2519,7 +2532,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         } else if (prevState === 'running') {
           const elapsedSeconds = Math.floor((Date.now() - stage5TimerStartRef.current) / 1000);
           const remaining = Math.max(0, test5mConfig.duration - elapsedSeconds);
-          setTimer5min(remaining);
+          if (timer5minRef.current !== remaining) {
+            timer5minRef.current = remaining;
+            setTimer5min(remaining);
+          }
 
           // Comprobar variación > tolerancia requerida (test5mConfig.tolerancia) en mm
           if (Math.abs(currentHeight - stage5InitialHeightRef.current) > test5mConfig.tolerancia) {
