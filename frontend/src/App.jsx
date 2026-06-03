@@ -1522,10 +1522,12 @@ function App() {
                       ].map(({ label, val, min, max, raw, rMin, rMax }) => {
                         const ok = raw != null && rMin != null ? raw >= rMin && raw <= rMax : null;
                         return (
-                          <div key={label} className={`p-3 rounded-xl border text-center ${ok ? 'border-green-500/40 bg-green-900/10' : 'border-red-500/40 bg-red-900/10'}`}>
-                            <span className="text-[10px] text-gray-400 uppercase tracking-widest block mb-1">{label}</span>
-                            <span className={`text-2xl font-mono font-black ${ok ? 'text-green-400' : 'text-red-400'}`}>{val ?? '—'}</span>
-                            <div className="text-[10px] text-gray-500 font-mono mt-1">ERP: {min} – {max}</div>
+                          <div key={label} className={`p-4 rounded-2xl border text-center ${ok ? 'border-green-500/40 bg-green-900/10' : 'border-red-500/40 bg-red-900/10'}`}>
+                            <span className="text-[11px] text-gray-400 uppercase tracking-widest block mb-1">{label}</span>
+                            <span className={`text-3xl font-mono font-black ${ok ? 'text-green-400' : 'text-red-400'}`}>{val ?? '—'}</span>
+                            <div className="text-base font-mono font-black text-yellow-400 mt-2 bg-[#050b0d] py-1 px-2 rounded-lg border border-[#2e404a]/30">
+                              ERP: {min} – {max}
+                            </div>
                           </div>
                         );
                       })}
