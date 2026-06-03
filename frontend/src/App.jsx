@@ -1307,9 +1307,9 @@ function App() {
                             AVG: {((testHUDOverlay.testDist * 100000) / rawElev).toFixed(0)} mm/s
                           </div>
                         )}
-                        <div className="mt-2 pt-2 border-t border-[#2e404a]/60 flex items-center gap-2">
-                          <span className="text-[10px] text-logisnext-slate font-bold">ERP:</span>
-                          <span className="text-sm font-mono font-bold text-gray-300">
+                        <div className="mt-2 pt-2 border-t border-[#2e404a]/60 flex flex-col gap-0.5">
+                          <span className="text-[10px] text-logisnext-slate font-bold tracking-wider">ERP OBJETIVO:</span>
+                          <span className="text-lg font-mono font-black text-yellow-400">
                             {testHUDOverlay.minElev ?? '—'} — {testHUDOverlay.maxElev ?? '—'}
                           </span>
                         </div>
@@ -1343,9 +1343,9 @@ function App() {
                             AVG: {((testHUDOverlay.testDist * 100000) / rawDesc).toFixed(0)} mm/s
                           </div>
                         )}
-                        <div className="mt-2 pt-2 border-t border-[#2e404a]/60 flex items-center gap-2">
-                          <span className="text-[10px] text-logisnext-slate font-bold">ERP:</span>
-                          <span className="text-sm font-mono font-bold text-gray-300">
+                        <div className="mt-2 pt-2 border-t border-[#2e404a]/60 flex flex-col gap-0.5">
+                          <span className="text-[10px] text-logisnext-slate font-bold tracking-wider">ERP OBJETIVO:</span>
+                          <span className="text-lg font-mono font-black text-yellow-400">
                             {testHUDOverlay.minDesc ?? '—'} — {testHUDOverlay.maxDesc ?? '—'}
                           </span>
                         </div>
