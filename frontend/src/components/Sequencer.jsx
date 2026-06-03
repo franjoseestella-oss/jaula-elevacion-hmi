@@ -1569,12 +1569,24 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
               // Condiciones iniciales NO cumplidas → Rojo parpadeante
               luzRoja = blinkTick;
             }
-            else if (cameraTestState === 'ascenso' || cameraTestState === 'espera_arriba' || cameraTestState === 'descenso') {
-              // Prueba en curso → Verde parpadeante
+            else if (cameraTestState === 'ascenso') {
+              // Si el PLC ha activado el Ready (carretilla arriba), luz azul fija de inmediato
+              if (isTimerReadyVal) {
+                luzAzul = true;
+              } else {
+                luzVerde = blinkTick;
+              }
+            }
+            else if (cameraTestState === 'espera_arriba') {
+              // Espera arriba durante la cuenta atrás → Luz azul fija
+              luzAzul = true;
+            }
+            else if (cameraTestState === 'descenso') {
+              // Descenso en curso → Verde parpadeante
               luzVerde = blinkTick;
             }
             else if (cameraTestState === 'ok') {
-              // Prueba superada → Verde fijo
+              // Prueba superada final (descenso completado) → Verde fijo (original)
               luzVerde = true;
             }
             else if (cameraTestState === 'nok') {
@@ -1851,6 +1863,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         return;
       }
 
+
       console.log(`[FLANCO READY↑] Detectado flanco 0→1 en estado '${testState}' (step ${step + 1}) — esperando 3s confirmación...`);
 
       // Cancelar cualquier timeout anterior antes de crear uno nuevo
@@ -1868,55 +1881,35 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           return;
         }
 
-        const currentStep_ = currentStepRef.current;
         const timers = simTimersRef.current;
         const erp = erpDataRef.current;
-        const isSinCarga = currentStep_ === 2;
+        const isSinCarga = currentStepRef.current === 2;
 
-        // Re-evaluar el estado actual por si cambió durante los 3 segundos
-        const currentTestState = cameraTestStateRef.current;
-        console.log(`[FLANCO READY↑] Flanco confirmado en estado '${currentTestState}' — leyendo valor...`);
+        console.log(`[FLANCO READY↑] Flanco confirmado en estado '${testState}' — leyendo valor...`);
 
-        const hAct = (plcStateRef.current?.OR_Altura_Carretilla || 0) / 1000;
-        const cotaM = cotaInicial / 1000;
-        const testDist = is1mTest ? 1.0 : 2.0;
-
-        if (currentTestState === 'ascenso') {
+        // Usamos testState (capturado en el flanco) para decidir la rama de evaluación
+        if (testState === 'ascenso') {
           // ─ Fin del ascenso ─
           if (timers.finishedElev) return;
-          // Se desactiva la comprobación estricta de altura para evitar bloqueos por lag o jitter
-          // const targetHeight = cotaM + testDist - 0.08; // 80mm de margen
-          // if (hAct < targetHeight) {
-          //   console.warn(`[FLANCO READY↑] Ascenso NO confirmado: Altura actual (${hAct.toFixed(3)}m) no supera la cota mínima de ascenso (${targetHeight.toFixed(3)}m)`);
-          //   return;
-          // }
-
           const raw = getPlcVal(plcStateRef.current, 'OR_Tiempo_Elevacion')
                    ?? getPlcVal(plcStateRef.current, 'OW_Tiempo_Elevacion')
                    ?? 0;
           const finalElev = Math.floor(raw / 10);
-          console.log(`[FLANCO READY↑] Elevación confirmada: ${finalElev} cs (raw=${raw}) con altura ${hAct.toFixed(3)}m`);
+          console.log(`[FLANCO READY↑] Elevación confirmada: ${finalElev} cs (raw=${raw})`);
           setSimTimers(prev => ({ ...prev, finishedElev: true, elev: finalElev }));
           
           setCameraTestState('espera_arriba');
           setWaitCountdown(3);
 
-        } else if (currentTestState === 'descenso') {
-          // ─ Fin del descenso ─
+        } else if (testState === 'descenso') {
+          // ─ Fin del descenso ─ (la UI ya está en 'ok', aquí evaluamos los tiempos)
           if (timers.finishedDesc) return;
-          // Se desactiva la comprobación estricta de altura para evitar bloqueos por lag o jitter
-          // const targetHeight = cotaM + 0.08; // 80mm de margen
-          // if (hAct > targetHeight) {
-          //   console.warn(`[FLANCO READY↑] Descenso NO confirmado: Altura actual (${hAct.toFixed(3)}m) está por encima de la cota inicial máxima (${targetHeight.toFixed(3)}m)`);
-          //   return;
-          // }
-
           const rawDesc = getPlcVal(plcStateRef.current, 'OR_Tiempo_Descenso')
                        ?? getPlcVal(plcStateRef.current, 'OW_Tiempo_Descenso')
                        ?? 0;
           const finalElev = timers.elev;
           const finalDesc = Math.floor(rawDesc / 10);
-          console.log(`[FLANCO READY↑] Descenso confirmado: ${finalDesc} cs (raw=${rawDesc}) con altura ${hAct.toFixed(3)}m`);
+          console.log(`[FLANCO READY↑] Descenso confirmado: ${finalDesc} cs (raw=${rawDesc})`);
           const minElev = isSinCarga ? erp?.tpo_elev_min_scarga : erp?.tpo_elevac_min;
           const maxElev = isSinCarga ? erp?.tpo_elev_max_scarga : erp?.tpo_elevac_max;
           const minDesc = isSinCarga ? erp?.tpo_desc_min_scarga : erp?.tpo_descenso_min;
@@ -1926,7 +1919,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           const isDescOk = Number(finalDesc) >= Number(minDesc) && Number(finalDesc) <= Number(maxDesc);
           if (!isElevOk || !isDescOk) {
             setTestAlarm('fuera_tolerancia');
-            setCameraTestState('nok');
+            setCameraTestState('nok'); // Corregir a NOK si los tiempos no cumplen
           } else {
             setTestAlarm(null);
             setCameraTestState('ok');
@@ -2989,7 +2982,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                         {cameraTestState === 'ascenso' && 'ASCENSO ACTIVO'}
                         {cameraTestState === 'espera_arriba' && 'ESPERANDO ARRIBA'}
                         {cameraTestState === 'descenso' && 'DESCENSO ACTIVO'}
-                        {cameraTestState === 'ok' && 'PRUEBA OK'}
+                        {cameraTestState === 'ok' && 'ELEVACION FINALIZADA'}
                         {cameraTestState === 'nok' && 'PRUEBA NOK'}
                       </span>
                       <CameraLED state={ledState} blinkTick={blinkTick} />
@@ -3063,6 +3056,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                     {palletState === 'animating' && (
                       <div className="flex items-center gap-2 mt-2 py-1.5 px-2 bg-logisnext-magenta/10 border border-logisnext-magenta/30 rounded text-[9px] text-logisnext-magenta">
                         <Loader2 size={12} className="animate-spin" /> Animación de recogida del palet en curso...
+                      </div>
+                    )}
+                    {cameraTestState === 'ok' && (
+                      <div className="flex items-center justify-center gap-2 mt-2 py-2 px-3 bg-blue-500/15 border border-blue-400/50 rounded-lg animate-pulse">
+                        <CheckCircle2 size={14} className="text-blue-400 shrink-0" />
+                        <span className="text-[11px] font-black uppercase tracking-widest text-blue-300">Elevación Finalizada</span>
                       </div>
                     )}
                   </>
@@ -3173,7 +3172,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                         {cameraTestState === 'ascenso' && 'ASCENSO ACTIVO'}
                         {cameraTestState === 'espera_arriba' && 'ESPERANDO ARRIBA'}
                         {cameraTestState === 'descenso' && 'DESCENSO ACTIVO'}
-                        {cameraTestState === 'ok' && 'PRUEBA OK'}
+                        {cameraTestState === 'ok' && 'ELEVACION FINALIZADA'}
                         {cameraTestState === 'nok' && 'PRUEBA NOK'}
                       </span>
                       <CameraLED state={ledState} blinkTick={blinkTick} />
@@ -3247,6 +3246,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                     {palletState === 'animating' && (
                       <div className="flex items-center gap-2 mt-2 py-1.5 px-2 bg-logisnext-magenta/10 border border-logisnext-magenta/30 rounded text-[9px] text-logisnext-magenta">
                         <Loader2 size={12} className="animate-spin" /> Animación de palet en curso...
+                      </div>
+                    )}
+                    {cameraTestState === 'ok' && (
+                      <div className="flex items-center justify-center gap-2 mt-2 py-2 px-3 bg-blue-500/15 border border-blue-400/50 rounded-lg animate-pulse">
+                        <CheckCircle2 size={14} className="text-blue-400 shrink-0" />
+                        <span className="text-[11px] font-black uppercase tracking-widest text-blue-300">Elevación Finalizada</span>
                       </div>
                     )}
                   </>

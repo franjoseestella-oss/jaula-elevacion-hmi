@@ -1363,54 +1363,52 @@ function App() {
             </div>
           )}
 
-          {/* ── CUENTA ATRÁS GRANDE — centrada en la vista 3D ── */}
-          {testHUDOverlay?.cameraTestState === 'espera_arriba' && testHUDOverlay?.waitCountdown != null && (
+          {/* ── CUENTA ATRÁS Y CARTEL CENTRAL — ELEVACIÓN FINALIZADA ── */}
+          {((testHUDOverlay?.cameraTestState === 'espera_arriba') || 
+            (testHUDOverlay?.cameraTestState === 'ascenso' && (telemetry?.mappedPlc?.Ob_Ready_Temporizador ?? appPlc?.Ob_Ready_Temporizador))) && (
             <div className="absolute inset-0 z-[80] flex flex-col items-center justify-center pointer-events-none">
-              <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px]" />
-              <div className="relative flex flex-col items-center gap-2">
-                {testHUDOverlay.waitCountdown > 0 ? (
-                  <>
-                    <span className="text-yellow-300 text-base font-black uppercase tracking-[0.3em] drop-shadow-[0_0_20px_rgba(250,204,21,0.9)]">
-                      INICIO DESCENSO EN
+              <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
+              <div className="relative flex flex-col items-center gap-4 bg-blue-950/90 border-4 border-blue-500 px-16 py-10 rounded-3xl shadow-[0_0_100px_rgba(59,130,246,0.9)] max-w-2xl text-center animate-in zoom-in-95 duration-200">
+                <span className="text-blue-400 text-xs font-black uppercase tracking-[0.4em] bg-blue-900/50 px-4 py-1.5 rounded-full border border-blue-500/30">
+                  Prueba de Elevación
+                </span>
+                <h1 className="text-white text-5xl font-black tracking-widest drop-shadow-[0_0_20px_rgba(255,255,255,0.2)] uppercase">
+                  ELEVACIÓN FINALIZADA
+                </h1>
+                
+                {testHUDOverlay?.cameraTestState === 'espera_arriba' && testHUDOverlay?.waitCountdown != null && (
+                  <div className="flex flex-col items-center mt-4 pt-4 border-t border-blue-500/30 w-full">
+                    {testHUDOverlay.waitCountdown > 0 ? (
+                      <>
+                        <span className="text-blue-300 text-xs font-bold uppercase tracking-[0.2em] mb-1">
+                          Inicio del descenso en
+                        </span>
+                        <span className="font-black font-mono text-blue-200 text-7xl leading-none select-none animate-pulse">
+                          {testHUDOverlay.waitCountdown}
+                        </span>
+                        <span className="text-blue-400 text-[10px] font-bold uppercase tracking-[0.3em] mt-1">
+                          {testHUDOverlay.waitCountdown === 1 ? 'segundo' : 'segundos'}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="font-black font-mono text-green-400 text-5xl leading-none select-none animate-pulse drop-shadow-[0_0_20px_rgba(74,222,128,0.5)]">
+                          GO!
+                        </span>
+                        <span className="text-green-300 text-xs font-bold uppercase tracking-[0.2em] mt-1 animate-bounce">
+                          ↓ Inicie Descenso ↓
+                        </span>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {testHUDOverlay?.cameraTestState === 'ascenso' && (
+                  <div className="flex flex-col items-center mt-4 pt-4 border-t border-blue-500/30 w-full animate-pulse">
+                    <span className="text-blue-300 text-[10px] font-bold uppercase tracking-[0.2em]">
+                      Confirmando señal de parada...
                     </span>
-                    <span
-                      className="font-black font-mono text-yellow-300 leading-none select-none"
-                      style={{
-                        fontSize: 'clamp(8rem, 22vw, 18rem)',
-                        textShadow: '0 0 80px rgba(250,204,21,0.9), 0 0 160px rgba(250,204,21,0.5)',
-                        animation: testHUDOverlay.waitCountdown <= 1 ? 'pulse 0.3s ease-in-out infinite' : 'pulse 0.8s ease-in-out infinite'
-                      }}
-                    >
-                      {testHUDOverlay.waitCountdown}
-                    </span>
-                    <span className="text-yellow-400 text-sm font-bold uppercase tracking-[0.4em] drop-shadow-[0_0_10px_rgba(250,204,21,0.7)]">
-                      {testHUDOverlay.waitCountdown === 1 ? 'segundo' : 'segundos'}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span
-                      className="font-black font-mono text-green-400 leading-none select-none animate-pulse"
-                      style={{
-                        fontSize: 'clamp(6rem, 18vw, 14rem)',
-                        textShadow: '0 0 60px rgba(74,222,128,0.95), 0 0 120px rgba(74,222,128,0.5)'
-                      }}
-                    >
-                      GO!
-                    </span>
-                    <span
-                      className="text-green-400 font-black animate-bounce select-none"
-                      style={{
-                        fontSize: 'clamp(4rem, 12vw, 9rem)',
-                        textShadow: '0 0 40px rgba(74,222,128,0.9)'
-                      }}
-                    >
-                      ↓
-                    </span>
-                    <span className="text-green-300 text-base font-black uppercase tracking-[0.4em] animate-pulse drop-shadow-[0_0_15px_rgba(74,222,128,0.8)]">
-                      INICIAR DESCENSO
-                    </span>
-                  </>
+                  </div>
                 )}
               </div>
             </div>
