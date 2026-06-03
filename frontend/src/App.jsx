@@ -1251,10 +1251,10 @@ function App() {
                 </div>
 
                 {/* Estado prueba */}
-                <div className="flex items-center justify-between bg-[#0a0f12] px-3 py-2 rounded-lg border border-[#2e404a] mb-3">
-                  <span className="text-[10px] text-logisnext-slate font-bold uppercase tracking-widest">Estado Prueba</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-gray-300 font-mono font-bold">
+                <div className="flex items-center justify-between bg-[#0a0f12] px-4 py-3 rounded-lg border border-[#2e404a] mb-3">
+                  <span className="text-[12px] text-logisnext-slate font-bold uppercase tracking-widest">Estado Prueba</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[16px] text-gray-200 font-mono font-black tracking-wide">
                       {testHUDOverlay.cameraTestState === 'standby' && 'ESPERANDO...'}
                       {testHUDOverlay.cameraTestState === 'esperando_1500' && `ESPERA ${localStorage.getItem('cotaInicialPruebas') || 1500} mm ↑`}
                       {testHUDOverlay.cameraTestState === 'ascenso' && 'ASCENSO ACTIVO'}
@@ -1263,10 +1263,10 @@ function App() {
                       {testHUDOverlay.cameraTestState === 'ok' && 'PRUEBA OK ✓'}
                       {testHUDOverlay.cameraTestState === 'nok' && 'PRUEBA NOK ✗'}
                     </span>
-                    <div className={`w-3.5 h-3.5 rounded-full border-2 ${testHUDOverlay.ledState === 'active' ? 'bg-green-400 border-green-200 animate-pulse shadow-[0_0_8px_#4ade80]' :
-                      testHUDOverlay.ledState === 'ok' ? 'bg-green-500 border-green-300 shadow-[0_0_10px_#22c55e]' :
-                        testHUDOverlay.ledState === 'nok' ? 'bg-red-500 border-red-300 shadow-[0_0_10px_#ef4444]' :
-                          'bg-red-600 border-red-400 animate-pulse shadow-[0_0_8px_#dc2626]'
+                    <div className={`w-5 h-5 rounded-full border-2 ${testHUDOverlay.ledState === 'active' ? 'bg-green-400 border-green-200 animate-pulse shadow-[0_0_12px_#4ade80]' :
+                      testHUDOverlay.ledState === 'ok' ? 'bg-green-500 border-green-300 shadow-[0_0_12px_#22c55e]' :
+                        testHUDOverlay.ledState === 'nok' ? 'bg-red-500 border-red-300 shadow-[0_0_12px_#ef4444]' :
+                          'bg-red-600 border-red-400 animate-pulse shadow-[0_0_12px_#dc2626]'
                       }`} />
                   </div>
                 </div>
