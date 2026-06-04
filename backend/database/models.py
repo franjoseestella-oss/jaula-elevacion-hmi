@@ -114,8 +114,68 @@ class ReferenciaEnCiclo(Base):
     __tablename__ = "REFERENCIA_EN_CICLO"
 
     id = Column(Integer, primary_key=True)
+    ETAPA_ACTUAL = Column(Integer, nullable=True, default=0)
     REFERENCIA_ACTUAL = Column(String(100), nullable=True, default="0")
     FECHA_INICIO_CICLO = Column(String(50), nullable=True, default="0")
+
+    # Campos idénticos a LogTabla
+    OPERARIO = Column(String(100), nullable=True, default="0")
+    FECHA_MONTAJE = Column(String(20), nullable=True, default="0")
+    NSECUENCIA = Column(String(20), nullable=True, default="0")
+    NMODELO = Column(String(50), nullable=True, default="0")
+    NBASTIDOR = Column(String(100), nullable=True, default="0")
+    NMASTIL = Column(String(50), nullable=True, default="0")
+    ALTURA_MAX_INTERMEDIA = Column(Float, nullable=True, default=0.0)
+
+    # 2. Multiload
+    ALTURA_CAPTADA = Column(Float, nullable=True, default=0.0)
+    FECHA_HORA_INICIO_MULTILOAD = Column(String(50), nullable=True, default="0")
+    FECHA_HORA_FIN_MULTILOAD = Column(String(50), nullable=True, default="0")
+    ESTADO_MULTILOAD = Column(String(20), nullable=True, default="0")
+
+    # 3. Sin Carga
+    TIEMPO_ELEVACION_MIN_SINCARGA = Column(Float, nullable=True, default=0.0)
+    TIEMPO_ELEVACION_MAX_SINCARGA = Column(Float, nullable=True, default=0.0)
+    TIEMPO_ELEVACION_MEDIDO_SINCARGA = Column(Float, nullable=True, default=0.0)
+    AVG_ELEVACION_SINCARGA = Column(Float, nullable=True, default=0.0)
+    TIEMPO_DESCENSO_MIN_SINCARGA = Column(Float, nullable=True, default=0.0)
+    TIEMPO_DESCENSO_MAX_SINCARGA = Column(Float, nullable=True, default=0.0)
+    TIEMPO_DESCENSO_MEDIDO_SINCARGA = Column(Float, nullable=True, default=0.0)
+    AVG_DESCENSO_SINCARGA = Column(Float, nullable=True, default=0.0)
+    FECHA_HORA_INICIO_SINCARGA = Column(String(50), nullable=True, default="0")
+    FECHA_HORA_FIN_SINCARGA = Column(String(50), nullable=True, default="0")
+    ESTADO_SINCARGA = Column(String(20), nullable=True, default="0")
+
+    # 4. Con Carga
+    TIEMPO_ELEVACION_MIN_CARGA = Column(Float, nullable=True, default=0.0)
+    TIEMPO_ELEVACION_MAX_CARGA = Column(Float, nullable=True, default=0.0)
+    TIEMPO_ELEVACION_MEDIDO_CARGA = Column(Float, nullable=True, default=0.0)
+    AVG_ELEVACION_CARGA = Column(Float, nullable=True, default=0.0)
+    TIEMPO_DESCENSO_MIN_CARGA = Column(Float, nullable=True, default=0.0)
+    TIEMPO_DESCENSO_MAX_CARGA = Column(Float, nullable=True, default=0.0)
+    TIEMPO_DESCENSO_MEDIDO_CARGA = Column(Float, nullable=True, default=0.0)
+    AVG_DESCENSO_CARGA = Column(Float, nullable=True, default=0.0)
+    FECHA_HORA_INICIO_CARGA = Column(String(50), nullable=True, default="0")
+    FECHA_HORA_FIN_CARGA = Column(String(50), nullable=True, default="0")
+    ESTADO_CARGA = Column(String(20), nullable=True, default="0")
+    CARGA_CONSIGNADA = Column(Float, nullable=True, default=0.0)
+    CARGA_GET = Column(Float, nullable=True, default=0.0)
+    PESO_PRUEBA = Column(Float, nullable=True, default=0.0)
+
+    # 5. 5 Minutos
+    ALTURA_INICIAL = Column(Float, nullable=True, default=0.0)
+    ALTURA_FINAL = Column(Float, nullable=True, default=0.0)
+    DIFERENCIA_ALTURAS = Column(Float, nullable=True, default=0.0)
+    FECHA_HORA_INICIO_5MIN = Column(String(50), nullable=True, default="0")
+    FECHA_HORA_FIN_5MIN = Column(String(50), nullable=True, default="0")
+    ESTADO_CARGA_5_MIN = Column(String(20), nullable=True, default="0")
+
+    # 6. Final
+    REPETICIONES_SECUENCIA = Column(Integer, nullable=True, default=0)
+    FECHA_HORA_INICIO_SEC = Column(String(50), nullable=True, default="0")
+    FECHA_HORA_FIN_SEC = Column(String(50), nullable=True, default="0")
+    DURACION_SEC = Column(String(50), nullable=True, default="0")
+    OK_NOK = Column(String(20), nullable=True, default="0")
 
 
 def init_db():
@@ -131,11 +191,60 @@ def init_db():
         try:
             ref = session.query(ReferenciaEnCiclo).first()
             if not ref:
-                ref = ReferenciaEnCiclo(REFERENCIA_ACTUAL="0", FECHA_INICIO_CICLO="0")
+                ref = ReferenciaEnCiclo()
                 session.add(ref)
             else:
+                # Resetear todos los campos
+                ref.ETAPA_ACTUAL = 0
                 ref.REFERENCIA_ACTUAL = "0"
                 ref.FECHA_INICIO_CICLO = "0"
+                ref.OPERARIO = "0"
+                ref.FECHA_MONTAJE = "0"
+                ref.NSECUENCIA = "0"
+                ref.NMODELO = "0"
+                ref.NBASTIDOR = "0"
+                ref.NMASTIL = "0"
+                ref.ALTURA_MAX_INTERMEDIA = 0.0
+                ref.ALTURA_CAPTADA = 0.0
+                ref.FECHA_HORA_INICIO_MULTILOAD = "0"
+                ref.FECHA_HORA_FIN_MULTILOAD = "0"
+                ref.ESTADO_MULTILOAD = "0"
+                ref.TIEMPO_ELEVACION_MIN_SINCARGA = 0.0
+                ref.TIEMPO_ELEVACION_MAX_SINCARGA = 0.0
+                ref.TIEMPO_ELEVACION_MEDIDO_SINCARGA = 0.0
+                ref.AVG_ELEVACION_SINCARGA = 0.0
+                ref.TIEMPO_DESCENSO_MIN_SINCARGA = 0.0
+                ref.TIEMPO_DESCENSO_MAX_SINCARGA = 0.0
+                ref.TIEMPO_DESCENSO_MEDIDO_SINCARGA = 0.0
+                ref.AVG_DESCENSO_SINCARGA = 0.0
+                ref.FECHA_HORA_INICIO_SINCARGA = "0"
+                ref.FECHA_HORA_FIN_SINCARGA = "0"
+                ref.ESTADO_SINCARGA = "0"
+                ref.TIEMPO_ELEVACION_MIN_CARGA = 0.0
+                ref.TIEMPO_ELEVACION_MAX_CARGA = 0.0
+                ref.TIEMPO_ELEVACION_MEDIDO_CARGA = 0.0
+                ref.AVG_ELEVACION_CARGA = 0.0
+                ref.TIEMPO_DESCENSO_MIN_CARGA = 0.0
+                ref.TIEMPO_DESCENSO_MAX_CARGA = 0.0
+                ref.TIEMPO_DESCENSO_MEDIDO_CARGA = 0.0
+                ref.AVG_DESCENSO_CARGA = 0.0
+                ref.FECHA_HORA_INICIO_CARGA = "0"
+                ref.FECHA_HORA_FIN_CARGA = "0"
+                ref.ESTADO_CARGA = "0"
+                ref.CARGA_CONSIGNADA = 0.0
+                ref.CARGA_GET = 0.0
+                ref.PESO_PRUEBA = 0.0
+                ref.ALTURA_INICIAL = 0.0
+                ref.ALTURA_FINAL = 0.0
+                ref.DIFERENCIA_ALTURAS = 0.0
+                ref.FECHA_HORA_INICIO_5MIN = "0"
+                ref.FECHA_HORA_FIN_5MIN = "0"
+                ref.ESTADO_CARGA_5_MIN = "0"
+                ref.REPETICIONES_SECUENCIA = 0
+                ref.FECHA_HORA_INICIO_SEC = "0"
+                ref.FECHA_HORA_FIN_SEC = "0"
+                ref.DURACION_SEC = "0"
+                ref.OK_NOK = "0"
             session.commit()
             print("[OK] Registro inicial de REFERENCIA_EN_CICLO establecido a 0.")
         except Exception as e:

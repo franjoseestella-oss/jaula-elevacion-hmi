@@ -817,7 +817,21 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(logData)
       });
+      // Sincronizar también con la referencia en ciclo al terminar
+      await fetch(`${API_BASE}/api/cycle/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(logData)
+      });
     } catch (e) { console.error("Error guardando log global:", e); }
+  };
+
+  const updateCycleInDb = (fields) => {
+    fetch(`${API_BASE}/api/cycle/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields)
+    }).catch(err => console.error("Error updating cycle database:", err));
   };
 
   const resetSequence = (keepRaisingFences = false) => {
@@ -1747,23 +1761,83 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     if (setStep2Overlay) setStep2Overlay(null);
     setCameraTestState('standby'); // Reset visual test state on step transition
 
-    // Guardar telemetría de fin de etapa según índice
+    // Guardar telemetría de fin de etapa según índice y actualizar DB
     const pState = plcStateRef.current;
     const simTimes = simTimersRef.current;
-    if (idx === 2) { // Fin Etapa 3 (Sin Carga)
+    const testDist = is1mTest ? 1.0 : 2.0;
+    let dbUpdate = {};
+
+    if (idx === 1) { // Fin Etapa 2 (Multiload)
+      const startT = stepStartTime[1];
+      dbUpdate = {
+        ALTURA_CAPTADA: pegatinaPosicion,
+        FECHA_HORA_INICIO_MULTILOAD: startT ? new Date(startT).toISOString() : null,
+        FECHA_HORA_FIN_MULTILOAD: new Date().toISOString(),
+        ESTADO_MULTILOAD: 'OK'
+      };
+    } else if (idx === 2) { // Fin Etapa 3 (Sin Carga)
       stageDataRef.current[3] = {
         elev: simTimes.elev,
         desc: simTimes.desc
       };
+      const startT = stepStartTime[2];
+      dbUpdate = {
+        TIEMPO_ELEVACION_MIN_SINCARGA: erpData?.tpo_elev_min_scarga != null ? erpData.tpo_elev_min_scarga / 100 : null,
+        TIEMPO_ELEVACION_MAX_SINCARGA: erpData?.tpo_elev_max_scarga != null ? erpData.tpo_elev_max_scarga / 100 : null,
+        TIEMPO_ELEVACION_MEDIDO_SINCARGA: simTimes.elev != null ? simTimes.elev / 100 : null,
+        AVG_ELEVACION_SINCARGA: simTimes.elev > 0 ? Number(((testDist * 100000) / simTimes.elev).toFixed(0)) : null,
+        TIEMPO_DESCENSO_MIN_SINCARGA: erpData?.tpo_desc_min_scarga != null ? erpData.tpo_desc_min_scarga / 100 : null,
+        TIEMPO_DESCENSO_MAX_SINCARGA: erpData?.tpo_desc_max_scarga != null ? erpData.tpo_desc_max_scarga / 100 : null,
+        TIEMPO_DESCENSO_MEDIDO_SINCARGA: simTimes.desc != null ? simTimes.desc / 100 : null,
+        AVG_DESCENSO_SINCARGA: simTimes.desc > 0 ? Number(((testDist * 100000) / simTimes.desc).toFixed(0)) : null,
+        FECHA_HORA_INICIO_SINCARGA: startT ? new Date(startT).toISOString() : null,
+        FECHA_HORA_FIN_SINCARGA: new Date().toISOString(),
+        ESTADO_SINCARGA: 'OK'
+      };
     } else if (idx === 3) { // Fin Etapa 4 (Con Carga)
+      const cargaGetVal = pState?.OW_Numero_Pallets ? pState.OW_Numero_Pallets * 250 : null;
       stageDataRef.current[4] = {
         elev: simTimes.elev,
         desc: simTimes.desc,
-        cargaGet: pState?.OW_Numero_Pallets ? pState.OW_Numero_Pallets * 250 : null
+        cargaGet: cargaGetVal
+      };
+      const startT = stepStartTime[3];
+      dbUpdate = {
+        TIEMPO_ELEVACION_MIN_CARGA: erpData?.tpo_elevac_min != null ? erpData.tpo_elevac_min / 100 : null,
+        TIEMPO_ELEVACION_MAX_CARGA: erpData?.tpo_elevac_max != null ? erpData.tpo_elevac_max / 100 : null,
+        TIEMPO_ELEVACION_MEDIDO_CARGA: simTimes.elev != null ? simTimes.elev / 100 : null,
+        AVG_ELEVACION_CARGA: simTimes.elev > 0 ? Number(((testDist * 100000) / simTimes.elev).toFixed(0)) : null,
+        TIEMPO_DESCENSO_MIN_CARGA: erpData?.tpo_descenso_min != null ? erpData.tpo_descenso_min / 100 : null,
+        TIEMPO_DESCENSO_MAX_CARGA: erpData?.tpo_descenso_max != null ? erpData.tpo_descenso_max / 100 : null,
+        TIEMPO_DESCENSO_MEDIDO_CARGA: simTimes.desc != null ? simTimes.desc / 100 : null,
+        AVG_DESCENSO_CARGA: simTimes.desc > 0 ? Number(((testDist * 100000) / simTimes.desc).toFixed(0)) : null,
+        FECHA_HORA_INICIO_CARGA: startT ? new Date(startT).toISOString() : null,
+        FECHA_HORA_FIN_CARGA: new Date().toISOString(),
+        ESTADO_CARGA: 'OK',
+        CARGA_CONSIGNADA: erpData?.peso_pruebas,
+        CARGA_GET: cargaGetVal,
+        PESO_PRUEBA: erpData?.peso_pruebas != null ? Math.floor(erpData.peso_pruebas / 250) * 250 : null
       };
     } else if (idx === 4) { // Fin Etapa 5 (5 min)
-      stageDataRef.current[5].altura_final = pState?.OR_Altura_Carretilla;
-      stageDataRef.current[5].diff = Math.abs((stageDataRef.current[5].altura_inicial || 0) - (pState?.OR_Altura_Carretilla || 0));
+      const altFinal = pState?.OR_Altura_Carretilla;
+      const altInicial = stageDataRef.current[5].altura_inicial || 0;
+      const diffVal = Math.abs(altInicial - (altFinal || 0));
+      stageDataRef.current[5].altura_final = altFinal;
+      stageDataRef.current[5].diff = diffVal;
+
+      const startT = stepStartTime[4];
+      dbUpdate = {
+        ALTURA_INICIAL: altInicial,
+        ALTURA_FINAL: altFinal,
+        DIFERENCIA_ALTURAS: diffVal,
+        FECHA_HORA_INICIO_5MIN: startT ? new Date(startT).toISOString() : null,
+        FECHA_HORA_FIN_5MIN: new Date().toISOString(),
+        ESTADO_CARGA_5_MIN: 'OK'
+      };
+    }
+
+    if (Object.keys(dbUpdate).length > 0) {
+      updateCycleInDb(dbUpdate);
     }
 
     // Registrar duración del paso
@@ -1945,6 +2019,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         if (!next[currentStep]) next[currentStep] = Date.now(); // solo si no se ha iniciado ya
         return next;
       });
+      // Actualizar etapa actual en base de datos (1 a 5)
+      updateCycleInDb({ ETAPA_ACTUAL: currentStep + 1 });
     }
   }, [currentStep]);
 
@@ -1956,10 +2032,20 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       const data = erpPreviewRef.current;
       
       // Iniciar el seguimiento del ciclo en la base de datos
+      const opName = operario ? `${operario.NOMBRE || ''} ${operario.APELLIDOS || ''}`.trim() : 'Desconocido';
       fetch(`${API_BASE}/api/cycle/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ referencia: data.bastidor })
+        body: JSON.stringify({
+          referencia: data.bastidor,
+          operario: opName,
+          fecha_montaje: data.fecha_montaje || '0',
+          nsecuencia: data.secuencia || '0',
+          nmodelo: data.modelo || '0',
+          nbastidor: data.bastidor || '0',
+          nmastil: data.mastil || '0',
+          altura_max_intermedia: data.altura_max_interm != null ? Number(data.altura_max_interm) : 0.0
+        })
       }).catch(err => console.error("Error starting cycle tracking:", err));
 
       onErpData(data);
@@ -2183,10 +2269,20 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     const data = erpPreview;
     
     // Iniciar el seguimiento del ciclo en la base de datos
+    const opName = operario ? `${operario.NOMBRE || ''} ${operario.APELLIDOS || ''}`.trim() : 'Desconocido';
     fetch(`${API_BASE}/api/cycle/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ referencia: data.bastidor })
+      body: JSON.stringify({
+        referencia: data.bastidor,
+        operario: opName,
+        fecha_montaje: data.fecha_montaje || '0',
+        nsecuencia: data.secuencia || '0',
+        nmodelo: data.modelo || '0',
+        nbastidor: data.bastidor || '0',
+        nmastil: data.mastil || '0',
+        altura_max_intermedia: data.altura_max_interm != null ? Number(data.altura_max_interm) : 0.0
+      })
     }).catch(err => console.error("Error starting cycle tracking:", err));
 
     previewConfirmedRef.current = data.bastidor; // marcar como confirmado ANTES de limpiar

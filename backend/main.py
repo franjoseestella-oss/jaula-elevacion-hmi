@@ -1062,6 +1062,13 @@ async def websocket_endpoint(websocket: WebSocket):
 
 class CycleStartParams(BaseModel):
     referencia: str
+    operario: str = "0"
+    fecha_montaje: str = "0"
+    nsecuencia: str = "0"
+    nmodelo: str = "0"
+    nbastidor: str = "0"
+    nmastil: str = "0"
+    altura_max_intermedia: float = 0.0
 
 @app.post("/api/cycle/start")
 def start_cycle(params: CycleStartParams, db: Session = Depends(get_local_db)):
@@ -1076,8 +1083,59 @@ def start_cycle(params: CycleStartParams, db: Session = Depends(get_local_db)):
         now = datetime.now()
         fecha_str = now.strftime("%H:%M %d/%m/%Y")
         
+        ref.ETAPA_ACTUAL = 1
         ref.REFERENCIA_ACTUAL = params.referencia
         ref.FECHA_INICIO_CICLO = fecha_str
+        ref.OPERARIO = params.operario
+        ref.FECHA_MONTAJE = params.fecha_montaje
+        ref.NSECUENCIA = params.nsecuencia
+        ref.NMODELO = params.nmodelo
+        ref.NBASTIDOR = params.nbastidor
+        ref.NMASTIL = params.nmastil
+        ref.ALTURA_MAX_INTERMEDIA = params.altura_max_intermedia
+        
+        # Reiniciar todos los otros datos por seguridad
+        ref.ALTURA_CAPTADA = 0.0
+        ref.FECHA_HORA_INICIO_MULTILOAD = "0"
+        ref.FECHA_HORA_FIN_MULTILOAD = "0"
+        ref.ESTADO_MULTILOAD = "0"
+        ref.TIEMPO_ELEVACION_MIN_SINCARGA = 0.0
+        ref.TIEMPO_ELEVACION_MAX_SINCARGA = 0.0
+        ref.TIEMPO_ELEVACION_MEDIDO_SINCARGA = 0.0
+        ref.AVG_ELEVACION_SINCARGA = 0.0
+        ref.TIEMPO_DESCENSO_MIN_SINCARGA = 0.0
+        ref.TIEMPO_DESCENSO_MAX_SINCARGA = 0.0
+        ref.TIEMPO_DESCENSO_MEDIDO_SINCARGA = 0.0
+        ref.AVG_DESCENSO_SINCARGA = 0.0
+        ref.FECHA_HORA_INICIO_SINCARGA = "0"
+        ref.FECHA_HORA_FIN_SINCARGA = "0"
+        ref.ESTADO_SINCARGA = "0"
+        ref.TIEMPO_ELEVACION_MIN_CARGA = 0.0
+        ref.TIEMPO_ELEVACION_MAX_CARGA = 0.0
+        ref.TIEMPO_ELEVACION_MEDIDO_CARGA = 0.0
+        ref.AVG_ELEVACION_CARGA = 0.0
+        ref.TIEMPO_DESCENSO_MIN_CARGA = 0.0
+        ref.TIEMPO_DESCENSO_MAX_CARGA = 0.0
+        ref.TIEMPO_DESCENSO_MEDIDO_CARGA = 0.0
+        ref.AVG_DESCENSO_CARGA = 0.0
+        ref.FECHA_HORA_INICIO_CARGA = "0"
+        ref.FECHA_HORA_FIN_CARGA = "0"
+        ref.ESTADO_CARGA = "0"
+        ref.CARGA_CONSIGNADA = 0.0
+        ref.CARGA_GET = 0.0
+        ref.PESO_PRUEBA = 0.0
+        ref.ALTURA_INICIAL = 0.0
+        ref.ALTURA_FINAL = 0.0
+        ref.DIFERENCIA_ALTURAS = 0.0
+        ref.FECHA_HORA_INICIO_5MIN = "0"
+        ref.FECHA_HORA_FIN_5MIN = "0"
+        ref.ESTADO_CARGA_5_MIN = "0"
+        ref.REPETICIONES_SECUENCIA = 0
+        ref.FECHA_HORA_INICIO_SEC = "0"
+        ref.FECHA_HORA_FIN_SEC = "0"
+        ref.DURACION_SEC = "0"
+        ref.OK_NOK = "0"
+
         db.commit()
         db.refresh(ref)
         return {
@@ -1085,6 +1143,25 @@ def start_cycle(params: CycleStartParams, db: Session = Depends(get_local_db)):
             "referencia": ref.REFERENCIA_ACTUAL,
             "fecha_inicio": ref.FECHA_INICIO_CICLO
         }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/cycle/update")
+def update_cycle(data: dict, db: Session = Depends(get_local_db)):
+    try:
+        ref = db.query(ReferenciaEnCiclo).filter(ReferenciaEnCiclo.id == 1).first()
+        if not ref:
+            ref = ReferenciaEnCiclo(id=1)
+            db.add(ref)
+        
+        for key, value in data.items():
+            if hasattr(ref, key):
+                setattr(ref, key, value)
+        
+        db.commit()
+        db.refresh(ref)
+        return {"status": "success", "data": data}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -1097,8 +1174,58 @@ def reset_cycle(db: Session = Depends(get_local_db)):
             ref = ReferenciaEnCiclo(id=1)
             db.add(ref)
         
+        # Resetear todos los campos
+        ref.ETAPA_ACTUAL = 0
         ref.REFERENCIA_ACTUAL = "0"
         ref.FECHA_INICIO_CICLO = "0"
+        ref.OPERARIO = "0"
+        ref.FECHA_MONTAJE = "0"
+        ref.NSECUENCIA = "0"
+        ref.NMODELO = "0"
+        ref.NBASTIDOR = "0"
+        ref.NMASTIL = "0"
+        ref.ALTURA_MAX_INTERMEDIA = 0.0
+        ref.ALTURA_CAPTADA = 0.0
+        ref.FECHA_HORA_INICIO_MULTILOAD = "0"
+        ref.FECHA_HORA_FIN_MULTILOAD = "0"
+        ref.ESTADO_MULTILOAD = "0"
+        ref.TIEMPO_ELEVACION_MIN_SINCARGA = 0.0
+        ref.TIEMPO_ELEVACION_MAX_SINCARGA = 0.0
+        ref.TIEMPO_ELEVACION_MEDIDO_SINCARGA = 0.0
+        ref.AVG_ELEVACION_SINCARGA = 0.0
+        ref.TIEMPO_DESCENSO_MIN_SINCARGA = 0.0
+        ref.TIEMPO_DESCENSO_MAX_SINCARGA = 0.0
+        ref.TIEMPO_DESCENSO_MEDIDO_SINCARGA = 0.0
+        ref.AVG_DESCENSO_SINCARGA = 0.0
+        ref.FECHA_HORA_INICIO_SINCARGA = "0"
+        ref.FECHA_HORA_FIN_SINCARGA = "0"
+        ref.ESTADO_SINCARGA = "0"
+        ref.TIEMPO_ELEVACION_MIN_CARGA = 0.0
+        ref.TIEMPO_ELEVACION_MAX_CARGA = 0.0
+        ref.TIEMPO_ELEVACION_MEDIDO_CARGA = 0.0
+        ref.AVG_ELEVACION_CARGA = 0.0
+        ref.TIEMPO_DESCENSO_MIN_CARGA = 0.0
+        ref.TIEMPO_DESCENSO_MAX_CARGA = 0.0
+        ref.TIEMPO_DESCENSO_MEDIDO_CARGA = 0.0
+        ref.AVG_DESCENSO_CARGA = 0.0
+        ref.FECHA_HORA_INICIO_CARGA = "0"
+        ref.FECHA_HORA_FIN_CARGA = "0"
+        ref.ESTADO_CARGA = "0"
+        ref.CARGA_CONSIGNADA = 0.0
+        ref.CARGA_GET = 0.0
+        ref.PESO_PRUEBA = 0.0
+        ref.ALTURA_INICIAL = 0.0
+        ref.ALTURA_FINAL = 0.0
+        ref.DIFERENCIA_ALTURAS = 0.0
+        ref.FECHA_HORA_INICIO_5MIN = "0"
+        ref.FECHA_HORA_FIN_5MIN = "0"
+        ref.ESTADO_CARGA_5_MIN = "0"
+        ref.REPETICIONES_SECUENCIA = 0
+        ref.FECHA_HORA_INICIO_SEC = "0"
+        ref.FECHA_HORA_FIN_SEC = "0"
+        ref.DURACION_SEC = "0"
+        ref.OK_NOK = "0"
+        
         db.commit()
         db.refresh(ref)
         return {
@@ -1115,10 +1242,11 @@ def get_cycle_status(db: Session = Depends(get_local_db)):
     try:
         ref = db.query(ReferenciaEnCiclo).filter(ReferenciaEnCiclo.id == 1).first()
         if not ref:
-            return {"referencia": "0", "fecha_inicio": "0"}
+            return {"referencia": "0", "fecha_inicio": "0", "etapa_actual": 0}
         return {
             "referencia": ref.REFERENCIA_ACTUAL or "0",
-            "fecha_inicio": ref.FECHA_INICIO_CICLO or "0"
+            "fecha_inicio": ref.FECHA_INICIO_CICLO or "0",
+            "etapa_actual": ref.ETAPA_ACTUAL or 0
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
