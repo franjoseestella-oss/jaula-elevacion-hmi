@@ -821,6 +821,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   };
 
   const resetSequence = (keepRaisingFences = false) => {
+    // Reset cycle tracking in DB
+    fetch(`${API_BASE}/api/cycle/reset`, { method: 'POST' })
+      .catch(err => console.error("Error resetting cycle reference tracking:", err));
+
     // Si aborta o resetea secuencia, la altura relativa tiene que ser 0 en el PLC
     const payload = {
       altura_relativa: 0,
@@ -1949,7 +1953,16 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     // Si el modal de previsualización está abierto, iniciar_secuencia confirma la carga
     if (erpPreviewRef.current) {
       console.log('[DIRECTO] Confirmando previsualización de ERP');
-      onErpData(erpPreviewRef.current);
+      const data = erpPreviewRef.current;
+      
+      // Iniciar el seguimiento del ciclo en la base de datos
+      fetch(`${API_BASE}/api/cycle/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ referencia: data.bastidor })
+      }).catch(err => console.error("Error starting cycle tracking:", err));
+
+      onErpData(data);
       setErpPreview(null);
       setSeqInput('');
       markOk(0);
@@ -2168,6 +2181,14 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     }
 
     const data = erpPreview;
+    
+    // Iniciar el seguimiento del ciclo en la base de datos
+    fetch(`${API_BASE}/api/cycle/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ referencia: data.bastidor })
+    }).catch(err => console.error("Error starting cycle tracking:", err));
+
     previewConfirmedRef.current = data.bastidor; // marcar como confirmado ANTES de limpiar
     setErpPreview(null);
     setManualBastidor('');

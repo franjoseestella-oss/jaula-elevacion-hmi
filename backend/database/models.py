@@ -110,11 +110,40 @@ class LogTabla(Base):
     fecha_creacion = Column(DateTime, server_default=func.now(), nullable=True)
 
 
+class ReferenciaEnCiclo(Base):
+    __tablename__ = "REFERENCIA_EN_CICLO"
+
+    id = Column(Integer, primary_key=True)
+    REFERENCIA_ACTUAL = Column(String(100), nullable=True, default="0")
+    FECHA_INICIO_CICLO = Column(String(50), nullable=True, default="0")
+
+
 def init_db():
     """Crea las tablas de la aplicación en DAFEED (SQL Server) si no existen."""
     try:
         Base.metadata.create_all(bind=engine)
-        print("[OK] Tablas creadas/verificadas en DAFEED (JAULA_ERP, LOG_TABLA).")
+        print("[OK] Tablas creadas/verificadas en DAFEED (JAULA_ERP, LOG_TABLA, REFERENCIA_EN_CICLO).")
+
+        # Inicializar/Resetear el registro de ciclo
+        from sqlalchemy.orm import sessionmaker
+        SessionLocal = sessionmaker(bind=engine)
+        session = SessionLocal()
+        try:
+            ref = session.query(ReferenciaEnCiclo).first()
+            if not ref:
+                ref = ReferenciaEnCiclo(REFERENCIA_ACTUAL="0", FECHA_INICIO_CICLO="0")
+                session.add(ref)
+            else:
+                ref.REFERENCIA_ACTUAL = "0"
+                ref.FECHA_INICIO_CICLO = "0"
+            session.commit()
+            print("[OK] Registro inicial de REFERENCIA_EN_CICLO establecido a 0.")
+        except Exception as e:
+            session.rollback()
+            print(f"[WARN] Error al inicializar/resetear REFERENCIA_EN_CICLO: {e}")
+        finally:
+            session.close()
     except Exception as e:
         print(f"[ERROR] No se pudieron crear las tablas en DAFEED: {e}")
         raise
+

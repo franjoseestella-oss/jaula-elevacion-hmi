@@ -13,7 +13,7 @@ import os
 import sys
 
 from database.database import engine, get_db, get_local_db
-from database.models import init_db, ErpCarretilla
+from database.models import init_db, ErpCarretilla, ReferenciaEnCiclo
 from database.crud import create_log, get_logs
 from erp_sync import parse_and_sync_dat, start_dat_watcher
 from opcua_client import opcua_manager
@@ -1058,6 +1058,70 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 
+
+
+class CycleStartParams(BaseModel):
+    referencia: str
+
+@app.post("/api/cycle/start")
+def start_cycle(params: CycleStartParams, db: Session = Depends(get_local_db)):
+    try:
+        ref = db.query(ReferenciaEnCiclo).filter(ReferenciaEnCiclo.id == 1).first()
+        if not ref:
+            ref = ReferenciaEnCiclo(id=1)
+            db.add(ref)
+        
+        # Formato: HH:MM DD/MM/AAAA
+        from datetime import datetime
+        now = datetime.now()
+        fecha_str = now.strftime("%H:%M %d/%m/%Y")
+        
+        ref.REFERENCIA_ACTUAL = params.referencia
+        ref.FECHA_INICIO_CICLO = fecha_str
+        db.commit()
+        db.refresh(ref)
+        return {
+            "status": "success",
+            "referencia": ref.REFERENCIA_ACTUAL,
+            "fecha_inicio": ref.FECHA_INICIO_CICLO
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/cycle/reset")
+def reset_cycle(db: Session = Depends(get_local_db)):
+    try:
+        ref = db.query(ReferenciaEnCiclo).filter(ReferenciaEnCiclo.id == 1).first()
+        if not ref:
+            ref = ReferenciaEnCiclo(id=1)
+            db.add(ref)
+        
+        ref.REFERENCIA_ACTUAL = "0"
+        ref.FECHA_INICIO_CICLO = "0"
+        db.commit()
+        db.refresh(ref)
+        return {
+            "status": "success",
+            "referencia": ref.REFERENCIA_ACTUAL,
+            "fecha_inicio": ref.FECHA_INICIO_CICLO
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/cycle/status")
+def get_cycle_status(db: Session = Depends(get_local_db)):
+    try:
+        ref = db.query(ReferenciaEnCiclo).filter(ReferenciaEnCiclo.id == 1).first()
+        if not ref:
+            return {"referencia": "0", "fecha_inicio": "0"}
+        return {
+            "referencia": ref.REFERENCIA_ACTUAL or "0",
+            "fecha_inicio": ref.FECHA_INICIO_CICLO or "0"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─────────────────────────────────────────────────────────────
