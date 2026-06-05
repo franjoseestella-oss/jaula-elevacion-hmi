@@ -346,10 +346,10 @@ const CageAssembly = ({ plcState, currentStep, erpData }) => {
           const pickedUpCount = (showWhitePallets && typeof window !== 'undefined' && window.__hasPalletOnForks) 
             ? Math.max(0, Math.floor(targetWeight / 250)) : 0;
           
-          const remainingCount = Math.max(0, 18 - pickedUpCount);
+          const remainingCount = Math.max(0, 20 - pickedUpCount);
 
           return Array.from({ length: remainingCount }).map((_, i) => {
-            const weight = 4500 - (i * 250);
+            const weight = 5000 - (i * 250);
             return (
               <StackPallet key={`ground-${i}`} position={[0, 0.1 + i * 0.22, 0]} weight={weight} />
             );
@@ -364,7 +364,7 @@ const CageAssembly = ({ plcState, currentStep, erpData }) => {
           const showWhitePallets = currentStep === 3 || currentStep === 4;
           const targetWeight = erpData?.peso_pruebas || 0;
           const pickedUpCount = (showWhitePallets && window.__hasPalletOnForks) ? Math.max(0, Math.floor(targetWeight / 250)) : 0;
-          const remainingCount = Math.max(0, 18 - pickedUpCount);
+          const remainingCount = Math.max(0, 20 - pickedUpCount);
 
           return hasPallet && (
             <WoodenPallet position={[0, 0.1 + remainingCount * 0.22, 0]} />
