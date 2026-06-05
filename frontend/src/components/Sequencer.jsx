@@ -400,6 +400,10 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     5: { altura_inicial: null, altura_final: null, diff: null }
   });
 
+  const stepInitRef = useRef({});
+  const step3PalletTriggeredRef = useRef(false); // evita bucle animating→picked_up→animating en etapa 3
+  const step4PalletTriggeredRef = useRef(false); // evita bucle animating→picked_up→animating en etapa 4
+
   const lastStep2OverlayRef = useRef(null);
   const updateStep2Overlay = (newValue) => {
     if (!setStep2Overlay) return;
