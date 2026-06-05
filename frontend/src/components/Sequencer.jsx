@@ -400,9 +400,25 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     5: { altura_inicial: null, altura_final: null, diff: null }
   });
 
-  const stepInitRef = useRef({});
-  const step3PalletTriggeredRef = useRef(false); // evita bucle animating→picked_up→animating en etapa 3
-  const step4PalletTriggeredRef = useRef(false); // evita bucle animating→picked_up→animating en etapa 4
+  const lastStep2OverlayRef = useRef(null);
+  const updateStep2Overlay = (newValue) => {
+    if (!setStep2Overlay) return;
+    const isSame = JSON.stringify(lastStep2OverlayRef.current) === JSON.stringify(newValue);
+    if (!isSame) {
+      lastStep2OverlayRef.current = newValue;
+      setStep2Overlay(newValue);
+    }
+  };
+
+  const lastTestHUDOverlayRef = useRef(null);
+  const updateTestHUDOverlay = (newValue) => {
+    if (!setTestHUDOverlay) return;
+    const isSame = JSON.stringify(lastTestHUDOverlayRef.current) === JSON.stringify(newValue);
+    if (!isSame) {
+      lastTestHUDOverlayRef.current = newValue;
+      setTestHUDOverlay(newValue);
+    }
+  };
 
   useEffect(() => {
     if (onStepChange) onStepChange(currentStep);
@@ -1532,17 +1548,15 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       const max = alturaMax + tolerancias.positiva;
       const isOk = actual >= min && actual <= max;
 
-      if (setStep2Overlay) {
-        setStep2Overlay({
-          active: true,
-          actual,
-          min,
-          max,
-          isOk
-        });
-      }
+      updateStep2Overlay({
+        active: true,
+        actual,
+        min,
+        max,
+        isOk
+      });
     } else {
-      if (setStep2Overlay) setStep2Overlay(null);
+      updateStep2Overlay(null);
     }
   }, [currentStep, erpData, plcState?.OR_Altura_Carretilla, tolerancias, setStep2Overlay]);
 
@@ -2437,7 +2451,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     const is5mActive = currentStep === 4 && stepStatus[4] === STEP_STATUS.ACTIVE && erpData && stepStarted[4];
 
     if (is5mActive) {
-      setStep2Overlay({
+      updateStep2Overlay({
         active: true,
         mode: 'test_5m',
         actual: currentHeightMm,
@@ -2450,7 +2464,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     } else if (currentStep === 1 && stepStatus[1] === STEP_STATUS.ACTIVE && erpData) {
       // Mantener el panel de multiload (lo gestiona el useEffect de multiload overlay)
     } else {
-      setStep2Overlay(null);
+      updateStep2Overlay(null);
     }
   }, [
     currentStep, stepStatus, erpData, stepStarted, currentHeightMm, cotaInicial,
@@ -2489,7 +2503,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         const realElev = simTimers.finishedElev ? rawElev : null;
         const realDesc = simTimers.finishedDesc ? rawDesc : null;
 
-        setTestHUDOverlay({
+        updateTestHUDOverlay({
           title: isSinCarga ? 'TEST SIN CARGA' : 'TEST CON CARGA',
           subtitle: `PRUEBA ${is1mTest ? '1m' : '2m'}${!isSinCarga ? ` | ${erpData.peso_pruebas ?? '—'} kg` : ''}`,
           cameraTestState,
@@ -2512,7 +2526,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           testDist: is1mTest ? 1.0 : 2.0
         });
       } else if (currentStep === 4 && stepStatus[4] === STEP_STATUS.ACTIVE && erpData) {
-        setTestHUDOverlay({
+        updateTestHUDOverlay({
           title: 'ESTABILIDAD 5 MINUTOS',
           subtitle: `CAÍDA MÁXIMA ${test5mConfig.tolerancia}mm`,
           test5mState,
@@ -2520,7 +2534,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           is5mTest: true
         });
       } else {
-        setTestHUDOverlay(null);
+        updateTestHUDOverlay(null);
       }
     }
   }, [currentStep, stepStatus, erpData, cameraTestState, waitCountdown, setTestHUDOverlay, isSimulation, simTimers, test5mState, testAlarm]);

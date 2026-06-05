@@ -184,9 +184,12 @@ function App() {
 
     if (newAlarmDesc) {
       setAlarms(prev => {
-        if (prev.length > 0 && prev[0].description === newAlarmDesc && (Date.now() - prev[0].id) < 5000) return prev;
+        if (prev.length > 0 && prev[0].description === newAlarmDesc) {
+          const lastAlarmTime = prev[0].startTime || (typeof prev[0].id === 'number' ? prev[0].id : Date.now());
+          if ((Date.now() - lastAlarmTime) < 5000) return prev;
+        }
         setHasUnreadAlarms(true);
-        return [{ id: Date.now(), timestamp: new Date().toLocaleString(), description: newAlarmDesc, type: 'Alarma' }, ...prev].slice(0, 5000);
+        return [{ id: Date.now(), timestamp: new Date().toLocaleString(), description: newAlarmDesc, type: 'Alarma', startTime: Date.now() }, ...prev].slice(0, 5000);
       });
     }
   }, [telemetry?.opcua_error, telemetry?.plc?.Ob_Abortar_Secuencia]);
@@ -745,19 +748,11 @@ function App() {
   useEffect(() => {
     let ws;
     let reconnectTimeout;
-    // Throttle: React state se actualiza máximo cada 100ms (10 Hz)
-    // El DOM directo y los globals siguen a velocidad total
+    // Throttle: React state se actualiza máximo cada 200ms (5 Hz)
+    // El DOM directo y los globals siguen a velocidad total (100+ Hz)
     let lastReactUpdate = 0;
     let pendingTelemetry = null;
-    let rafId = null;
-
-    const flushTelemetry = () => {
-      if (pendingTelemetry) {
-        setTelemetry(pendingTelemetry);
-        pendingTelemetry = null;
-      }
-      rafId = null;
-    };
+    let throttleTimer = null;
 
     const connect = () => {
       try {
@@ -792,7 +787,7 @@ function App() {
                 laserSpan.innerText = Number(mappedPlc.OR_Altura_Carretilla).toFixed(2);
               }
 
-              // ── Actualización de React con THROTTLE 100ms (10 Hz) ───────
+              // ── Actualización de React con THROTTLE 200ms (5 Hz) ───────
               // Evita el Out of Memory causado por 100+ re-renders/segundo
               const newTelemetry = {
                 distance: data.distance,
@@ -807,19 +802,22 @@ function App() {
               const now = Date.now();
               pendingTelemetry = newTelemetry;
 
-              if (now - lastReactUpdate >= 100) {
-                // Más de 100ms desde el último update → actualizar ya
-                lastReactUpdate = now;
-                if (rafId) cancelAnimationFrame(rafId);
-                rafId = null;
-                setTelemetry(newTelemetry);
-                pendingTelemetry = null;
-              } else if (!rafId) {
-                // Dentro del throttle → programar update en el próximo frame disponible
-                rafId = requestAnimationFrame(() => {
-                  lastReactUpdate = Date.now();
-                  flushTelemetry();
-                });
+              if (!throttleTimer) {
+                const msSinceLastUpdate = now - lastReactUpdate;
+                if (msSinceLastUpdate >= 200) {
+                  lastReactUpdate = now;
+                  setTelemetry(newTelemetry);
+                  pendingTelemetry = null;
+                } else {
+                  throttleTimer = setTimeout(() => {
+                    lastReactUpdate = Date.now();
+                    if (pendingTelemetry) {
+                      setTelemetry(pendingTelemetry);
+                      pendingTelemetry = null;
+                    }
+                    throttleTimer = null;
+                  }, 200 - msSinceLastUpdate);
+                }
               }
             }
           } catch (parseErr) {
@@ -848,7 +846,7 @@ function App() {
     connect();
     return () => {
       clearTimeout(reconnectTimeout);
-      if (rafId) cancelAnimationFrame(rafId);
+      if (throttleTimer) clearTimeout(throttleTimer);
       if (ws) ws.close();
     };
   }, []);
