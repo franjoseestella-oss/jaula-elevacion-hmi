@@ -4,5 +4,5 @@
     "dbName": "ServerInterfaces",
     "frequency": 300.0,
     "namespace": "4",
-    "isSimulation": false
+    "isSimulation": true
 }
