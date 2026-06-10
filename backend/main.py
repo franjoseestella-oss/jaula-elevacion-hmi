@@ -1285,6 +1285,68 @@ def read_last_log_for_bastidor(bastidor: str, db: Session = Depends(get_local_db
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ─────────────────────────────────────────────────────────────
+# Registro del alarmero (LOG_ALARMAS)
+# ─────────────────────────────────────────────────────────────
+
+class AlarmCreate(BaseModel):
+    plcVar: str | None = None
+    description: str | None = None
+    type: str | None = None
+    timestamp: str | None = None
+    startTime: int | None = None
+    endTime: int | None = None
+    duration: str | None = None
+
+class AlarmResolve(BaseModel):
+    plcVar: str
+    endTime: int
+    duration: str
+
+@app.get("/api/alarms")
+def read_alarms(skip: int = 0, limit: int = 2000, db: Session = Depends(get_local_db)):
+    try:
+        from database.crud import get_alarms
+        return get_alarms(db, skip=skip, limit=limit)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/alarms")
+def save_alarm(alarm_data: AlarmCreate, db: Session = Depends(get_local_db)):
+    try:
+        from database.crud import create_alarm
+        alarm = create_alarm(db, alarm_data.dict())
+        return {"status": "success", "id": alarm.id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/alarms/resolve")
+def update_alarm_resolved(resolve_data: AlarmResolve, db: Session = Depends(get_local_db)):
+    try:
+        from database.crud import resolve_alarm
+        alarm = resolve_alarm(
+            db, 
+            plcVar=resolve_data.plcVar, 
+            endTime=resolve_data.endTime, 
+            duration=resolve_data.duration
+        )
+        if not alarm:
+            return {"status": "not_found", "message": "No active alarm found to resolve"}
+        return {"status": "success", "id": alarm.id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/alarms")
+def clear_alarms(db: Session = Depends(get_local_db)):
+    try:
+        from database.crud import delete_all_alarms
+        delete_all_alarms(db)
+        return {"status": "success", "message": "Historial de alarmas borrado"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ─────────────────────────────────────────────────────────────
 # Health check
 # ─────────────────────────────────────────────────────────────
@@ -1307,10 +1369,12 @@ def health_db():
         with engine.connect() as conn:
             n_erp    = conn.execute(text("SELECT COUNT(*) FROM JAULA_ERP")).scalar()
             n_logs = conn.execute(text("SELECT COUNT(*) FROM LOG_TABLA")).scalar()
+            n_alarms = conn.execute(text("SELECT COUNT(*) FROM LOG_ALARMAS")).scalar()
         return {
             "connected": True,
             "jaula_erp": n_erp,
             "logs": n_logs,
+            "alarms": n_alarms,
         }
     except Exception as e:
         return {"connected": False, "error": str(e)}

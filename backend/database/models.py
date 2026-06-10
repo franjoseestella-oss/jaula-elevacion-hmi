@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime
+from sqlalchemy import Column, Integer, String, Float, DateTime, BigInteger
 from sqlalchemy.sql import func
 from .database import Base, engine
 
@@ -110,6 +110,20 @@ class LogTabla(Base):
     fecha_creacion = Column(DateTime, server_default=func.now(), nullable=True)
 
 
+class LogAlarma(Base):
+    __tablename__ = "LOG_ALARMAS"
+
+    id = Column(Integer, primary_key=True, index=True)
+    plcVar = Column(String(100), nullable=True)
+    description = Column(String(500), nullable=True)
+    type = Column(String(50), nullable=True)
+    timestamp = Column(String(50), nullable=True)
+    startTime = Column(BigInteger, nullable=True)
+    endTime = Column(BigInteger, nullable=True)
+    duration = Column(String(50), nullable=True)
+    fecha_creacion = Column(DateTime, server_default=func.now(), nullable=True)
+
+
 class ReferenciaEnCiclo(Base):
     __tablename__ = "REFERENCIA_EN_CICLO"
 
@@ -182,7 +196,7 @@ def init_db():
     """Crea las tablas de la aplicación en DAFEED (SQL Server) si no existen."""
     try:
         Base.metadata.create_all(bind=engine)
-        print("[OK] Tablas creadas/verificadas en DAFEED (JAULA_ERP, LOG_TABLA, REFERENCIA_EN_CICLO).")
+        print("[OK] Tablas creadas/verificadas en DAFEED (JAULA_ERP, LOG_TABLA, LOG_ALARMAS, REFERENCIA_EN_CICLO).")
 
         # Inicializar/Resetear el registro de ciclo
         from sqlalchemy.orm import sessionmaker

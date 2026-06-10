@@ -105,6 +105,49 @@ function App() {
     return () => window.removeEventListener('plcAlarmConfigUpdated', handleConfigChange);
   }, []);
 
+  const logAlarmToDb = (alarm) => {
+    fetch('http://localhost:8001/api/alarms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        plcVar: alarm.plcVar || null,
+        description: alarm.description,
+        type: alarm.type,
+        timestamp: alarm.timestamp,
+        startTime: alarm.startTime,
+        endTime: alarm.endTime || null,
+        duration: alarm.duration || 'Activa'
+      })
+    }).catch(err => console.error("Error al guardar alarma en BD:", err));
+  };
+
+  const resolveAlarmInDb = (plcVar, durationStr, endTime) => {
+    fetch('http://localhost:8001/api/alarms/resolve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        plcVar: plcVar,
+        endTime: endTime,
+        duration: durationStr
+      })
+    }).catch(err => console.error("Error al resolver alarma en BD:", err));
+  };
+
+  const handleClearAlarmsHistory = () => {
+    if (window.confirm("¿Seguro que deseas borrar todo el histórico de alarmas de la base de datos?")) {
+      fetch('http://localhost:8001/api/alarms', {
+        method: 'DELETE'
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success') {
+          setAlarms([]);
+        }
+      })
+      .catch(err => console.error("Error al borrar histórico de alarmas:", err));
+    }
+  };
+
   const hasActiveCriticalAlarm = alarmConfig?.in?.some(a => a.type === 'Alarma' && telemetry?.plc?.[a.plcVar]) || false;
 
   // Ref para llamar funciones del Sequencer directamente (sin pasar por WebSocket)
@@ -172,6 +215,18 @@ function App() {
     }
   }, []);
 
+  // Cargar histórico de alarmas desde base de datos al montar la aplicación
+  useEffect(() => {
+    fetch('http://localhost:8001/api/alarms')
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setAlarms(data);
+        }
+      })
+      .catch(err => console.error("Error al cargar histórico de alarmas:", err));
+  }, []);
+
   // Track alarms
   useEffect(() => {
     let newAlarmDesc = null;
@@ -189,7 +244,16 @@ function App() {
           if ((Date.now() - lastAlarmTime) < 5000) return prev;
         }
         setHasUnreadAlarms(true);
-        return [{ id: Date.now(), timestamp: new Date().toLocaleString(), description: newAlarmDesc, type: 'Alarma', startTime: Date.now() }, ...prev].slice(0, 5000);
+        const newAlarm = {
+          id: Date.now(),
+          timestamp: new Date().toLocaleString(),
+          description: newAlarmDesc,
+          type: 'Alarma',
+          startTime: Date.now(),
+          duration: 'Activa'
+        };
+        logAlarmToDb(newAlarm);
+        return [newAlarm, ...prev].slice(0, 5000);
       });
     }
   }, [telemetry?.opcua_error, telemetry?.plc?.Ob_Abortar_Secuencia]);
@@ -279,6 +343,8 @@ function App() {
         };
       });
 
+      newAlarmObjects.forEach(logAlarmToDb);
+
       setAlarms(prev => {
         const updated = [...newAlarmObjects, ...prev];
         return updated.slice(0, 5000); // Limit historical alarms to 5000
@@ -289,16 +355,27 @@ function App() {
     const resolvedAlarms = activePlcAlarmsRef.current.filter(id => !currentActive.includes(id));
     if (resolvedAlarms.length > 0) {
       const nowTime = Date.now();
-      setAlarms(prev => prev.map(alarm => {
-        if (resolvedAlarms.includes(alarm.plcVar) && !alarm.endTime) {
-          const durationMs = nowTime - alarm.startTime;
+      setAlarms(prev => {
+        resolvedAlarms.forEach(plcVar => {
+          const matchingAlarm = prev.find(a => a.plcVar === plcVar && !a.endTime);
+          const durationMs = matchingAlarm ? (nowTime - matchingAlarm.startTime) : 0;
           const secs = Math.floor(durationMs / 1000);
           const mins = Math.floor(secs / 60);
           const durationStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
-          return { ...alarm, endTime: nowTime, duration: durationStr };
-        }
-        return alarm;
-      }));
+          resolveAlarmInDb(plcVar, durationStr, nowTime);
+        });
+
+        return prev.map(alarm => {
+          if (resolvedAlarms.includes(alarm.plcVar) && !alarm.endTime) {
+            const durationMs = nowTime - alarm.startTime;
+            const secs = Math.floor(durationMs / 1000);
+            const mins = Math.floor(secs / 60);
+            const durationStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
+            return { ...alarm, endTime: nowTime, duration: durationStr };
+          }
+          return alarm;
+        });
+      });
     }
 
     activePlcAlarmsRef.current = currentActive;
@@ -368,7 +445,7 @@ function App() {
       setAlarms(prev => {
         if (prev.length > 0 && prev[0].description === '[ALARMA CRÍTICA] Valla no está en trabajo.') return prev;
         setHasUnreadAlarms(true);
-        return [{
+        const newAlarm = {
           id: `SYS_FENCE_NOT_IN_WORK-${now.getTime()}`,
           plcVar: 'SYS_FENCE_NOT_IN_WORK',
           description: '[ALARMA CRÍTICA] Valla no está en trabajo.',
@@ -377,21 +454,28 @@ function App() {
           startTime: now.getTime(),
           endTime: null,
           duration: 'Activa'
-        }, ...prev].slice(0, 5000);
+        };
+        logAlarmToDb(newAlarm);
+        return [newAlarm, ...prev].slice(0, 5000);
       });
       setShowActiveAlarms(true);
     } else {
       const nowTime = Date.now();
-      setAlarms(prev => prev.map(alarm => {
-        if (alarm.plcVar === 'SYS_FENCE_NOT_IN_WORK' && !alarm.endTime) {
-          const durationMs = nowTime - alarm.startTime;
-          const secs = Math.floor(durationMs / 1000);
-          const mins = Math.floor(secs / 60);
-          const durationStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
-          return { ...alarm, endTime: nowTime, duration: durationStr };
-        }
-        return alarm;
-      }));
+      setAlarms(prev => {
+        const matchingAlarm = prev.find(a => a.plcVar === 'SYS_FENCE_NOT_IN_WORK' && !a.endTime);
+        const durationMs = matchingAlarm ? (nowTime - matchingAlarm.startTime) : 0;
+        const secs = Math.floor(durationMs / 1000);
+        const mins = Math.floor(secs / 60);
+        const durationStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
+        resolveAlarmInDb('SYS_FENCE_NOT_IN_WORK', durationStr, nowTime);
+
+        return prev.map(alarm => {
+          if (alarm.plcVar === 'SYS_FENCE_NOT_IN_WORK' && !alarm.endTime) {
+            return { ...alarm, endTime: nowTime, duration: durationStr };
+          }
+          return alarm;
+        });
+      });
     }
   }, [fenceAlarmActive]);
 
@@ -402,7 +486,7 @@ function App() {
       setAlarms(prev => {
         if (prev.length > 0 && prev[0].description === '[ALARMA CRÍTICA] Valla no está en reposo.') return prev;
         setHasUnreadAlarms(true);
-        return [{
+        const newAlarm = {
           id: `SYS_FENCE_NOT_IN_REPOSO-${now.getTime()}`,
           plcVar: 'SYS_FENCE_NOT_IN_REPOSO',
           description: '[ALARMA CRÍTICA] Valla no está en reposo.',
@@ -411,21 +495,28 @@ function App() {
           startTime: now.getTime(),
           endTime: null,
           duration: 'Activa'
-        }, ...prev].slice(0, 5000);
+        };
+        logAlarmToDb(newAlarm);
+        return [newAlarm, ...prev].slice(0, 5000);
       });
       setShowActiveAlarms(true);
     } else {
       const nowTime = Date.now();
-      setAlarms(prev => prev.map(alarm => {
-        if (alarm.plcVar === 'SYS_FENCE_NOT_IN_REPOSO' && !alarm.endTime) {
-          const durationMs = nowTime - alarm.startTime;
-          const secs = Math.floor(durationMs / 1000);
-          const mins = Math.floor(secs / 60);
-          const durationStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
-          return { ...alarm, endTime: nowTime, duration: durationStr };
-        }
-        return alarm;
-      }));
+      setAlarms(prev => {
+        const matchingAlarm = prev.find(a => a.plcVar === 'SYS_FENCE_NOT_IN_REPOSO' && !a.endTime);
+        const durationMs = matchingAlarm ? (nowTime - matchingAlarm.startTime) : 0;
+        const secs = Math.floor(durationMs / 1000);
+        const mins = Math.floor(secs / 60);
+        const durationStr = mins > 0 ? `${mins}m ${secs % 60}s` : `${secs}s`;
+        resolveAlarmInDb('SYS_FENCE_NOT_IN_REPOSO', durationStr, nowTime);
+
+        return prev.map(alarm => {
+          if (alarm.plcVar === 'SYS_FENCE_NOT_IN_REPOSO' && !alarm.endTime) {
+            return { ...alarm, endTime: nowTime, duration: durationStr };
+          }
+          return alarm;
+        });
+      });
     }
   }, [fenceReposoAlarmActive]);
 
@@ -1126,7 +1217,7 @@ function App() {
                     <span className="text-2xl font-black text-red-500 uppercase tracking-widest drop-shadow-md">Log_Alarms</span>
                   </div>
                   <div className="flex items-center gap-4">
-                    <button onClick={() => setAlarms([])} className="text-white text-sm font-bold uppercase tracking-wider bg-orange-600/80 border border-orange-500 hover:bg-orange-500 px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-2">
+                    <button onClick={handleClearAlarmsHistory} className="text-white text-sm font-bold uppercase tracking-wider bg-orange-600/80 border border-orange-500 hover:bg-orange-500 px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-2">
                       <Trash2 size={18} /> Borrar Histórico
                     </button>
                     <button onClick={handleExportAlarms} className="text-white text-sm font-bold uppercase tracking-wider bg-green-600/80 border border-green-500 hover:bg-green-500 px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-2">
