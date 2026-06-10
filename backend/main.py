@@ -69,35 +69,54 @@ def on_startup():
     try:
         import json
         config_path = resource_path("plc_config.json")
+        config_data = {}
         if os.path.exists(config_path):
             with open(config_path, "r", encoding="utf-8") as f:
-                config_data = json.load(f)
-                ip = config_data.get("ip", "192.168.0.1")
-                port = config_data.get("port", "4840")
-                db_name = config_data.get("dbName") or config_data.get("dbNameFast") or "DB25_OPC_UA_SCAN_LENTO"
-                frequency = config_data.get("frequency") or config_data.get("hzFast") or 100.0
-                namespace = config_data.get("namespace", "3")
-                is_simulation = config_data.get("isSimulation", True)
-                
-                opcua_manager.update_config(
-                    ip=ip,
-                    port=port,
-                    db_name_fast=db_name,
-                    db_name_slow=db_name,
-                    hz_fast=float(frequency),
-                    hz_slow=float(frequency),
-                    namespace=str(namespace),
-                    db_name=db_name,
-                    frequency=float(frequency)
-                )
-                
-                if is_simulation:
-                    opcua_manager.disable()
-                else:
-                    opcua_manager.enable()
-                print(f"[OK] Configuración PLC cargada desde archivo: {ip}:{port}, DB={db_name}, sim={is_simulation}")
+                try:
+                    config_data = json.load(f)
+                except Exception as je:
+                    print(f"[WARN] Error parseando plc_config.json: {je}")
+
+        ip = config_data.get("ip", "192.168.1.1")
+        port = config_data.get("port", "4840")
+        db_name = config_data.get("dbName") or config_data.get("dbNameFast") or "ServerInterfaces"
+        frequency = config_data.get("frequency") or config_data.get("hzFast") or 300.0
+        namespace = config_data.get("namespace", "4")
+        is_simulation = config_data.get("isSimulation", True)
+
+        # Si al arrancar está configurado en modo simulación (isSimulation=True),
+        # forzamos isSimulation=False para conectar al PLC real
+        if is_simulation:
+            is_simulation = False
+            config_data["ip"] = ip
+            config_data["port"] = port
+            config_data["dbName"] = db_name
+            config_data["frequency"] = frequency
+            config_data["namespace"] = namespace
+            config_data["isSimulation"] = False
+            try:
+                with open(config_path, "w", encoding="utf-8") as fw:
+                    json.dump(config_data, fw, indent=4)
+                print("[OK] Modo simulación desactivado automáticamente en el arranque para conectar con el PLC.")
+            except Exception as we:
+                print(f"[WARN] No se pudo actualizar plc_config.json: {we}")
+
+        opcua_manager.update_config(
+            ip=ip,
+            port=port,
+            db_name_fast=db_name,
+            db_name_slow=db_name,
+            hz_fast=float(frequency),
+            hz_slow=float(frequency),
+            namespace=str(namespace),
+            db_name=db_name,
+            frequency=float(frequency)
+        )
+
+        opcua_manager.enable()
+        print(f"[OK] Configuración PLC cargada y conectada al PLC: {ip}:{port}, DB={db_name}, sim=False")
     except Exception as e:
-        print(f"[WARN] No se pudo cargar plc_config.json: {e}")
+        print(f"[WARN] No se pudo cargar o iniciar la configuración del PLC: {e}")
 
 app.add_middleware(
     CORSMiddleware,

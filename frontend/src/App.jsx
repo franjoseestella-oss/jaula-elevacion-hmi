@@ -70,7 +70,12 @@ function App() {
   const [operario, setOperario] = useState(null);
   const [isSimulation, setIsSimulation] = useState(() => {
     const saved = localStorage.getItem('isSimulation');
-    return saved !== null ? JSON.parse(saved) : false;
+    const isSim = saved !== null ? JSON.parse(saved) : false;
+    if (isSim) {
+      localStorage.setItem('isSimulation', 'false');
+      return false;
+    }
+    return false;
   });
 
   useEffect(() => {
@@ -90,6 +95,14 @@ function App() {
   const [showAlarmsHistory, setShowAlarmsHistory] = useState(false);
   const [showActiveAlarms, setShowActiveAlarms] = useState(false);
   const [hasUnreadAlarms, setHasUnreadAlarms] = useState(false);
+
+  const [startupGraceActive, setStartupGraceActive] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setStartupGraceActive(false);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const [alarmConfig, setAlarmConfig] = useState(() => {
     const saved = localStorage.getItem("plcAlarmConfig");
@@ -235,7 +248,7 @@ function App() {
   // Track alarms
   useEffect(() => {
     let newAlarmDesc = null;
-    if (telemetry?.opcua_error && telemetry?.opcua_error !== "None") {
+    if (!isSimulation && telemetry?.opcua_error && telemetry?.opcua_error !== "None" && telemetry?.opcua_error !== "Modo simulacion activo") {
       newAlarmDesc = 'Error conexión OPC UA: ' + telemetry.opcua_error;
     }
     if (telemetry?.plc?.Ob_Abortar_Secuencia) {
@@ -261,7 +274,7 @@ function App() {
         return [newAlarm, ...prev].slice(0, 5000);
       });
     }
-  }, [telemetry?.opcua_error, telemetry?.plc?.Ob_Abortar_Secuencia]);
+  }, [telemetry?.opcua_error, telemetry?.plc?.Ob_Abortar_Secuencia, isSimulation]);
 
   const activePlcAlarmsRef = useRef([]);
 
@@ -269,21 +282,23 @@ function App() {
   useEffect(() => {
     const currentActive = [];
 
-    if (!networkStatus.opc || telemetry?.opcua_connected === false) {
-      currentActive.push('SYS_PLC_DISCONNECTED');
-    }
+    if (!startupGraceActive) {
+      if (!networkStatus.opc || telemetry?.opcua_connected === false) {
+        currentActive.push('SYS_PLC_DISCONNECTED');
+      }
 
-    if (networkStatus.lectorqr === false) {
-      currentActive.push('SYS_QR_DISCONNECTED');
-    }
+      if (networkStatus.lectorqr === false) {
+        currentActive.push('SYS_QR_DISCONNECTED');
+      }
 
-    if (telemetry?.plc && alarmConfig?.in) {
-      const plcActive = alarmConfig.in.filter(a => telemetry.plc[a.plcVar]).map(a => a.plcVar);
-      currentActive.push(...plcActive);
+      if (telemetry?.plc && alarmConfig?.in) {
+        const plcActive = alarmConfig.in.filter(a => telemetry.plc[a.plcVar]).map(a => a.plcVar);
+        currentActive.push(...plcActive);
 
-      // Inject manual mode alarm if not automatic (and not in simulation)
-      if (!isSimulation && telemetry?.opcua_connected && !telemetry.mappedPlc?.Ob_Estado_Automatico && !telemetry.plc?.Ob_Estado_Automatico) {
-        currentActive.push('SYS_MODO_MANUAL');
+        // Inject manual mode alarm if not automatic (and not in simulation)
+        if (!isSimulation && telemetry?.opcua_connected && !telemetry.mappedPlc?.Ob_Estado_Automatico && !telemetry.plc?.Ob_Estado_Automatico) {
+          currentActive.push('SYS_MODO_MANUAL');
+        }
       }
     }
 
@@ -384,25 +399,27 @@ function App() {
     }
 
     activePlcAlarmsRef.current = currentActive;
-  }, [telemetry?.plc, telemetry?.opcua_connected, alarmConfig?.in, networkStatus.opc, networkStatus.lectorqr, isSimulation, telemetry?.mappedPlc]);
+  }, [telemetry?.plc, telemetry?.opcua_connected, alarmConfig?.in, networkStatus.opc, networkStatus.lectorqr, isSimulation, telemetry?.mappedPlc, startupGraceActive]);
 
   const activeAlarmsList = React.useMemo(() => {
     const list = [];
 
-    if (!networkStatus.opc || telemetry?.opcua_connected === false) {
-      list.push({
-        id: 'SYS_PLC_DISCONNECTED',
-        description: '[ALARMA CRÍTICA] Sin conexión con PLC (OPC UA).',
-        type: 'Alarma'
-      });
-    }
+    if (!startupGraceActive) {
+      if (!networkStatus.opc || telemetry?.opcua_connected === false) {
+        list.push({
+          id: 'SYS_PLC_DISCONNECTED',
+          description: '[ALARMA CRÍTICA] Sin conexión con PLC (OPC UA).',
+          type: 'Alarma'
+        });
+      }
 
-    if (networkStatus.lectorqr === false) {
-      list.push({
-        id: 'SYS_QR_DISCONNECTED',
-        description: '[ALARMA CRÍTICA] Lector QR Datalogic desconectado.',
-        type: 'Alarma'
-      });
+      if (networkStatus.lectorqr === false) {
+        list.push({
+          id: 'SYS_QR_DISCONNECTED',
+          description: '[ALARMA CRÍTICA] Lector QR Datalogic desconectado.',
+          type: 'Alarma'
+        });
+      }
     }
 
     if (telemetry?.plc && alarmConfig?.in) {
@@ -432,7 +449,7 @@ function App() {
       });
     }
 
-    if (!isSimulation && telemetry?.opcua_connected && !telemetry.mappedPlc?.Ob_Estado_Automatico && !telemetry.plc?.Ob_Estado_Automatico) {
+    if (!startupGraceActive && !isSimulation && telemetry?.opcua_connected && !telemetry.mappedPlc?.Ob_Estado_Automatico && !telemetry.plc?.Ob_Estado_Automatico) {
       list.push({
         id: 'SYS_MODO_MANUAL',
         description: '[ADVERTENCIA] Máquina en estado manual, no cumples condiciones iniciales',
@@ -441,11 +458,11 @@ function App() {
     }
 
     return list;
-  }, [telemetry?.plc, telemetry?.mappedPlc, telemetry?.opcua_connected, alarmConfig?.in, networkStatus.opc, networkStatus.lectorqr, isSimulation, fenceAlarmActive, fenceReposoAlarmActive]);
+  }, [telemetry?.plc, telemetry?.mappedPlc, telemetry?.opcua_connected, alarmConfig?.in, networkStatus.opc, networkStatus.lectorqr, isSimulation, fenceAlarmActive, fenceReposoAlarmActive, startupGraceActive]);
 
   // Sincronizar alarma de valla con el histórico (Trabajo)
   useEffect(() => {
-    if (fenceAlarmActive) {
+    if (fenceAlarmActive && !startupGraceActive) {
       const now = new Date();
       setAlarms(prev => {
         if (prev.length > 0 && prev[0].description === '[ALARMA CRÍTICA] Valla no está en trabajo.') return prev;
@@ -464,7 +481,7 @@ function App() {
         return [newAlarm, ...prev].slice(0, 5000);
       });
       setShowActiveAlarms(true);
-    } else {
+    } else if (!fenceAlarmActive) {
       const nowTime = Date.now();
       setAlarms(prev => {
         const matchingAlarm = prev.find(a => a.plcVar === 'SYS_FENCE_NOT_IN_WORK' && !a.endTime);
@@ -482,11 +499,11 @@ function App() {
         });
       });
     }
-  }, [fenceAlarmActive]);
+  }, [fenceAlarmActive, startupGraceActive]);
 
   // Sincronizar alarma de valla con el histórico (Reposo)
   useEffect(() => {
-    if (fenceReposoAlarmActive) {
+    if (fenceReposoAlarmActive && !startupGraceActive) {
       const now = new Date();
       setAlarms(prev => {
         if (prev.length > 0 && prev[0].description === '[ALARMA CRÍTICA] Valla no está en reposo.') return prev;
@@ -505,7 +522,7 @@ function App() {
         return [newAlarm, ...prev].slice(0, 5000);
       });
       setShowActiveAlarms(true);
-    } else {
+    } else if (!fenceReposoAlarmActive) {
       const nowTime = Date.now();
       setAlarms(prev => {
         const matchingAlarm = prev.find(a => a.plcVar === 'SYS_FENCE_NOT_IN_REPOSO' && !a.endTime);
@@ -523,7 +540,7 @@ function App() {
         });
       });
     }
-  }, [fenceReposoAlarmActive]);
+  }, [fenceReposoAlarmActive, startupGraceActive]);
 
   useEffect(() => {
     if (!networkStatus.opc || telemetry?.opcua_connected === false || networkStatus.lectorqr === false || fenceAlarmActive || fenceReposoAlarmActive) {
