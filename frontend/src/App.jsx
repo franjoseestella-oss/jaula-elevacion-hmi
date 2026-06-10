@@ -187,6 +187,14 @@ function App() {
 
   // ── Auto-connect to PLC on startup if a saved config exists ──
   useEffect(() => {
+    // Si al arrancar la aplicación está en modo simulación, forzar cambio a modo PLC real
+    const savedSim = localStorage.getItem('isSimulation');
+    const isSim = savedSim !== null ? JSON.parse(savedSim) : false;
+    if (isSim) {
+      localStorage.setItem('isSimulation', 'false');
+      setIsSimulation(false);
+    }
+
     const savedConfigStr = localStorage.getItem('plcConfig');
     if (savedConfigStr) {
       try {
@@ -199,16 +207,13 @@ function App() {
           savedConfig.frequency = savedConfig.hzFast || 300;
         }
 
-        // Only send connect request if we are in PLC mode
-        const savedSim = localStorage.getItem('isSimulation');
-        const isSim = savedSim !== null ? JSON.parse(savedSim) : false;
-
+        // Siempre forzar la conexión al PLC real (isSimulation: false) en el arranque
         fetch('http://localhost:8001/config/plc', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...savedConfig,
-            isSimulation: isSim
+            isSimulation: false
           })
         }).catch(e => console.error("Error auto-connecting to PLC:", e));
       } catch (e) { }
