@@ -74,16 +74,17 @@ def get_last_log_for_bastidor(db: Session, bastidor: str) -> Optional[LogTabla]:
 
 def create_alarm(db: Session, alarm_data: dict) -> LogAlarma:
     """Inserta una nueva alarma en LOG_ALARMAS."""
-    # Quitar id si viene del frontend en la creación
-    if "id" in alarm_data and isinstance(alarm_data["id"], str):
-        # El frontend puede generar un string ID para uso local (ej: SYS_PLC_DISCONNECTED-12345),
-        # pero en la base de datos usamos una columna id autoincremental entera.
-        # Por lo tanto, no pasamos el 'id' al constructor para que SQLAlchemy use el autoincremento.
-        alarm_data_copy = alarm_data.copy()
-        alarm_data_copy.pop("id")
-        alarm = LogAlarma(**alarm_data_copy)
-    else:
-        alarm = LogAlarma(**alarm_data)
+    # Convertimos las claves en minúsculas del frontend a los nombres de las columnas en la BD
+    db_data = {
+        "VARIABLE_PLC": alarm_data.get("plcVar"),
+        "DESCRIPCION": alarm_data.get("description"),
+        "TIPO": alarm_data.get("type"),
+        "FECHA_Y_HORA": alarm_data.get("timestamp"),
+        "START_TIME": alarm_data.get("startTime"),
+        "END_TIME": alarm_data.get("endTime"),
+        "DURACION": alarm_data.get("duration")
+    }
+    alarm = LogAlarma(**db_data)
     db.add(alarm)
     db.commit()
     db.refresh(alarm)
@@ -93,13 +94,13 @@ def resolve_alarm(db: Session, plcVar: str, endTime: int, duration: str) -> Opti
     """Marca como resuelta la alarma más reciente que esté activa para una variable dada."""
     alarm = (
         db.query(LogAlarma)
-        .filter(LogAlarma.plcVar == plcVar, LogAlarma.endTime == None)
+        .filter(LogAlarma.VARIABLE_PLC == plcVar, LogAlarma.END_TIME == None)
         .order_by(LogAlarma.id.desc())
         .first()
     )
     if alarm:
-        alarm.endTime = endTime
-        alarm.duration = duration
+        alarm.END_TIME = endTime
+        alarm.DURACION = duration
         db.commit()
         db.refresh(alarm)
     return alarm

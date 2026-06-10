@@ -1308,7 +1308,20 @@ class AlarmResolve(BaseModel):
 def read_alarms(skip: int = 0, limit: int = 2000, db: Session = Depends(get_local_db)):
     try:
         from database.crud import get_alarms
-        return get_alarms(db, skip=skip, limit=limit)
+        db_alarms = get_alarms(db, skip=skip, limit=limit)
+        return [
+            {
+                "id": a.id,
+                "plcVar": a.VARIABLE_PLC,
+                "description": a.DESCRIPCION,
+                "type": a.TIPO,
+                "timestamp": a.FECHA_Y_HORA,
+                "startTime": a.START_TIME,
+                "endTime": a.END_TIME,
+                "duration": a.DURACION
+            }
+            for a in db_alarms
+        ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
