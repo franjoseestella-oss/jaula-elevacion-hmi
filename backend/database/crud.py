@@ -74,15 +74,11 @@ def get_last_log_for_bastidor(db: Session, bastidor: str) -> Optional[LogTabla]:
 
 def create_alarm(db: Session, alarm_data: dict) -> LogAlarma:
     """Inserta una nueva alarma en LOG_ALARMAS."""
-    # Convertimos las claves en minúsculas del frontend a los nombres de las columnas en la BD
     db_data = {
-        "VARIABLE_PLC": alarm_data.get("plcVar"),
-        "DESCRIPCION": alarm_data.get("description"),
-        "TIPO": alarm_data.get("type"),
         "FECHA_Y_HORA": alarm_data.get("timestamp"),
-        "START_TIME": alarm_data.get("startTime"),
-        "END_TIME": alarm_data.get("endTime"),
-        "DURACION": alarm_data.get("duration")
+        "TIPO": alarm_data.get("type"),
+        "DESCRIPCION": alarm_data.get("description"),
+        "DURACION": alarm_data.get("duration", "Activa")
     }
     alarm = LogAlarma(**db_data)
     db.add(alarm)
@@ -91,15 +87,23 @@ def create_alarm(db: Session, alarm_data: dict) -> LogAlarma:
     return alarm
 
 def resolve_alarm(db: Session, plcVar: str, endTime: int, duration: str) -> Optional[LogAlarma]:
-    """Marca como resuelta la alarma más reciente que esté activa para una variable dada."""
+    """Marca como resuelta la alarma más reciente que esté activa buscando por descripción."""
+    mapping = {
+        "SYS_PLC_DISCONNECTED": "Sin conexión con PLC",
+        "SYS_QR_DISCONNECTED": "Lector QR Datalogic desconectado",
+        "SYS_MODO_MANUAL": "Máquina en estado manual",
+        "SYS_FENCE_NOT_IN_WORK": "Valla no está en trabajo",
+        "SYS_FENCE_NOT_IN_REPOSO": "Valla no está en reposo"
+    }
+    search_term = mapping.get(plcVar, f"[{plcVar}]")
+
     alarm = (
         db.query(LogAlarma)
-        .filter(LogAlarma.VARIABLE_PLC == plcVar, LogAlarma.END_TIME == None)
+        .filter(LogAlarma.DURACION == "Activa", LogAlarma.DESCRIPCION.like(f"%{search_term}%"))
         .order_by(LogAlarma.id.desc())
         .first()
     )
     if alarm:
-        alarm.END_TIME = endTime
         alarm.DURACION = duration
         db.commit()
         db.refresh(alarm)

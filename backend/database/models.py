@@ -114,14 +114,10 @@ class LogAlarma(Base):
     __tablename__ = "LOG_ALARMAS"
 
     id = Column(Integer, primary_key=True, index=True)
-    VARIABLE_PLC = Column(String(100), nullable=True)
-    DESCRIPCION = Column(String(500), nullable=True)
-    TIPO = Column(String(50), nullable=True)
     FECHA_Y_HORA = Column(String(50), nullable=True)
-    START_TIME = Column(BigInteger, nullable=True)
-    END_TIME = Column(BigInteger, nullable=True)
+    TIPO = Column(String(50), nullable=True)
+    DESCRIPCION = Column(String(500), nullable=True)
     DURACION = Column(String(50), nullable=True)
-    fecha_creacion = Column(DateTime, server_default=func.now(), nullable=True)
 
 
 class ReferenciaEnCiclo(Base):

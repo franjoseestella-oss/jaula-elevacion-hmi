@@ -1309,15 +1309,35 @@ def read_alarms(skip: int = 0, limit: int = 2000, db: Session = Depends(get_loca
     try:
         from database.crud import get_alarms
         db_alarms = get_alarms(db, skip=skip, limit=limit)
+        
+        def extract_plc_var(desc: str) -> str:
+            if not desc:
+                return ""
+            if "Sin conexión con PLC" in desc:
+                return "SYS_PLC_DISCONNECTED"
+            if "Lector QR" in desc:
+                return "SYS_QR_DISCONNECTED"
+            if "Máquina en estado manual" in desc:
+                return "SYS_MODO_MANUAL"
+            if "Valla no está en trabajo" in desc:
+                return "SYS_FENCE_NOT_IN_WORK"
+            if "Valla no está en reposo" in desc:
+                return "SYS_FENCE_NOT_IN_REPOSO"
+            import re
+            m = re.match(r"^\[([^\]]+)\]", desc)
+            if m:
+                return m.group(1)
+            return ""
+
         return [
             {
                 "id": a.id,
-                "plcVar": a.VARIABLE_PLC,
+                "plcVar": extract_plc_var(a.DESCRIPCION),
                 "description": a.DESCRIPCION,
                 "type": a.TIPO,
                 "timestamp": a.FECHA_Y_HORA,
-                "startTime": a.START_TIME,
-                "endTime": a.END_TIME,
+                "startTime": None,
+                "endTime": None if a.DURACION == "Activa" else 1,
                 "duration": a.DURACION
             }
             for a in db_alarms
