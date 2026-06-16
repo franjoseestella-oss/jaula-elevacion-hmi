@@ -1176,6 +1176,9 @@ def update_cycle(data: dict, db: Session = Depends(get_local_db)):
         
         for key, value in data.items():
             if hasattr(ref, key):
+                # Sanitizar strings 'NULL' o 'null' a None
+                if isinstance(value, str) and value.strip().upper() == 'NULL':
+                    value = None
                 setattr(ref, key, value)
         
         db.commit()

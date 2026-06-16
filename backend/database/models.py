@@ -1,6 +1,31 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, BigInteger
+from sqlalchemy import Column, Integer, String, Float, DateTime, BigInteger, TypeDecorator
 from sqlalchemy.sql import func
 from .database import Base, engine
+
+
+class SafeFloat(TypeDecorator):
+    """
+    TypeDecorator robusto para columnas numéricas que en SQL Server están
+    almacenadas como nvarchar y pueden contener valores no numéricos como 'NP', 'NULL' o vacíos.
+    """
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        return str(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        val_str = str(value).strip()
+        if val_str.upper() in ('NULL', 'NONE', 'NP', ''):
+            return None
+        try:
+            return float(val_str)
+        except ValueError:
+            return None
 
 
 class ErpCarretilla(Base):
@@ -58,7 +83,7 @@ class LogTabla(Base):
     ALTURA_MAX_INTERMEDIA = Column(Float, nullable=True)
 
     # 2. Multiload
-    ALTURA_CAPTADA = Column(Float, nullable=True)
+    ALTURA_CAPTADA = Column(SafeFloat, nullable=True)
     FECHA_HORA_INICIO_MULTILOAD = Column(String(50), nullable=True)
     FECHA_HORA_FIN_MULTILOAD = Column(String(50), nullable=True)
     ESTADO_MULTILOAD = Column(String(20), nullable=True)
@@ -93,9 +118,9 @@ class LogTabla(Base):
     PESO_PRUEBA = Column(Float, nullable=True)
 
     # 5. 5 Minutos
-    ALTURA_INICIAL = Column(Float, nullable=True)
-    ALTURA_FINAL = Column(Float, nullable=True)
-    DIFERENCIA_ALTURAS = Column(Float, nullable=True)
+    ALTURA_INICIAL = Column(SafeFloat, nullable=True)
+    ALTURA_FINAL = Column(SafeFloat, nullable=True)
+    DIFERENCIA_ALTURAS = Column(SafeFloat, nullable=True)
     FECHA_HORA_INICIO_5MIN = Column(String(50), nullable=True)
     FECHA_HORA_FIN_5MIN = Column(String(50), nullable=True)
     ESTADO_CARGA_5_MIN = Column(String(20), nullable=True)
