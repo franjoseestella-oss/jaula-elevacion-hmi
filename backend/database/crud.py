@@ -52,8 +52,15 @@ def upsert_carretilla(db: Session, data: dict) -> ErpCarretilla:
 
 def create_log(db: Session, log_data: dict) -> LogTabla:
     """Guarda un registro completo en LOG_TABLA."""
-    # Evitar guardar en base de datos si log_data tiene campos nulos irrelevantes que fallarían
-    log = LogTabla(**log_data)
+    # Sanitizar strings 'NULL' o 'null' a None
+    cleaned_data = {}
+    for k, v in log_data.items():
+        if isinstance(v, str) and v.strip().upper() == 'NULL':
+            cleaned_data[k] = None
+        else:
+            cleaned_data[k] = v
+            
+    log = LogTabla(**cleaned_data)
     db.add(log)
     db.commit()
     db.refresh(log)
