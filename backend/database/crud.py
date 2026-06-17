@@ -51,7 +51,7 @@ def upsert_carretilla(db: Session, data: dict) -> ErpCarretilla:
 # ─────────────────────────────────────────────────────────────
 
 def create_log(db: Session, log_data: dict) -> LogTabla:
-    """Guarda un registro completo en LOG_TABLA."""
+    """Guarda o actualiza un registro completo en LOG_TABLA."""
     # Sanitizar strings 'NULL' o 'null' a None
     cleaned_data = {}
     for k, v in log_data.items():
@@ -59,18 +59,33 @@ def create_log(db: Session, log_data: dict) -> LogTabla:
             cleaned_data[k] = None
         else:
             cleaned_data[k] = v
-            
-    log = LogTabla(**cleaned_data)
-    # Generar ID manual autoincremental si no se proporciona, ya que la columna id en LOG_TABLA no es IDENTITY
-    if log.id is None:
-        from sqlalchemy import func
-        max_id = db.query(func.max(LogTabla.id)).scalar()
-        log.id = 1.0 if max_id is None else float(max_id) + 1.0
 
-    db.add(log)
-    db.commit()
-    db.refresh(log)
-    return log
+    bastidor = cleaned_data.get("NBASTIDOR")
+    existing = None
+    if bastidor:
+        existing = db.query(LogTabla).filter(LogTabla.NBASTIDOR == bastidor).order_by(LogTabla.id.desc()).first()
+
+    if existing:
+        # Actualizar todos los campos del registro existente
+        for k, v in cleaned_data.items():
+            if k != 'id':  # No cambiar la clave primaria
+                setattr(existing, k, v)
+        db.commit()
+        db.refresh(existing)
+        return existing
+    else:
+        log = LogTabla(**cleaned_data)
+        # Generar ID manual autoincremental si no se proporciona, ya que la columna id en LOG_TABLA no es IDENTITY
+        if log.id is None:
+            from sqlalchemy import func
+            max_id = db.query(func.max(LogTabla.id)).scalar()
+            log.id = 1.0 if max_id is None else float(max_id) + 1.0
+
+        db.add(log)
+        db.commit()
+        db.refresh(log)
+        return log
+
 
 def get_logs(db: Session, skip: int = 0, limit: int = 200) -> List[LogTabla]:
     """Obtiene el historial de LOG_TABLA."""
