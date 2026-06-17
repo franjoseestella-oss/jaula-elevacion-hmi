@@ -71,7 +71,7 @@ class ErpCarretilla(Base):
 class LogTabla(Base):
     __tablename__ = "LOG_TABLA"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Float, primary_key=True, index=True, autoincrement=False)
 
     # 1. Identificación y Generales
     OPERARIO = Column(String(100), nullable=True)

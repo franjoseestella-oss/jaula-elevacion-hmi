@@ -61,6 +61,12 @@ def create_log(db: Session, log_data: dict) -> LogTabla:
             cleaned_data[k] = v
             
     log = LogTabla(**cleaned_data)
+    # Generar ID manual autoincremental si no se proporciona, ya que la columna id en LOG_TABLA no es IDENTITY
+    if log.id is None:
+        from sqlalchemy import func
+        max_id = db.query(func.max(LogTabla.id)).scalar()
+        log.id = 1.0 if max_id is None else float(max_id) + 1.0
+
     db.add(log)
     db.commit()
     db.refresh(log)
