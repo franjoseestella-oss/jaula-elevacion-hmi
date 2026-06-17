@@ -132,8 +132,6 @@ class LogTabla(Base):
     DURACION_SEC = Column(String(50), nullable=True)
     OK_NOK = Column(String(20), nullable=True)
 
-    fecha_creacion = Column(DateTime, server_default=func.now(), nullable=True)
-
 
 class LogAlarma(Base):
     __tablename__ = "LOG_ALARMAS"
