@@ -1325,16 +1325,20 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       // Si ya estaba desbloqueado → ejecutar acción de avance
       if (currentStep >= 1 && currentStep <= 4 && stepStarted[currentStep]) {
         if (stepStatus[2] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
-          // NOK: REPETIR — reiniciar la prueba desde 'esperando_1500'
+          // NOK: REPETIR / FORZAR
           if (cameraTestState === 'nok') {
-            resetStartsInPlc();
-            setCameraTestState('standby');
-            setTestAlarm(null);
-            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
-            setWaitCountdown(null);
-            setTimeout(() => {
-              setCameraTestState('esperando_1500');
-            }, 500);
+            if (window.confirm("La prueba de cámara sin carga ha resultado NOK. ¿Desea FORZAR el avance a la siguiente etapa? (Aceptar = Forzar avance, Cancelar = Repetir prueba)")) {
+              markOk(2);
+            } else {
+              resetStartsInPlc();
+              setCameraTestState('standby');
+              setTestAlarm(null);
+              setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
+              setWaitCountdown(null);
+              setTimeout(() => {
+                setCameraTestState('esperando_1500');
+              }, 500);
+            }
             return;
           }
           if (cameraTestState === 'standby') {
@@ -1357,16 +1361,20 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             setTestAlarm(null);
           }
 
-          // NOK: REPETIR — reiniciar la prueba desde 'esperando_1500'
+          // NOK: REPETIR / FORZAR
           if (cameraTestState === 'nok') {
-            resetStartsInPlc();
-            setCameraTestState('standby');
-            setTestAlarm(null);
-            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
-            setWaitCountdown(null);
-            setTimeout(() => {
-              setCameraTestState('esperando_1500');
-            }, 500);
+            if (window.confirm("La prueba de cámara con carga ha resultado NOK. ¿Desea FORZAR el avance a la siguiente etapa? (Aceptar = Forzar avance, Cancelar = Repetir prueba)")) {
+              markOk(3);
+            } else {
+              resetStartsInPlc();
+              setCameraTestState('standby');
+              setTestAlarm(null);
+              setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
+              setWaitCountdown(null);
+              setTimeout(() => {
+                setCameraTestState('esperando_1500');
+              }, 500);
+            }
             return;
           }
           if (cameraTestState === 'standby') {
@@ -1396,9 +1404,13 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           }
 
           if (test5mState === 'nok') {
-            setTest5mState('esperando_elevacion');
-            setTimer5min(null);
-            setTestAlarm(null);
+            if (window.confirm("La prueba de 5 minutos ha resultado NOK. ¿Desea FORZAR el avance y finalizar la secuencia? (Aceptar = Forzar avance, Cancelar = Repetir prueba)")) {
+              markOk(4);
+            } else {
+              setTest5mState('esperando_elevacion');
+              setTimer5min(null);
+              setTestAlarm(null);
+            }
             return;
           }
           if (test5mState === 'ok') {
@@ -2126,14 +2138,18 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     if (step >= 1 && step <= 4 && started[step]) {
       if (statuses[2] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') {
         if (cameraTestState === 'nok') {
-          resetStartsInPlc();
-          setCameraTestState('standby');
-          setTestAlarm(null);
-          setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
-          setWaitCountdown(null);
-          setTimeout(() => {
-            setCameraTestState('esperando_1500');
-          }, 500);
+          if (window.confirm("La prueba de cámara sin carga ha resultado NOK. ¿Desea FORZAR el avance a la siguiente etapa? (Aceptar = Forzar avance, Cancelar = Repetir prueba)")) {
+            markOk(2);
+          } else {
+            resetStartsInPlc();
+            setCameraTestState('standby');
+            setTestAlarm(null);
+            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
+            setWaitCountdown(null);
+            setTimeout(() => {
+              setCameraTestState('esperando_1500');
+            }, 500);
+          }
           return;
         }
         if (cameraTestState === 'standby') {
@@ -2155,14 +2171,18 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
 
         if (cameraTestState === 'nok') {
-          resetStartsInPlc();
-          setCameraTestState('standby');
-          setTestAlarm(null);
-          setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
-          setWaitCountdown(null);
-          setTimeout(() => {
-            setCameraTestState('esperando_1500');
-          }, 500);
+          if (window.confirm("La prueba de cámara con carga ha resultado NOK. ¿Desea FORZAR el avance a la siguiente etapa? (Aceptar = Forzar avance, Cancelar = Repetir prueba)")) {
+            markOk(3);
+          } else {
+            resetStartsInPlc();
+            setCameraTestState('standby');
+            setTestAlarm(null);
+            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
+            setWaitCountdown(null);
+            setTimeout(() => {
+              setCameraTestState('esperando_1500');
+            }, 500);
+          }
           return;
         }
         if (cameraTestState === 'standby') {
@@ -2178,9 +2198,13 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         } else if (cameraTestState === 'ok') markOk(3);
       } else if (statuses[4] === STEP_STATUS.ACTIVE) {
         if (test5mState === 'nok') {
-          setTest5mState('esperando_elevacion');
-          setTestAlarm(null);
-          setTimer5min(null);
+          if (window.confirm("La prueba de 5 minutos ha resultado NOK. ¿Desea FORZAR el avance y finalizar la secuencia? (Aceptar = Forzar avance, Cancelar = Repetir prueba)")) {
+            markOk(4);
+          } else {
+            setTest5mState('esperando_elevacion');
+            setTestAlarm(null);
+            setTimer5min(null);
+          }
           return;
         }
         if (test5mState === 'ok') {
@@ -2208,7 +2232,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
     if (cameraTestState === 'nok') {
       const activeTestStep = statuses[2] === STEP_STATUS.ACTIVE ? 2 : statuses[3] === STEP_STATUS.ACTIVE ? 3 : null;
-      if (activeTestStep !== null) markOk(activeTestStep);
+      if (activeTestStep !== null) {
+        const stepName = activeTestStep === 2 ? "sin carga" : "con carga";
+        if (window.confirm(`La prueba de cámara ${stepName} ha resultado NOK. ¿Desea FORZAR el avance a la siguiente etapa?`)) {
+          markOk(activeTestStep);
+        }
+      }
       return;
     }
 
@@ -2717,6 +2746,24 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     ? `${String(Math.floor(timer5min / 60)).padStart(2, '0')}:${String(timer5min % 60).padStart(2, '0')}`
     : null;
 
+  const handleRepetirCameraTest = () => {
+    resetStartsInPlc();
+    setCameraTestState('standby');
+    setTestAlarm(null);
+    setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
+    setWaitCountdown(null);
+    setTimeout(() => {
+      setCameraTestState('esperando_1500');
+    }, 500);
+  };
+
+  const handleContinuarCameraTest = (stepIdx) => {
+    const stepName = stepIdx === 2 ? "sin carga" : "con carga";
+    if (window.confirm(`La prueba de cámara ${stepName} ha resultado NOK. ¿Desea forzar el avance a la siguiente etapa?`)) {
+      markOk(stepIdx);
+    }
+  };
+
   const handleRepetir5m = () => {
     setTest5mState('esperando_elevacion');
     setTimer5min(null);
@@ -2724,9 +2771,12 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   };
 
   const handleContinuar5m = () => {
-    // Avanzar forzadamente a pesar del fallo
-    markOk(4);
+    // Avanzar forzadamente a pesar del fallo con confirmación previa
+    if (window.confirm("La prueba de 5 minutos ha resultado NOK. ¿Desea forzar el avance y finalizar la secuencia?")) {
+      markOk(4);
+    }
   };
+
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -3199,6 +3249,22 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                         <span className="text-[11px] font-black uppercase tracking-widest text-blue-300">Elevación Finalizada</span>
                       </div>
                     )}
+                    {cameraTestState === 'nok' && (
+                      <div className="flex flex-col gap-2 mt-2">
+                        <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-2 rounded text-[10px] font-bold">
+                          <AlertTriangle size={12} className="inline mr-1" />
+                          {testAlarm || 'Fallo de prueba de cámara sin carga.'}
+                        </div>
+                        <div className="flex gap-2">
+                          <ActionBtn onClick={handleRepetirCameraTest} variant="secondary" className="flex-1">
+                            <RotateCcw size={12} /> Repetir Prueba
+                          </ActionBtn>
+                          <ActionBtn onClick={() => handleContinuarCameraTest(2)} variant="primary" className="flex-1">
+                            Continuar <CheckCircle2 size={12} />
+                          </ActionBtn>
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
               </>
@@ -3387,6 +3453,22 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
                       <div className="flex items-center justify-center gap-2 mt-2 py-2 px-3 bg-blue-500/15 border border-blue-400/50 rounded-lg animate-pulse">
                         <CheckCircle2 size={14} className="text-blue-400 shrink-0" />
                         <span className="text-[11px] font-black uppercase tracking-widest text-blue-300">Elevación Finalizada</span>
+                      </div>
+                    )}
+                    {cameraTestState === 'nok' && (
+                      <div className="flex flex-col gap-2 mt-2">
+                        <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-2 rounded text-[10px] font-bold">
+                          <AlertTriangle size={12} className="inline mr-1" />
+                          {testAlarm || 'Fallo de prueba de cámara con carga.'}
+                        </div>
+                        <div className="flex gap-2">
+                          <ActionBtn onClick={handleRepetirCameraTest} variant="secondary" className="flex-1">
+                            <RotateCcw size={12} /> Repetir Prueba
+                          </ActionBtn>
+                          <ActionBtn onClick={() => handleContinuarCameraTest(3)} variant="primary" className="flex-1">
+                            Continuar <CheckCircle2 size={12} />
+                          </ActionBtn>
+                        </div>
                       </div>
                     )}
                   </>
