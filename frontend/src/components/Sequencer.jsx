@@ -772,6 +772,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     const finalGlobalStatus = overrideStatus === 'NOK' ? 'NOK' : calculatedStatus;
 
     const logData = {
+      id: prevLog.id || null,
       OPERARIO: operario ? `${operario.NOMBRE || ''} ${operario.APELLIDOS || ''}`.trim() : 'Desconocido',
       FECHA_MONTAJE: erp?.fecha_montaje,
       NSECUENCIA: erp?.secuencia,

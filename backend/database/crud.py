@@ -60,10 +60,10 @@ def create_log(db: Session, log_data: dict) -> LogTabla:
         else:
             cleaned_data[k] = v
 
-    bastidor = cleaned_data.get("NBASTIDOR")
+    log_id = cleaned_data.get("id")
     existing = None
-    if bastidor:
-        existing = db.query(LogTabla).filter(LogTabla.NBASTIDOR == bastidor).order_by(LogTabla.id.desc()).first()
+    if log_id is not None:
+        existing = db.query(LogTabla).filter(LogTabla.id == log_id).first()
 
     if existing:
         # Actualizar todos los campos del registro existente
@@ -74,6 +74,8 @@ def create_log(db: Session, log_data: dict) -> LogTabla:
         db.refresh(existing)
         return existing
     else:
+        if 'id' in cleaned_data:
+            del cleaned_data['id']
         log = LogTabla(**cleaned_data)
         # Generar ID manual autoincremental si no se proporciona, ya que la columna id en LOG_TABLA no es IDENTITY
         if log.id is None:
