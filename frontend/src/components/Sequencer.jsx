@@ -84,6 +84,7 @@ const StatusIcon = ({ status }) => {
 };
 
 const StepCard = ({ num, icon: Icon, title, status, children, action, canSkip, onToggleSkip }) => {
+  const { t } = useLanguage();
   const s = statusStyle[status] || statusStyle.pending;
   const isActive = status === STEP_STATUS.ACTIVE;
 
@@ -107,7 +108,7 @@ const StepCard = ({ num, icon: Icon, title, status, children, action, canSkip, o
             <button
               onClick={onToggleSkip}
               className={`p-1 mr-1 rounded transition-colors ${status === STEP_STATUS.SKIP ? 'text-gray-500 hover:text-gray-300 bg-gray-800/50' : 'text-logisnext-slate hover:text-white'}`}
-              title={status === STEP_STATUS.SKIP ? "Restaurar etapa" : "Deshabilitar etapa"}
+              title={status === STEP_STATUS.SKIP ? t('restaurar_etapa') : t('deshabilitar_etapa')}
             >
               {status === STEP_STATUS.SKIP ? <RotateCcw size={12} /> : <XCircle size={12} />}
             </button>
