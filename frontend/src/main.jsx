@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import { LanguageProvider } from './LanguageContext.jsx'
 
 // ── Recuperación automática de pantalla en blanco por cambio de rama (HMR fail) ──
 // Cuando Vite no puede aplicar un cambio en caliente (ej. git checkout),
@@ -43,8 +44,9 @@ window.addEventListener('unhandledrejection', (event) => {
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary name="Aplicación Principal">
-      <App />
+      <LanguageProvider>
+        <App />
+      </LanguageProvider>
     </ErrorBoundary>
   </StrictMode>,
 )
-

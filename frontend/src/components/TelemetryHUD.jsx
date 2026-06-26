@@ -1,7 +1,9 @@
 import React from 'react';
 import { Target, Clock } from 'lucide-react';
+import { useLanguage } from '../LanguageContext';
 
 const TelemetryHUD = ({ telemetry, cycleTimer = 0, isSimulation, distance = 0 }) => {
+  const { t } = useLanguage();
   const isRunning = cycleTimer > 0;
 
   // Formatear como MM:SS.d si >= 60s, si no como SS.dd s
@@ -24,7 +26,7 @@ const TelemetryHUD = ({ telemetry, cycleTimer = 0, isSimulation, distance = 0 })
         
         <div className="flex items-center gap-2 mb-2">
           <Target size={14} className="text-logisnext-magenta animate-pulse" />
-          <h3 className="text-logisnext-lightslate text-[10px] font-black uppercase tracking-[0.2em]">Laser Sensor (Y)</h3>
+          <h3 className="text-logisnext-lightslate text-[10px] font-black uppercase tracking-[0.2em]">{t('laser_sensor')}</h3>
         </div>
 
         <div className="flex items-baseline gap-2">
@@ -49,7 +51,7 @@ const TelemetryHUD = ({ telemetry, cycleTimer = 0, isSimulation, distance = 0 })
         <div className={`absolute top-0 right-0 w-full h-[2px] transition-colors duration-500 ${isRunning ? 'bg-green-500 shadow-[0_0_10px_#22c55e]' : 'bg-[#2e404a]'}`}></div>
         
         <div className="flex items-center justify-end gap-2 mb-2">
-          <h3 className="text-logisnext-lightslate text-[10px] font-black uppercase tracking-[0.2em]">Cycle Time</h3>
+          <h3 className="text-logisnext-lightslate text-[10px] font-black uppercase tracking-[0.2em]">{t('cycle_time')}</h3>
           <Clock size={14} className={`transition-colors duration-500 ${isRunning ? 'text-green-500' : 'text-logisnext-slate'}`} />
         </div>
 
@@ -62,7 +64,7 @@ const TelemetryHUD = ({ telemetry, cycleTimer = 0, isSimulation, distance = 0 })
         
         <div className={`mt-2 inline-block px-3 py-1 rounded-full border transition-all duration-500 ${isRunning ? 'bg-green-500/10 border-green-500/30' : 'bg-[#1d2930]/50 border-[#2e404a]'}`}>
           <p className={`text-[10px] font-black uppercase tracking-widest transition-colors duration-500 ${isRunning ? 'text-green-400' : 'text-logisnext-slate/60'}`}>
-            {isRunning ? telemetry.state : 'EN ESPERA'}
+            {isRunning ? telemetry.state : t('en_espera')}
           </p>
         </div>
       </div>

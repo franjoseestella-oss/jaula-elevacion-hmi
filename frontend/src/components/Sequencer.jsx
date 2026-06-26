@@ -5,6 +5,7 @@ import {
   CheckCircle2, AlertTriangle, SkipForward, Loader2,
   RotateCcw, Ruler, Lock, Hash, Database, XCircle, Play, X
 } from 'lucide-react';
+import { useLanguage } from '../LanguageContext';
 
 
 const API_BASE = 'http://127.0.0.1:8001';
@@ -360,6 +361,7 @@ const CameraLED = ({ state, blinkTick }) => {
 // ─── Componente principal ────────────────────────────────────────────────────
 
 const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState, plcState, setStep2Overlay, setTestHUDOverlay, setWaitingForIniciar, sequencerRef, onSequenceEnd, onStepChange, operario, isSimulation, isAnyModalOpen, iniciarPlcTime, telemetry, setFenceAlarmActive, setFenceReposoAlarmActive }) => {
+  const { t } = useLanguage();
   const [stepStatus, setStepStatus] = useState([
     STEP_STATUS.ACTIVE,
     STEP_STATUS.PENDING,

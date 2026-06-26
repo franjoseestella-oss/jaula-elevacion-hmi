@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, Settings, Network, Usb, Save, TestTube, Cpu, Activity, Lightbulb, Box, Upload, QrCode, Camera } from 'lucide-react';
+import { X, Settings, Network, Usb, Save, TestTube, Cpu, Activity, Lightbulb, Box, Upload, QrCode, Camera, Globe } from 'lucide-react';
 import ObjViewer from './ObjViewer';
+import { useLanguage } from '../LanguageContext';
 
 const SettingsModal = ({ open, onClose, telemetry }) => {
+  const { language, setLanguage, t } = useLanguage();
   const [activeTab, setActiveTab] = useState('lectorqr');
   const [testResult, setTestResult] = useState(null);
   const [isTesting, setIsTesting] = useState(false);
@@ -158,10 +160,10 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
           setBaslerPreviewUrl(imgData.image);
         } else {
           const errData = await imgRes.json().catch(() => ({}));
-          setBaslerTestResult({ status: 'warning', message: errData.detail || 'Cámara conectada, pero error al capturar imagen.' });
+          setBaslerTestResult({ status: 'warning', message: errData.detail || t('basler_error_captura') });
         }
       } else {
-        setBaslerTestResult({ status: 'error', message: statusData.message || 'Cámara no conectada' });
+        setBaslerTestResult({ status: 'error', message: statusData.message || t('basler_no_conectada') });
       }
     } catch (err) {
       setBaslerTestResult({ status: 'error', message: err.message });
@@ -186,10 +188,10 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
             </div>
             <div>
               <h2 className="text-white font-black text-sm uppercase tracking-widest">
-                Configuración del Sistema
+                {t('ajustes_sistema')}
               </h2>
               <span className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
-                Preferencias y Dispositivos
+                {t('preferencias_dispositivos')}
               </span>
             </div>
           </div>
@@ -210,7 +212,7 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
               }`}
             >
               <QrCode size={14} />
-              Lector QR
+              {t('lector_qr')}
             </button>
             <button
               onClick={() => setActiveTab('tolerancia')}
@@ -221,7 +223,7 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
               }`}
             >
               <Activity size={14} />
-              Tolerancia
+              {t('tolerancia')}
             </button>
             <button
               onClick={() => setActiveTab('prueba5m')}
@@ -232,7 +234,7 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
               }`}
             >
               <TestTube size={14} />
-              Prueba 5 Min
+              {t('prueba_5_min')}
             </button>
             <button
               onClick={() => setActiveTab('visor3d')}
@@ -243,7 +245,7 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
               }`}
             >
               <Box size={14} />
-              Visor 3D
+              {t('visor_3d')}
             </button>
             <button
               onClick={() => setActiveTab('camara')}
@@ -254,7 +256,7 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
               }`}
             >
               <Lightbulb size={14} />
-              Cámara 3D
+              {t('camara_3d')}
             </button>
             <button
               onClick={() => setActiveTab('basler')}
@@ -265,7 +267,18 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
               }`}
             >
               <Camera size={14} />
-              Cámara Basler
+              {t('camara_basler')}
+            </button>
+            <button
+              onClick={() => setActiveTab('lenguajes')}
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${
+                activeTab === 'lenguajes'
+                  ? 'bg-logisnext-magenta/20 text-logisnext-magenta border border-logisnext-magenta/30'
+                  : 'text-logisnext-slate hover:bg-[#1d2930] hover:text-white border border-transparent'
+              }`}
+            >
+              <Globe size={14} />
+              {t('lenguajes')}
             </button>
           </div>
 
@@ -276,7 +289,7 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
               <div className="space-y-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-logisnext-magenta/50 pb-1 inline-block">
-                    Configurar Lector QR
+                    {t('configurar_lector_qr')}
                   </h3>
                   {qrConnType === 'serial' && (
                     <button 
@@ -294,7 +307,7 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
                       }}
                       className="text-[10px] text-logisnext-magenta font-bold uppercase tracking-widest hover:text-white transition-colors"
                     >
-                      Actualizar Puertos
+                      {t('actualizar_puertos')}
                     </button>
                   )}
                 </div>
@@ -302,21 +315,21 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
                 {/* Tipo de Conexión */}
                 <div className="space-y-3">
                   <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
-                    Tipo de Conexión
+                    {t('tipo_conexion')}
                   </label>
                   <div className="flex gap-4">
                     <label className={`flex-1 flex items-center justify-center gap-2 py-3 border rounded-lg cursor-pointer transition-all ${
                       qrConnType === 'usb' ? 'bg-[#1d2930] border-logisnext-magenta text-white shadow-[0_0_15px_rgba(221,40,118,0.2)]' : 'border-[#2e404a] text-logisnext-slate hover:border-[#5d7a8a]'
                     }`}>
                       <input type="radio" name="qrConnType" value="usb" checked={qrConnType === 'usb'} onChange={() => setQrConnType('usb')} className="hidden" />
-                      <span className="text-xs font-bold uppercase tracking-wider">USB (Teclado)</span>
+                      <span className="text-xs font-bold uppercase tracking-wider">{t('usb_teclado')}</span>
                     </label>
                     <label className={`flex-1 flex items-center justify-center gap-2 py-3 border rounded-lg cursor-pointer transition-all ${
                       qrConnType === 'serial' ? 'bg-[#1d2930] border-logisnext-magenta text-white shadow-[0_0_15px_rgba(221,40,118,0.2)]' : 'border-[#2e404a] text-logisnext-slate hover:border-[#5d7a8a]'
                     }`}>
                       <input type="radio" name="qrConnType" value="serial" checked={qrConnType === 'serial'} onChange={() => setQrConnType('serial')} className="hidden" />
                       <Usb size={16} />
-                      <span className="text-xs font-bold uppercase tracking-wider">Serial (COM)</span>
+                      <span className="text-xs font-bold uppercase tracking-wider">{t('serial_com')}</span>
                     </label>
                   </div>
                 </div>
@@ -326,20 +339,20 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
                     <div className="bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-5 space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="flex flex-col gap-1.5">
-                          <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Puerto COM</label>
+                          <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">{t('puerto_com')}</label>
                           <select
                             value={qrComPort}
                             onChange={(e) => setQrComPort(e.target.value)}
                             className="bg-[#0a0f12] border border-[#2e404a] rounded-lg px-3 py-2 text-white text-xs font-mono outline-none focus:border-logisnext-magenta transition-colors"
                           >
-                            {availableComPorts.length === 0 && <option value={qrComPort}>{qrComPort} (No detectado)</option>}
+                            {availableComPorts.length === 0 && <option value={qrComPort}>{qrComPort} ({t('no_detectado')})</option>}
                             {availableComPorts.map(port => (
                               <option key={port} value={port}>{port}</option>
                             ))}
                           </select>
                         </div>
                         <div className="flex flex-col gap-1.5">
-                          <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Baud Rate</label>
+                          <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">{t('baud_rate')}</label>
                           <select
                             value={qrBaudRate}
                             onChange={(e) => setQrBaudRate(e.target.value)}
@@ -370,7 +383,7 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
                           className="flex items-center gap-2 px-4 py-2 border border-[#2e404a] hover:bg-[#2e404a] text-logisnext-lightslate hover:text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
                         >
                           <TestTube size={14} className={isQrTesting ? "animate-spin" : ""} />
-                          {isQrTesting ? "Probando..." : "Test Conexión"}
+                          {isQrTesting ? t('probando') : t('test_conexion')}
                         </button>
                         <button
                           onClick={handleReadQr}
@@ -378,19 +391,19 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
                           className="flex items-center gap-2 px-4 py-2 border border-logisnext-magenta text-logisnext-magenta hover:bg-logisnext-magenta hover:text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
                         >
                           <QrCode size={14} className={isReadingQr ? "animate-spin" : ""} />
-                          {isReadingQr ? "Leyendo..." : "Leer Datos"}
+                          {isReadingQr ? t('leyendo') : t('leer_datos')}
                         </button>
                       </div>
                     </div>
                   </>
                 ) : (
                   <div className="bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-5 space-y-4">
-                     <p className="text-xs text-logisnext-lightslate">
-                        Tu lector QR está conectado por USB y actuando como un teclado convencional (emulación de teclado). Haz clic en el recuadro de abajo y escanea un código para probarlo:
+                     <p className="text-xs text-logisnext-lightslate font-medium">
+                        {t('lector_usb_desc')}
                      </p>
                      <textarea 
                        autoFocus
-                       placeholder="Haz clic aquí y escanea un código..." 
+                       placeholder={t('haz_clic_escanear')} 
                        className="w-full bg-[#0a0f12] border border-[#2e404a] rounded-lg px-4 py-3 text-white text-sm font-mono outline-none focus:border-logisnext-magenta transition-colors min-h-[100px] resize-none custom-scrollbar"
                        onChange={(e) => {
                          const val = e.target.value;
@@ -410,10 +423,10 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
                 {qrReadResult && (
                   <div className="bg-[#1d2930]/60 border border-[#2e404a] rounded-xl p-4 mt-4">
                     <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest block mb-2">
-                      Resultado de Lectura
+                      {t('resultado_lectura')}
                     </label>
                     <div className={`font-mono text-sm whitespace-pre-wrap break-all ${qrReadResult.status === 'ok' ? 'text-green-400' : 'text-red-400'}`}>
-                      {qrReadResult.status === 'ok' ? (qrReadResult.data || 'Lectura vacía') : qrReadResult.message}
+                      {qrReadResult.status === 'ok' ? (qrReadResult.data || t('lectura_vacia')) : qrReadResult.message}
                     </div>
                   </div>
                 )}
@@ -425,18 +438,18 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
               <div className="space-y-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-logisnext-magenta/50 pb-1 inline-block">
-                    Tolerancia (Multiload)
+                    {t('tolerancia_multiload')}
                   </h3>
                 </div>
 
                 <div className="bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-5 space-y-6">
                   <p className="text-xs text-logisnext-lightslate font-medium">
-                    Configure los márgenes de tolerancia para la colocación de la pegatina en la etapa de Multiload. El sistema indicará posición correcta si la altura del láser se encuentra dentro de estos límites respecto a la ALTURA MAX del ERP.
+                    {t('tolerancia_desc')}
                   </p>
                   <div className="grid grid-cols-2 gap-6">
                     <div className="flex flex-col gap-2">
                       <label className="text-[10px] text-green-400 font-bold uppercase tracking-widest">
-                        Tolerancia en Positivo (+mm)
+                        {t('tolerancia_positiva')}
                       </label>
                       <input
                         type="number"
@@ -447,7 +460,7 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
                     </div>
                     <div className="flex flex-col gap-2">
                       <label className="text-[10px] text-red-400 font-bold uppercase tracking-widest">
-                        Tolerancia en Negativo (-mm)
+                        {t('tolerancia_negativa')}
                       </label>
                       <input
                         type="number"
@@ -461,11 +474,11 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
 
                 <div className="bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-5 space-y-6 mt-6">
                   <p className="text-xs text-logisnext-lightslate font-medium">
-                    Configure la cota de inicio estandarizada para las pruebas de elevación. Normalmente 1500 mm.
+                    {t('cota_inicial_desc')}
                   </p>
                   <div className="flex flex-col gap-2">
                     <label className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">
-                      Cota Inicial Pruebas (mm)
+                      {t('cota_inicial_pruebas')}
                     </label>
                     <input
                       type="number"
@@ -482,18 +495,18 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
               <div className="space-y-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-logisnext-magenta/50 pb-1 inline-block">
-                    Prueba 5 Minutos (Mx / XL)
+                    {t('prueba_5_minutos_titulo')}
                   </h3>
                 </div>
 
                 <div className="bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-5 space-y-6">
                   <p className="text-xs text-logisnext-lightslate font-medium">
-                    Configure la duración de la prueba de estabilidad en carga y la tolerancia máxima permitida de caída (variación en milímetros) respecto a la altura inicial.
+                    {t('prueba_5_minutos_desc')}
                   </p>
                   <div className="grid grid-cols-2 gap-6">
                     <div className="flex flex-col gap-2">
                       <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
-                        Duración (segundos)
+                        {t('duracion_segundos')}
                       </label>
                       <input
                         type="number"
@@ -504,7 +517,7 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
                     </div>
                     <div className="flex flex-col gap-2">
                       <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
-                        Tolerancia de caída (mm)
+                        {t('tolerancia_caida')}
                       </label>
                       <input
                         type="number"
@@ -522,24 +535,24 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
               <div className="space-y-4 h-full flex flex-col">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-logisnext-magenta/50 pb-1 inline-block">
-                    Visor 3D (OBJ/MTL)
+                    {t('visor_3d_titulo')}
                   </h3>
                 </div>
 
                 <div className="flex gap-4 shrink-0">
                   <label className="flex-1 flex flex-col items-center justify-center p-3 bg-[#1d2930]/40 border border-dashed border-[#2e404a] hover:border-logisnext-magenta/50 rounded-xl cursor-pointer transition-colors">
                     <Upload size={16} className="text-logisnext-lightslate mb-1" />
-                    <span className="text-[10px] text-white font-bold uppercase tracking-widest">Subir .OBJ</span>
+                    <span className="text-[10px] text-white font-bold uppercase tracking-widest">{t('subir_obj')}</span>
                     <span className="text-[9px] text-logisnext-slate mt-0.5 truncate max-w-[150px]">
-                      {objFile ? objFile.name : 'Ningún archivo seleccionado'}
+                      {objFile ? objFile.name : t('ningun_archivo')}
                     </span>
                     <input type="file" accept=".obj" className="hidden" onChange={(e) => setObjFile(e.target.files[0])} />
                   </label>
                   <label className="flex-1 flex flex-col items-center justify-center p-3 bg-[#1d2930]/40 border border-dashed border-[#2e404a] hover:border-logisnext-magenta/50 rounded-xl cursor-pointer transition-colors">
                     <Upload size={16} className="text-logisnext-lightslate mb-1" />
-                    <span className="text-[10px] text-white font-bold uppercase tracking-widest">Subir .MTL</span>
+                    <span className="text-[10px] text-white font-bold uppercase tracking-widest">{t('subir_mtl')}</span>
                     <span className="text-[9px] text-logisnext-slate mt-0.5 truncate max-w-[150px]">
-                      {mtlFile ? mtlFile.name : 'Opcional (Materiales)'}
+                      {mtlFile ? mtlFile.name : t('opcional_materiales')}
                     </span>
                     <input type="file" accept=".mtl" className="hidden" onChange={(e) => setMtlFile(e.target.files[0])} />
                   </label>
@@ -555,12 +568,12 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
               <div className="space-y-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-logisnext-magenta/50 pb-1 inline-block">
-                    Cámara Recreación (Debug)
+                    {t('camara_debug_titulo')}
                   </h3>
                 </div>
                 <div className="bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-5 space-y-6">
                   <p className="text-xs text-logisnext-lightslate font-medium">
-                    Mueve la cámara en el entorno 3D a la posición deseada, abre este menú y pulsa el botón para obtener las coordenadas exactas. Así podrás compartirlas para fijar la posición.
+                    {t('camara_debug_desc')}
                   </p>
                   <button
                     onClick={() => {
@@ -570,12 +583,12 @@ const SettingsModal = ({ open, onClose, telemetry }) => {
                           target: window.__cameraTarget
                         });
                       } else {
-                        alert("Mueve un poco la cámara en la pantalla principal primero para registrar sus coordenadas.");
+                        alert(t('mover_camara_aviso'));
                       }
                     }}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors"
                   >
-                    Obtener Posición Actual
+                    {t('obtener_posicion')}
                   </button>
 
                   {cameraCoords && (
@@ -602,17 +615,17 @@ Z: ${cameraCoords.target.z.toFixed(3)}`}
               <div className="space-y-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-logisnext-magenta/50 pb-1 inline-block">
-                    Configuración Cámara Basler
+                    {t('config_basler_titulo')}
                   </h3>
                 </div>
 
                 <div className="bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-5 space-y-6">
                   <p className="text-xs text-logisnext-lightslate font-medium">
-                    Configure la dirección IP de la cámara industrial Basler. Si la deja en blanco, el sistema intentará autodetectar la primera cámara disponible en la red.
+                    {t('config_basler_desc')}
                   </p>
                   <div className="flex flex-col gap-2">
                     <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
-                      Dirección IP (Opcional)
+                      {t('ip_opcional')}
                     </label>
                     <input
                       type="text"
@@ -641,7 +654,7 @@ Z: ${cameraCoords.target.z.toFixed(3)}`}
                         className="flex items-center gap-2 px-4 py-2 border border-[#2e404a] hover:bg-[#2e404a] text-logisnext-lightslate hover:text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50 shrink-0"
                       >
                         <TestTube size={14} className={isBaslerTesting ? "animate-spin" : ""} />
-                        {isBaslerTesting ? "Diagnosticando..." : "Diagnóstico de Cámara"}
+                        {isBaslerTesting ? t('diagnosticando') : t('diagnostico_camara')}
                       </button>
                     </div>
 
@@ -649,12 +662,12 @@ Z: ${cameraCoords.target.z.toFixed(3)}`}
                       <div className="mt-4 border border-[#2e404a] rounded-lg overflow-hidden bg-black flex flex-col items-center justify-center relative min-h-[200px]">
                         <div className="absolute top-2 left-2 z-10 px-2 py-1 bg-black/60 text-white text-[10px] font-mono rounded backdrop-blur flex items-center gap-2">
                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_5px_#22c55e]"></span>
-                           PREVIEW BASLER
+                           {t('preview_basler')}
                         </div>
                         <img 
-                          src={baslerPreviewUrl} 
-                          alt="Previsualización Basler" 
-                          className="max-h-[300px] w-auto object-contain"
+                           src={baslerPreviewUrl} 
+                           alt="Previsualización Basler" 
+                           className="max-h-[300px] w-auto object-contain"
                         />
                       </div>
                     )}
@@ -662,19 +675,58 @@ Z: ${cameraCoords.target.z.toFixed(3)}`}
                 </div>
               </div>
             )}
+
+            {activeTab === 'lenguajes' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-logisnext-magenta/50 pb-1 inline-block">
+                    {t('configurar_idioma')}
+                  </h3>
+                </div>
+                <div className="bg-[#1d2930]/40 border border-[#2e404a] rounded-xl p-5 space-y-6">
+                  <p className="text-xs text-logisnext-lightslate font-medium">
+                    {t('seleccione_idioma')}
+                  </p>
+                  <div className="flex flex-col gap-4">
+                    <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
+                      language === 'es' ? 'bg-[#1d2930] border-logisnext-magenta text-white shadow-[0_0_15px_rgba(221,40,118,0.2)]' : 'border-[#2e404a] text-logisnext-slate hover:border-[#5d7a8a]'
+                    }`}>
+                      <input type="radio" name="appLanguage" value="es" checked={language === 'es'} onChange={() => setLanguage('es')} className="hidden" />
+                      <span className="text-xs font-black uppercase tracking-wider">{t('castellano_op')}</span>
+                    </label>
+                    <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
+                      language === 'en' ? 'bg-[#1d2930] border-logisnext-magenta text-white shadow-[0_0_15px_rgba(221,40,118,0.2)]' : 'border-[#2e404a] text-logisnext-slate hover:border-[#5d7a8a]'
+                    }`}>
+                      <input type="radio" name="appLanguage" value="en" checked={language === 'en'} onChange={() => setLanguage('en')} className="hidden" />
+                      <span className="text-xs font-black uppercase tracking-wider">{t('ingles_op')}</span>
+                    </label>
+                    <label className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all ${
+                      language === 'ja' ? 'bg-[#1d2930] border-logisnext-magenta text-white shadow-[0_0_15px_rgba(221,40,118,0.2)]' : 'border-[#2e404a] text-logisnext-slate hover:border-[#5d7a8a]'
+                    }`}>
+                      <input type="radio" name="appLanguage" value="ja" checked={language === 'ja'} onChange={() => setLanguage('ja')} className="hidden" />
+                      <span className="text-xs font-black uppercase tracking-wider">{t('japones_op')}</span>
+                    </label>
+                  </div>
+                  <p className="text-[10px] text-logisnext-slate">
+                    {t('idioma_nota')}
+                  </p>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
 
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-[#2e404a] bg-[#0a0f12]/80 shrink-0">
           <button onClick={onClose} className="text-[10px] text-logisnext-slate hover:text-white uppercase tracking-widest font-bold transition-colors">
-            Cancelar
+            {t('cancelar')}
           </button>
           <button
             onClick={handleSave}
             className="flex items-center gap-2 px-6 py-2 bg-logisnext-magenta hover:bg-logisnext-magenta/80 text-white text-xs font-black uppercase tracking-wider rounded-lg transition-all shadow-[0_0_20px_rgba(221,40,118,0.4)]"
           >
-            <Save size={14} /> Guardar
+            <Save size={14} /> {t('guardar')}
           </button>
         </div>
       </div>

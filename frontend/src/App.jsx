@@ -15,6 +15,7 @@ import PlcModal from './components/PlcModal';
 import BaslerModal from './components/BaslerModal';
 import LogViewer from './components/LogViewer';
 import ErrorBoundary from './components/ErrorBoundary';
+import { useLanguage } from './LanguageContext';
 
 const API_BASE = 'http://127.0.0.1:8001';
 
@@ -58,6 +59,25 @@ function usePlcCountdown(varValue, onComplete) {
 }
 
 function App() {
+  const { t } = useLanguage();
+  const formatSubtitle = (sub) => {
+    if (!sub) return '';
+    if (sub.startsWith('PRUEBA ')) {
+      const parts = sub.split('|');
+      const firstPart = parts[0].trim();
+      const m = firstPart.includes('1m') ? '1' : '2';
+      let translated = t('prueba_metros').replace('{m}', m);
+      if (parts.length > 1) {
+        translated += ' |' + parts[1];
+      }
+      return translated;
+    }
+    if (sub.startsWith('CAÍDA MÁXIMA ')) {
+      const mm = sub.replace('CAÍDA MÁXIMA ', '').replace('mm', '');
+      return t('caida_maxima_value').replace('{mm}', mm);
+    }
+    return sub;
+  };
   const [erpData, setErpData] = useState(null);
 
   const [erpModalOpen, setErpModalOpen] = useState(false);
@@ -147,7 +167,7 @@ function App() {
   };
 
   const handleClearAlarmsHistory = () => {
-    if (window.confirm("¿Seguro que deseas borrar todo el histórico de alarmas de la base de datos?")) {
+    if (window.confirm(t("confirmar_borrar_historico"))) {
       fetch('http://localhost:8001/api/alarms', {
         method: 'DELETE'
       })
@@ -614,7 +634,7 @@ function App() {
 
   const handleHoldStart = (varName) => {
     if (varName === 'Ob_Iniciar_Secuencia' && !appPlc?.Ob_Estado_Automatico) {
-      alert("No se puede iniciar la secuencia: La máquina está en modo MANUAL.");
+      alert(t("no_iniciar_modo_manual"));
       return;
     }
     let targetVar = varName;
@@ -661,7 +681,7 @@ function App() {
     if (pulseActive && pulseActive.varName === varName) return; // Prevent overlapping pulses
 
     if (varName === 'Ob_Iniciar_Secuencia' && !appPlc?.Ob_Estado_Automatico) {
-      alert("No se puede iniciar la secuencia: La máquina está en modo MANUAL.");
+      alert(t("no_iniciar_modo_manual"));
       return;
     }
 
@@ -1015,21 +1035,21 @@ function App() {
                   {step2Overlay.isOk ? <CheckCircle2 size={64} className="text-white drop-shadow-lg" /> : <AlertTriangle size={64} className="text-blue-400 drop-shadow-lg" />}
                   <div className="flex flex-col gap-2">
                     <span className="text-3xl font-black tracking-widest text-white drop-shadow-md">
-                      ALTURA ACTUAL: <span className={step2Overlay.isOk ? "text-white" : "text-blue-400"}>{step2Overlay.actual.toFixed(2)} mm</span>
+                      {t('altura_actual')}: <span className={step2Overlay.isOk ? "text-white" : "text-blue-400"}>{step2Overlay.actual.toFixed(2)} mm</span>
                     </span>
                     <div className="flex gap-4 items-center">
-                      <span className="text-lg font-bold tracking-widest text-gray-300">OBJETIVO:</span>
+                      <span className="text-lg font-bold tracking-widest text-gray-300">{t('objetivo')}:</span>
                       <span className="text-xl font-black text-gray-200 bg-black/30 px-3 py-1 rounded">
                         {step2Overlay.min} mm <span className="text-gray-400 mx-1">—</span> {step2Overlay.max} mm
                       </span>
                     </div>
                     {step2Overlay.isOk ? (
                       <span className="text-xl font-black tracking-widest text-green-200 mt-2 border-t border-green-500/50 pt-2">
-                        CARRETILLA EN POSICIÓN. PUEDE COLOCAR PEGATINA.
+                        {t('carretilla_en_posicion')}
                       </span>
                     ) : (
                       <span className="text-xl font-black tracking-widest text-blue-200 mt-2 border-t border-blue-500/50 pt-2">
-                        PUEDE COLOCAR PEGATINA.
+                        {t('puede_colocar_pegatina')}
                       </span>
                     )}
                   </div>
@@ -1043,10 +1063,10 @@ function App() {
                   </div>
                   <div className="flex flex-col gap-2 w-full">
                     <span className="text-3xl font-black tracking-widest text-white drop-shadow-md">
-                      ALTURA ACTUAL: <span className="text-blue-400">{step2Overlay.actual.toFixed(0)} mm</span>
+                      {t('altura_actual')}: <span className="text-blue-400">{step2Overlay.actual.toFixed(0)} mm</span>
                     </span>
                     <div className="flex gap-4 items-center">
-                      <span className="text-lg font-bold tracking-widest text-gray-300">LÍMITE INICIO:</span>
+                      <span className="text-lg font-bold tracking-widest text-gray-300">{t('limite_inicio')}</span>
                       <span className="text-xl font-black text-gray-200 bg-black/30 px-3 py-1 rounded">
                         &lt; {step2Overlay.cotaInicial} mm
                       </span>
@@ -1057,8 +1077,8 @@ function App() {
                       <div className="mt-2 bg-red-900/40 border border-red-500 p-3 rounded-xl flex items-center gap-3">
                         <AlertTriangle size={32} className="text-red-400" />
                         <span className="text-lg font-black text-red-300 tracking-wider">
-                          ¡CARRETILLA DEMASIADO ALTA!<br />
-                          <span className="text-sm font-bold opacity-80">Baje por debajo de {step2Overlay.cotaInicial} mm para poder iniciar.</span>
+                          {t('carretilla_demasiado_alta')}<br />
+                          <span className="text-sm font-bold opacity-80">{t('baje_por_debajo_de').replace('{cota}', step2Overlay.cotaInicial)}</span>
                         </span>
                       </div>
                     )}
@@ -1067,22 +1087,22 @@ function App() {
                     {step2Overlay.cameraTestState !== 'standby' && (
                       <div className="mt-2 p-3 bg-blue-900/20 border border-blue-500/40 rounded-xl">
                         <span className="text-xl font-black tracking-widest text-blue-300 uppercase block mb-2 border-b border-blue-500/30 pb-2">
-                          {step2Overlay.cameraTestState === 'esperando_1500' && 'ESPERANDO INICIO...'}
-                          {step2Overlay.cameraTestState === 'ascenso' && 'ASCENSO EN CURSO'}
-                          {step2Overlay.cameraTestState === 'espera_arriba' && `ESTABILIZANDO (${step2Overlay.waitCountdown}s)`}
-                          {step2Overlay.cameraTestState === 'descenso' && 'DESCENSO EN CURSO'}
-                          {step2Overlay.cameraTestState === 'ok' && <span className="text-green-400">PRUEBA COMPLETADA</span>}
-                          {step2Overlay.cameraTestState === 'nok' && <span className="text-red-400">PRUEBA FALLIDA</span>}
+                          {step2Overlay.cameraTestState === 'esperando_1500' && t('esperando_inicio')}
+                          {step2Overlay.cameraTestState === 'ascenso' && t('ascenso_en_curso')}
+                          {step2Overlay.cameraTestState === 'espera_arriba' && t('estabilizando_tiempo').replace('{tiempo}', step2Overlay.waitCountdown)}
+                          {step2Overlay.cameraTestState === 'descenso' && t('descenso_en_curso')}
+                          {step2Overlay.cameraTestState === 'ok' && <span className="text-green-400">{t('prueba_completada')}</span>}
+                          {step2Overlay.cameraTestState === 'nok' && <span className="text-red-400">{t('prueba_fallida')}</span>}
                         </span>
 
                         {testHUDOverlay && (
                           <div className="flex justify-around items-center w-full mt-3">
                             <div className={`flex flex-col items-center px-6 py-2 rounded-lg border-2 ${step2Overlay.cameraTestState === 'ascenso' ? 'border-blue-400 bg-blue-900/40 animate-pulse shadow-[0_0_20px_rgba(59,130,246,0.3)]' : 'border-gray-600 bg-gray-800/50 opacity-80'}`}>
-                              <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">↑ Ascenso</span>
+                              <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">{t('ascenso_up')}</span>
                               <span className={`text-4xl font-mono font-black ${step2Overlay.cameraTestState === 'ascenso' ? 'text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]' : 'text-gray-300'}`}>{testHUDOverlay.realElev ?? '0.00'}s</span>
                               {testHUDOverlay._rawElev > 0 && testHUDOverlay.testDist && (
                                 <span className="text-sm font-mono font-bold text-gray-400 mt-1">
-                                  AVG: {((testHUDOverlay.testDist * 100000) / testHUDOverlay._rawElev).toFixed(0)} mm/s
+                                  {t('avg_velocidad').replace('{velocidad}', ((testHUDOverlay.testDist * 100000) / testHUDOverlay._rawElev).toFixed(0))}
                                 </span>
                               )}
                             </div>
@@ -1093,7 +1113,7 @@ function App() {
                             {step2Overlay.cameraTestState === 'espera_arriba' && (
                               <>
                                 <div className="flex flex-col items-center px-8 py-2 rounded-lg border-2 border-yellow-400 bg-yellow-900/40 animate-pulse shadow-[0_0_30px_rgba(250,204,21,0.4)] mx-2">
-                                  <span className="text-sm font-bold text-yellow-400 uppercase tracking-widest">Estabilizando</span>
+                                  <span className="text-sm font-bold text-yellow-400 uppercase tracking-widest">{t('estabilizando_label')}</span>
                                   <span className="text-5xl font-mono font-black text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.9)]">{step2Overlay.waitCountdown ?? 0}s</span>
                                 </div>
                                 <div className="text-blue-500/50 mx-2 text-3xl font-black">|</div>
@@ -1101,11 +1121,11 @@ function App() {
                             )}
 
                             <div className={`flex flex-col items-center px-6 py-2 rounded-lg border-2 ${step2Overlay.cameraTestState === 'descenso' ? 'border-blue-400 bg-blue-900/40 animate-pulse shadow-[0_0_20px_rgba(59,130,246,0.3)]' : 'border-gray-600 bg-gray-800/50 opacity-80'}`}>
-                              <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">↓ Descenso</span>
+                              <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">{t('descenso_down')}</span>
                               <span className={`text-4xl font-mono font-black ${step2Overlay.cameraTestState === 'descenso' ? 'text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]' : 'text-gray-300'}`}>{testHUDOverlay.realDesc ?? '0.00'}s</span>
                               {testHUDOverlay._rawDesc > 0 && testHUDOverlay.testDist && (
                                 <span className="text-sm font-mono font-bold text-gray-400 mt-1">
-                                  AVG: {((testHUDOverlay.testDist * 100000) / testHUDOverlay._rawDesc).toFixed(0)} mm/s
+                                  {t('avg_velocidad').replace('{velocidad}', ((testHUDOverlay.testDist * 100000) / testHUDOverlay._rawDesc).toFixed(0))}
                                 </span>
                               )}
                             </div>
@@ -1120,14 +1140,14 @@ function App() {
                 <div className="flex flex-col items-start gap-4">
                   <div className="flex items-center gap-3 border-b border-gray-600 pb-2 w-full">
                     <AlertTriangle size={32} className="text-yellow-400" />
-                    <span className="text-2xl font-black tracking-widest text-white uppercase">TEST DE ESTABILIDAD (5 MIN)</span>
+                    <span className="text-2xl font-black tracking-widest text-white uppercase">{t('test_estabilidad_5min')}</span>
                   </div>
                   <div className="flex flex-col gap-2 w-full">
                     <span className="text-3xl font-black tracking-widest text-white drop-shadow-md">
-                      ALTURA ACTUAL: <span className="text-blue-400">{step2Overlay.actual.toFixed(0)} mm</span>
+                      {t('altura_actual')}: <span className="text-blue-400">{step2Overlay.actual.toFixed(0)} mm</span>
                     </span>
                     <div className="flex gap-4 items-center">
-                      <span className="text-lg font-bold tracking-widest text-gray-300">LÍMITE INICIO:</span>
+                      <span className="text-lg font-bold tracking-widest text-gray-300">{t('limite_inicio')}</span>
                       <span className="text-xl font-black text-gray-200 bg-black/30 px-3 py-1 rounded">
                         &gt; {step2Overlay.cotaInicial} mm
                       </span>
@@ -1138,8 +1158,8 @@ function App() {
                       <div className="mt-2 bg-red-900/40 border border-red-500 p-3 rounded-xl flex items-center gap-3">
                         <AlertTriangle size={32} className="text-red-400" />
                         <span className="text-lg font-black text-red-300 tracking-wider">
-                          ¡CARRETILLA DEMASIADO ALTA!<br />
-                          <span className="text-sm font-bold opacity-80">Baje por debajo de {step2Overlay.cotaInicial} mm para poder iniciar.</span>
+                          {t('carretilla_demasiado_alta')}<br />
+                          <span className="text-sm font-bold opacity-80">{t('baje_por_debajo_de').replace('{cota}', step2Overlay.cotaInicial)}</span>
                         </span>
                       </div>
                     )}
@@ -1149,8 +1169,8 @@ function App() {
                       <div className="mt-2 bg-amber-900/40 border border-amber-500 p-3 rounded-xl flex items-center gap-3">
                         <AlertTriangle size={32} className="text-amber-400" />
                         <span className="text-lg font-black text-amber-300 tracking-wider">
-                          ¡CARRETILLA DEMASIADO BAJA!<br />
-                          <span className="text-sm font-bold opacity-80">Eleve por encima de {step2Overlay.cotaInicial} mm para comenzar a estabilizar.</span>
+                          {t('carretilla_demasiado_baja')}<br />
+                          <span className="text-sm font-bold opacity-80">{t('eleve_por_encima_de').replace('{cota}', step2Overlay.cotaInicial)}</span>
                         </span>
                       </div>
                     )}
@@ -1160,10 +1180,10 @@ function App() {
                       <div className="mt-2 p-3 bg-[#1d2930] border border-[#2e404a] rounded-xl flex items-center justify-between gap-6">
                         <span className={`text-xl font-black tracking-widest uppercase ${step2Overlay.test5mState === 'nok' ? 'text-red-400' : 'text-blue-300'
                           }`}>
-                          {step2Overlay.test5mState === 'stabilizing' && 'ESTABILIZANDO...'}
-                          {step2Overlay.test5mState === 'running' && 'PRUEBA EN CURSO'}
-                          {step2Overlay.test5mState === 'ok' && <span className="text-green-400">PRUEBA SUPERADA</span>}
-                          {step2Overlay.test5mState === 'nok' && 'PRUEBA FALLIDA'}
+                          {step2Overlay.test5mState === 'stabilizing' && t('estabilizando_dots')}
+                          {step2Overlay.test5mState === 'running' && t('prueba_en_curso')}
+                          {step2Overlay.test5mState === 'ok' && <span className="text-green-400">{t('prueba_superada')}</span>}
+                          {step2Overlay.test5mState === 'nok' && t('prueba_fallida')}
                         </span>
                         {(step2Overlay.test5mState === 'running' || step2Overlay.test5mState === 'ok' || step2Overlay.test5mState === 'nok') && (
                           <span className={`text-4xl font-mono font-black tracking-wider ${step2Overlay.test5mState === 'nok' ? 'text-red-500' :
@@ -1198,7 +1218,7 @@ function App() {
               <div className="bg-red-600/20 border-b border-red-500/30 p-5 flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-3">
                   <AlertTriangle size={24} className="text-red-500" />
-                  <span className="text-base font-black text-red-500 uppercase tracking-widest drop-shadow-md">Alarmas Activas</span>
+                  <span className="text-base font-black text-red-500 uppercase tracking-widest drop-shadow-md">{t('alarmas_activas')}</span>
                 </div>
                 <div className="flex items-center gap-3">
                   <button onClick={() => {
@@ -1206,14 +1226,14 @@ function App() {
                     // No cerramos el modal manualmente. Se cerrará solo si activeAlarmsList se queda vacío.
                   }}
                     className="text-white text-xs font-bold uppercase tracking-wider bg-red-600/80 border border-red-500 hover:bg-red-500 px-3 py-1.5 rounded-lg shadow-sm transition-colors">
-                    Reset Alarmas
+                    {t('reset_alarmas')}
                   </button>
                   <button onClick={() => setShowActiveAlarms(false)} className="text-gray-400 hover:text-white bg-[#1d2930] p-2 rounded-lg hover:bg-red-600 transition-colors"><X size={20} /></button>
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 custom-scrollbar">
                 {activeAlarmsList.length === 0 ? (
-                  <span className="text-sm text-gray-500 italic text-center py-10">No hay alarmas activas en este momento.</span>
+                  <span className="text-sm text-gray-500 italic text-center py-10">{t('no_alarmas_activas')}</span>
                 ) : activeAlarmsList.map(a => {
                   const isWarning = a.type?.toUpperCase() === 'ADVERTENCIA';
                   return (
@@ -1236,14 +1256,14 @@ function App() {
                 <div className="bg-red-600/20 border-b border-red-500/30 p-6 flex justify-between items-center shrink-0">
                   <div className="flex items-center gap-4">
                     <AlertTriangle size={32} className="text-red-500" />
-                    <span className="text-2xl font-black text-red-500 uppercase tracking-widest drop-shadow-md">Log_Alarms</span>
+                    <span className="text-2xl font-black text-red-500 uppercase tracking-widest drop-shadow-md">{t('log_alarmas')}</span>
                   </div>
                   <div className="flex items-center gap-4">
                     <button onClick={handleClearAlarmsHistory} className="text-white text-sm font-bold uppercase tracking-wider bg-orange-600/80 border border-orange-500 hover:bg-orange-500 px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-2">
-                      <Trash2 size={18} /> Borrar Histórico
+                      <Trash2 size={18} /> {t('borrar_historico')}
                     </button>
                     <button onClick={handleExportAlarms} className="text-white text-sm font-bold uppercase tracking-wider bg-green-600/80 border border-green-500 hover:bg-green-500 px-4 py-2 rounded-lg shadow-sm transition-colors flex items-center gap-2">
-                      <Download size={18} /> Exportar .xlsx
+                      <Download size={18} /> {t('exportar_xlsx')}
                     </button>
                     <button onClick={() => setShowAlarmsHistory(false)} className="text-gray-400 hover:text-white bg-[#1d2930] p-2.5 rounded-lg hover:bg-red-600 transition-colors">
                       <X size={24} />
@@ -1252,15 +1272,15 @@ function App() {
                 </div>
                 <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
                   {alarms.length === 0 ? (
-                    <div className="text-lg text-gray-500 italic text-center py-20">No hay alarmas registradas en el histórico.</div>
+                    <div className="text-lg text-gray-500 italic text-center py-20">{t('no_alarmas_historico')}</div>
                   ) : (
                     <table className="w-full text-left border-collapse text-sm">
                       <thead className="bg-[#1d2930] sticky top-0 z-10">
                         <tr>
-                          <th className="p-4 border-b border-gray-700 text-gray-300 font-bold uppercase w-1/6">Fecha y Hora</th>
-                          <th className="p-4 border-b border-gray-700 text-gray-300 font-bold uppercase w-1/6">Alarma / Advertencia</th>
-                          <th className="p-4 border-b border-gray-700 text-gray-300 font-bold uppercase w-3/6">Descripción</th>
-                          <th className="p-4 border-b border-gray-700 text-gray-300 font-bold uppercase w-1/6">Duración</th>
+                          <th className="p-4 border-b border-gray-700 text-gray-300 font-bold uppercase w-1/6">{t('fecha_hora')}</th>
+                          <th className="p-4 border-b border-gray-700 text-gray-300 font-bold uppercase w-1/6">{t('alarma_advertencia')}</th>
+                          <th className="p-4 border-b border-gray-700 text-gray-300 font-bold uppercase w-3/6">{t('descripcion')}</th>
+                          <th className="p-4 border-b border-gray-700 text-gray-300 font-bold uppercase w-1/6">{t('duracion')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1272,13 +1292,13 @@ function App() {
                               }`}>
                               <td className="p-4 text-gray-400 font-mono">{a.timestamp}</td>
                               <td className={`p-4 font-bold ${isWarning ? 'text-yellow-500' : 'text-red-500'}`}>
-                                {isWarning ? 'ADVERTENCIA' : 'ALARMA'}
+                                {isWarning ? t('advertencia_label') : t('alarma_label')}
                               </td>
                               <td className="p-4 text-gray-200">{a.description}</td>
                               <td className="p-4">
                                 <span className={`px-3 py-1 rounded-full text-xs font-bold ${isActive ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-gray-800 text-gray-400'
                                   }`}>
-                                  {a.duration}
+                                  {isActive ? t('alarma_activa') : a.duration}
                                 </span>
                               </td>
                             </tr>
@@ -1297,8 +1317,8 @@ function App() {
             <div className="absolute top-28 left-1/2 -translate-x-1/2 z-50 bg-red-600/90 border-4 border-red-500 text-white px-8 py-4 rounded-xl shadow-[0_0_50px_rgba(220,38,38,0.8)] flex items-center gap-6 backdrop-blur-md">
               <AlertTriangle size={56} className="text-white drop-shadow-lg" />
               <div className="flex flex-col">
-                <span className="text-4xl font-black tracking-[0.2em] drop-shadow-md">VALLAS NO EN POSICIÓN</span>
-                <span className="text-sm font-bold tracking-widest text-red-100 drop-shadow">PELIGRO: LA JAULA NO ES SEGURA</span>
+                <span className="text-4xl font-black tracking-[0.2em] drop-shadow-md">{t('vallas_no_posicion')}</span>
+                <span className="text-sm font-bold tracking-widest text-red-100 drop-shadow">{t('peligro_jaula_no_segura')}</span>
               </div>
             </div>
           )}
@@ -1308,8 +1328,8 @@ function App() {
             <div className="absolute top-0 left-1/2 -translate-x-1/2 z-[60] bg-yellow-400 text-black px-10 py-2 rounded-b-3xl border-4 border-t-0 border-black shadow-[0_15px_40px_rgba(234,179,8,0.6)] flex items-center gap-6" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(0,0,0,0.2) 20px, rgba(0,0,0,0.2) 40px)' }}>
               <AlertTriangle size={36} className="text-black drop-shadow-sm animate-pulse" />
               <div className="flex flex-col text-center">
-                <span className="text-2xl font-black tracking-[0.1em] uppercase drop-shadow-sm bg-yellow-400/80 px-2 rounded">¡¡ ATENCIÓN VALLAS ABAJO !!</span>
-                <span className="text-sm font-black tracking-widest text-black/90 drop-shadow-sm bg-yellow-400/80 px-2 mt-1 rounded">SUBIRLAS AL FINALIZAR LA PRUEBA</span>
+                <span className="text-2xl font-black tracking-[0.1em] uppercase drop-shadow-sm bg-yellow-400/80 px-2 rounded">{t('atencion_vallas_abajo')}</span>
+                <span className="text-sm font-black tracking-widest text-black/90 drop-shadow-sm bg-yellow-400/80 px-2 mt-1 rounded">{t('subirlas_al_finalizar')}</span>
               </div>
               <AlertTriangle size={36} className="text-black drop-shadow-sm animate-pulse" />
             </div>
@@ -1326,20 +1346,20 @@ function App() {
               <div className={`absolute top-10 right-10 z-50 px-6 py-4 rounded-2xl border-2 backdrop-blur-md shadow-2xl flex flex-col gap-3 ${
                 isCorrect ? 'bg-green-600/80 border-green-400' : 'bg-[#0a0f12]/90 border-logisnext-magenta'
               }`}>
-                <h3 className="text-xs font-black uppercase tracking-widest text-gray-300 border-b border-white/20 pb-2">Control de Carga</h3>
+                <h3 className="text-xs font-black uppercase tracking-widest text-gray-300 border-b border-white/20 pb-2">{t('control_carga')}</h3>
                 <div className="flex justify-between items-center gap-8">
-                  <span className="text-sm font-bold text-gray-400 tracking-wider">PESO ERP</span>
+                  <span className="text-sm font-bold text-gray-400 tracking-wider">{t('peso_erp')}</span>
                   <span className="text-xl font-black text-logisnext-magenta">{pesoErp} kg</span>
                 </div>
                 <div className="flex justify-between items-center gap-8">
-                  <span className="text-sm font-bold text-gray-400 tracking-wider">PESO PRUEBA</span>
+                  <span className="text-sm font-bold text-gray-400 tracking-wider">{t('peso_prueba')}</span>
                   <span className="text-xl font-black text-yellow-400">{pesoPrueba} kg</span>
                 </div>
                 <div className="flex justify-between items-end gap-8">
-                  <span className="text-sm font-bold text-gray-400 tracking-wider">CARGA ACTUAL</span>
+                  <span className="text-sm font-bold text-gray-400 tracking-wider">{t('carga_actual')}</span>
                   <div className="flex flex-col items-end">
                     <span className="text-2xl font-black text-white">{cargaActual} kg</span>
-                    <span className="text-[10px] text-gray-400">({appPlc?.OW_Numero_Pallets || 0} pallets × 250kg)</span>
+                    <span className="text-[10px] text-gray-400">{t('pallets_multi').replace('{pallets}', appPlc?.OW_Numero_Pallets || 0)}</span>
                   </div>
                 </div>
               </div>
@@ -1356,23 +1376,28 @@ function App() {
                     <Camera size={22} className="text-logisnext-magenta" />
                   </div>
                   <div>
-                    <h2 className="text-lg font-black text-white uppercase tracking-wider">{testHUDOverlay.title}</h2>
-                    <p className="text-[10px] text-logisnext-slate uppercase tracking-widest">{testHUDOverlay.subtitle}</p>
+                    <h2 className="text-lg font-black text-white uppercase tracking-wider">
+                      {testHUDOverlay.title === 'TEST SIN CARGA' ? t('test_sin_carga') :
+                       testHUDOverlay.title === 'TEST CON CARGA' ? t('test_con_carga') :
+                       testHUDOverlay.title === 'ESTABILIDAD 5 MINUTOS' ? t('estabilidad_5m_hud') :
+                       testHUDOverlay.title}
+                    </h2>
+                    <p className="text-[10px] text-logisnext-slate uppercase tracking-widest">{formatSubtitle(testHUDOverlay.subtitle)}</p>
                   </div>
                 </div>
 
                 {/* Estado prueba */}
                 <div className="flex items-center justify-between bg-[#0a0f12] px-4 py-3 rounded-lg border border-[#2e404a] mb-3">
-                  <span className="text-[12px] text-logisnext-slate font-bold uppercase tracking-widest">Estado Prueba</span>
+                  <span className="text-[12px] text-logisnext-slate font-bold uppercase tracking-widest">{t('estado_prueba')}</span>
                   <div className="flex items-center gap-3">
                     <span className="text-[16px] text-gray-200 font-mono font-black tracking-wide">
-                      {testHUDOverlay.cameraTestState === 'standby' && 'ESPERANDO...'}
-                      {testHUDOverlay.cameraTestState === 'esperando_1500' && `ESPERA ${localStorage.getItem('cotaInicialPruebas') || 1500} mm ↑`}
-                      {testHUDOverlay.cameraTestState === 'ascenso' && 'ASCENSO ACTIVO'}
-                      {testHUDOverlay.cameraTestState === 'espera_arriba' && 'ESPERA ARRIBA'}
-                      {testHUDOverlay.cameraTestState === 'descenso' && 'DESCENSO ACTIVO'}
-                      {testHUDOverlay.cameraTestState === 'ok' && 'PRUEBA OK ✓'}
-                      {testHUDOverlay.cameraTestState === 'nok' && 'PRUEBA NOK ✗'}
+                      {testHUDOverlay.cameraTestState === 'standby' && t('esperando')}
+                      {testHUDOverlay.cameraTestState === 'esperando_1500' && t('espera_cota_subir').replace('{cota}', localStorage.getItem('cotaInicialPruebas') || 1500)}
+                      {testHUDOverlay.cameraTestState === 'ascenso' && t('ascenso_activo')}
+                      {testHUDOverlay.cameraTestState === 'espera_arriba' && t('espera_arriba')}
+                      {testHUDOverlay.cameraTestState === 'descenso' && t('descenso_activo')}
+                      {testHUDOverlay.cameraTestState === 'ok' && t('prueba_ok')}
+                      {testHUDOverlay.cameraTestState === 'nok' && t('prueba_nok')}
                     </span>
                     <div className={`w-5 h-5 rounded-full border-2 ${testHUDOverlay.ledState === 'active' ? 'bg-green-400 border-green-200 animate-pulse shadow-[0_0_12px_#4ade80]' :
                       testHUDOverlay.ledState === 'ok' ? 'bg-green-500 border-green-300 shadow-[0_0_12px_#22c55e]' :
@@ -1385,7 +1410,7 @@ function App() {
                 {/* Nota compacta cuando está en espera_arriba (el contador grande cubre la vista) */}
                 {testHUDOverlay.cameraTestState === 'espera_arriba' && (
                   <div className="mb-3 flex items-center justify-center gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-xl py-2 px-3">
-                    <span className="text-yellow-400 text-xs font-black uppercase tracking-widest animate-pulse">⟱ ESPERA PARA DESCENDER</span>
+                    <span className="text-yellow-400 text-xs font-black uppercase tracking-widest animate-pulse">{t('espera_para_descender')}</span>
                   </div>
                 )}
 
@@ -1407,19 +1432,19 @@ function App() {
                           isActive ? 'bg-blue-400' : 'bg-blue-600/40'
                           }`} />
                         <div className="flex items-baseline justify-between mb-1">
-                          <span className="text-[10px] text-logisnext-slate uppercase tracking-widest">↑ Ascenso</span>
-                          {isActive && <span className="text-[9px] text-blue-400 font-bold animate-pulse">● MIDIENDO</span>}
+                          <span className="text-[10px] text-logisnext-slate uppercase tracking-widest">{t('ascenso_up')}</span>
+                          {isActive && <span className="text-[9px] text-blue-400 font-bold animate-pulse">{t('midiendo')}</span>}
                         </div>
                         <span className={`text-4xl font-mono font-black leading-none ${inRange === true ? 'text-green-400' : inRange === false ? 'text-red-400' :
                           isActive ? 'text-blue-300' : 'text-gray-300'
                           }`}>{elevVal ?? '—'}</span>
                         {rawElev > 0 && testHUDOverlay.testDist && (
                           <div className="mt-1 text-sm font-mono font-bold text-blue-200/70">
-                            AVG: {((testHUDOverlay.testDist * 100000) / rawElev).toFixed(0)} mm/s
+                            {t('avg_velocidad').replace('{velocidad}', ((testHUDOverlay.testDist * 100000) / rawElev).toFixed(0))}
                           </div>
                         )}
                         <div className="mt-2 pt-2 border-t border-[#2e404a]/60 flex flex-col gap-0.5">
-                          <span className="text-[10px] text-logisnext-slate font-bold tracking-wider">ERP OBJETIVO:</span>
+                          <span className="text-[10px] text-logisnext-slate font-bold tracking-wider">{t('erp_objetivo')}</span>
                           <span className="text-lg font-mono font-black text-yellow-400">
                             {testHUDOverlay.minElev ?? '—'} — {testHUDOverlay.maxElev ?? '—'}
                           </span>
@@ -1443,19 +1468,19 @@ function App() {
                           isActive ? 'bg-purple-400' : 'bg-purple-600/40'
                           }`} />
                         <div className="flex items-baseline justify-between mb-1">
-                          <span className="text-[10px] text-logisnext-slate uppercase tracking-widest">↓ Descenso</span>
-                          {isActive && <span className="text-[9px] text-purple-400 font-bold animate-pulse">● MIDIENDO</span>}
+                          <span className="text-[10px] text-logisnext-slate uppercase tracking-widest">{t('descenso_down')}</span>
+                          {isActive && <span className="text-[9px] text-purple-400 font-bold animate-pulse">{t('midiendo')}</span>}
                         </div>
                         <span className={`text-4xl font-mono font-black leading-none ${inRange === true ? 'text-green-400' : inRange === false ? 'text-red-400' :
                           isActive ? 'text-purple-300' : 'text-gray-300'
                           }`}>{descVal ?? '—'}</span>
                         {rawDesc > 0 && testHUDOverlay.testDist && (
                           <div className="mt-1 text-sm font-mono font-bold text-purple-200/70">
-                            AVG: {((testHUDOverlay.testDist * 100000) / rawDesc).toFixed(0)} mm/s
+                            {t('avg_velocidad').replace('{velocidad}', ((testHUDOverlay.testDist * 100000) / rawDesc).toFixed(0))}
                           </div>
                         )}
                         <div className="mt-2 pt-2 border-t border-[#2e404a]/60 flex flex-col gap-0.5">
-                          <span className="text-[10px] text-logisnext-slate font-bold tracking-wider">ERP OBJETIVO:</span>
+                          <span className="text-[10px] text-logisnext-slate font-bold tracking-wider">{t('erp_objetivo')}</span>
                           <span className="text-lg font-mono font-black text-yellow-400">
                             {testHUDOverlay.minDesc ?? '—'} — {testHUDOverlay.maxDesc ?? '—'}
                           </span>
@@ -1481,10 +1506,10 @@ function App() {
               <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
               <div className="relative flex flex-col items-center gap-4 bg-blue-950/90 border-4 border-blue-500 px-16 py-10 rounded-3xl shadow-[0_0_100px_rgba(59,130,246,0.9)] max-w-2xl text-center animate-in zoom-in-95 duration-200">
                 <span className="text-blue-400 text-xs font-black uppercase tracking-[0.4em] bg-blue-900/50 px-4 py-1.5 rounded-full border border-blue-500/30">
-                  Prueba de Elevación
+                  {t('prueba_elevacion_label')}
                 </span>
                 <h1 className="text-white text-5xl font-black tracking-widest drop-shadow-[0_0_20px_rgba(255,255,255,0.2)] uppercase">
-                  ELEVACIÓN FINALIZADA
+                  {t('elevacion_finalizada')}
                 </h1>
                 
                 {testHUDOverlay?.cameraTestState === 'espera_arriba' && testHUDOverlay?.waitCountdown != null && (
@@ -1492,13 +1517,13 @@ function App() {
                     {testHUDOverlay.waitCountdown > 0 ? (
                       <>
                         <span className="text-blue-300 text-xs font-bold uppercase tracking-[0.2em] mb-1">
-                          Inicio del descenso en
+                          {t('inicio_descenso_en')}
                         </span>
                         <span className="font-black font-mono text-blue-200 text-7xl leading-none select-none animate-pulse">
                           {testHUDOverlay.waitCountdown}
                         </span>
                         <span className="text-blue-400 text-[10px] font-bold uppercase tracking-[0.3em] mt-1">
-                          {testHUDOverlay.waitCountdown === 1 ? 'segundo' : 'segundos'}
+                          {testHUDOverlay.waitCountdown === 1 ? t('segundo') : t('segundos')}
                         </span>
                       </>
                     ) : (
@@ -1507,7 +1532,7 @@ function App() {
                           GO!
                         </span>
                         <span className="text-green-300 text-xs font-bold uppercase tracking-[0.2em] mt-1 animate-bounce">
-                          ↓ Inicie Descenso ↓
+                          ↓ {t('inicie_descenso').trim()} ↓
                         </span>
                       </>
                     )}
@@ -1517,7 +1542,7 @@ function App() {
                 {testHUDOverlay?.cameraTestState === 'ascenso' && (
                   <div className="flex flex-col items-center mt-4 pt-4 border-t border-blue-500/30 w-full animate-pulse">
                     <span className="text-blue-300 text-[10px] font-bold uppercase tracking-[0.2em]">
-                      Confirmando señal de parada...
+                      {t('confirmando_senal_parada')}
                     </span>
                   </div>
                 )}
@@ -1555,19 +1580,19 @@ function App() {
                     {isLoadError ? (
                       <>
                         <span className="text-red-400 text-sm font-black uppercase tracking-[0.25em]">
-                          CARGA O COTA INCORRECTA
+                          {t('carga_cota_incorrecta')}
                         </span>
                         <h2 className="text-white text-3xl font-black tracking-wide">
-                          Condiciones no cumplidas
+                          {t('condiciones_no_cumplidas')}
                         </h2>
                         <p className="text-gray-400 text-sm font-medium">
-                          La carga no corresponde con lo que propone el ERP. Revise los pallets de hierro y madera.
+                          {t('carga_no_corresponde')}
                         </p>
                         <div className="mt-2 flex items-center gap-3 px-6 py-3 rounded-xl border bg-red-900/20 border-red-500/40">
                           <span className="text-red-300 text-3xl font-black">⚖️</span>
                           <div className="text-left">
                             <div className="text-red-300 font-black text-sm uppercase tracking-widest">
-                              VALIDACIÓN DE CARGA
+                              {t('validacion_carga')}
                             </div>
                             <div className="text-gray-400 text-xs">
                               {alarm}
@@ -1578,15 +1603,13 @@ function App() {
                     ) : isIncomplete ? (
                       <>
                         <span className="text-orange-400 text-sm font-black uppercase tracking-[0.25em]">
-                          MOVIMIENTO INCOMPLETO
+                          {t('movimiento_incompleto')}
                         </span>
                         <h2 className="text-white text-3xl font-black tracking-wide">
-                          {isAscIncomplete ? 'Ascenso Incompleto' : 'Descenso Incompleto'}
+                          {isAscIncomplete ? t('ascenso_incompleto') : t('descenso_incompleto')}
                         </h2>
                         <p className="text-gray-400 text-sm font-medium">
-                          {isAscIncomplete
-                            ? 'La carretilla no alcanzó la altura máxima requerida. La prueba ha sido cancelada.'
-                            : 'La carretilla no completó el descenso hasta la posición inicial. La prueba ha sido cancelada.'}
+                          {isAscIncomplete ? t('ascenso_incompleto_desc') : t('descenso_incompleto_desc')}
                         </p>
                         {/* Indicador visual del movimiento fallido */}
                         <div className={`mt-2 flex items-center gap-3 px-6 py-3 rounded-xl border ${isAscIncomplete
@@ -1598,28 +1621,27 @@ function App() {
                           </span>
                           <div className="text-left">
                             <div className="text-orange-300 font-black text-sm uppercase tracking-widest">
-                              {isAscIncomplete ? 'ASCENSO' : 'DESCENSO'}
+                              {isAscIncomplete ? t('ascenso_up').trim().toUpperCase() : t('descenso_down').trim().toUpperCase()}
                             </div>
                             <div className="text-gray-400 text-xs">
-                              Detenido sin completar el recorrido (timeout 2s)
+                              {t('detenido_sin_completar')}
                             </div>
                           </div>
                         </div>
                       </>
                     ) : is5mError ? (
                       <>
-                        <span className="text-red-400 text-sm font-black uppercase tracking-[0.25em]">CAÍDA EXCESIVA</span>
-                        <h2 className="text-white text-3xl font-black tracking-wide">¿Repetir la prueba?</h2>
+                        <span className="text-red-400 text-sm font-black uppercase tracking-[0.25em]">{t('caida_excesiva')}</span>
+                        <h2 className="text-white text-3xl font-black tracking-wide">{t('repetir_prueba')}</h2>
                         <p className="text-gray-400 text-sm font-medium">
-                          26050138
-                          La altura ha descendido por debajo de la tolerancia configurada ({testHUDOverlay.subtitle}).
+                          {t('caida_excesiva_desc').replace('{subtitle}', formatSubtitle(testHUDOverlay.subtitle))}
                         </p>
                       </>
                     ) : (
                       <>
-                        <span className="text-red-400 text-sm font-black uppercase tracking-[0.25em]">RESULTADO FUERA DE TOLERANCIA</span>
-                        <h2 className="text-white text-3xl font-black tracking-wide">¿Repetir la prueba?</h2>
-                        <p className="text-gray-400 text-sm font-medium">Los tiempos registrados no cumplen las tolerancias del ERP.</p>
+                        <span className="text-red-400 text-sm font-black uppercase tracking-[0.25em]">{t('resultado_fuera_tolerancia')}</span>
+                        <h2 className="text-white text-3xl font-black tracking-wide">{t('repetir_prueba')}</h2>
+                        <p className="text-gray-400 text-sm font-medium">{t('tiempos_no_cumplen_erp')}</p>
                       </>
                     )}
                   </div>
@@ -1628,8 +1650,8 @@ function App() {
                   {!isIncomplete && !isLoadError && !is5mError && (
                     <div className="w-full grid grid-cols-2 gap-3">
                       {[
-                        { label: '↑ Ascenso', val: testHUDOverlay.realElev, min: testHUDOverlay.minElev, max: testHUDOverlay.maxElev, raw: testHUDOverlay._rawElev, rMin: testHUDOverlay._minElev, rMax: testHUDOverlay._maxElev },
-                        { label: '↓ Descenso', val: testHUDOverlay.realDesc, min: testHUDOverlay.minDesc, max: testHUDOverlay.maxDesc, raw: testHUDOverlay._rawDesc, rMin: testHUDOverlay._minDesc, rMax: testHUDOverlay._maxDesc }
+                        { label: '↑ ' + t('ascenso_up').trim(), val: testHUDOverlay.realElev, min: testHUDOverlay.minElev, max: testHUDOverlay.maxElev, raw: testHUDOverlay._rawElev, rMin: testHUDOverlay._minElev, rMax: testHUDOverlay._maxElev },
+                        { label: '↓ ' + t('descenso_down').trim(), val: testHUDOverlay.realDesc, min: testHUDOverlay.minDesc, max: testHUDOverlay.maxDesc, raw: testHUDOverlay._rawDesc, rMin: testHUDOverlay._minDesc, rMax: testHUDOverlay._maxDesc }
                       ].map(({ label, val, min, max, raw, rMin, rMax }) => {
                         const ok = raw != null && rMin != null ? raw >= rMin && raw <= rMax : null;
                         return (
@@ -1657,13 +1679,13 @@ function App() {
                       {iniciarPlcTime !== null ? (
                         <>
                           <span className="text-4xl animate-pulse py-1">{iniciarPlcTime}</span>
-                          <span className="text-[10px] font-normal opacity-70 normal-case">Pulsador físico detectado...</span>
+                          <span className="text-[10px] font-normal opacity-70 normal-case">{t('pulsador_fisico_detectado')}</span>
                         </>
                       ) : (
                         <>
                           <span className="text-2xl">▶</span>
-                          <span>SÍ — Repetir</span>
-                          <span className="text-[10px] font-normal opacity-70 normal-case">Click para iniciar</span>
+                          <span>{t('si_repetir')}</span>
+                          <span className="text-[10px] font-normal opacity-70 normal-case">{t('click_iniciar')}</span>
                         </>
                       )}
                     </button>
@@ -1679,13 +1701,13 @@ function App() {
                         {pegatinaPlcTime !== null ? (
                           <>
                             <span className="text-4xl animate-pulse py-1">{pegatinaPlcTime}</span>
-                            <span className="text-[10px] font-normal opacity-70 normal-case">Pulsador físico detectado...</span>
+                            <span className="text-[10px] font-normal opacity-70 normal-case">{t('pulsador_fisico_detectado')}</span>
                           </>
                         ) : (
                           <>
                             <span className="text-2xl">✓</span>
-                            <span>NO — Continuar</span>
-                            <span className="text-[10px] font-normal opacity-70 normal-case">Click para continuar</span>
+                            <span>{t('no_continuar')}</span>
+                            <span className="text-[10px] font-normal opacity-70 normal-case">{t('click_continuar')}</span>
                           </>
                         )}
                       </button>
@@ -1708,9 +1730,9 @@ function App() {
             fallback={
               <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-[#0a0f12]">
                 <span className="text-4xl">⚠</span>
-                <p className="text-red-400 font-black uppercase tracking-widest text-sm">Error en el visor 3D</p>
-                <p className="text-gray-500 text-xs text-center max-w-xs">El motor 3D ha fallado. Recargue la página para restaurar la visualización.</p>
-                <button onClick={() => window.location.reload()} className="mt-2 px-6 py-2 bg-logisnext-magenta/80 text-white text-xs font-black uppercase tracking-widest rounded-lg hover:bg-logisnext-magenta transition-colors">🔄 Recargar</button>
+                <p className="text-red-400 font-black uppercase tracking-widest text-sm">{t('error_visor_3d')}</p>
+                <p className="text-gray-500 text-xs text-center max-w-xs">{t('error_visor_3d_desc')}</p>
+                <button onClick={() => window.location.reload()} className="mt-2 px-6 py-2 bg-logisnext-magenta/80 text-white text-xs font-black uppercase tracking-widest rounded-lg hover:bg-logisnext-magenta transition-colors">{t('recargar_btn')}</button>
               </div>
             }
           >
@@ -1778,7 +1800,7 @@ function App() {
                 <button
                   onClick={() => {
                     if (hasActiveCriticalAlarm) {
-                      alert("No se puede iniciar la secuencia: Hay alarmas críticas activas.");
+                      alert(t('no_iniciar_alarmas_criticas'));
                       return;
                     }
                     if (!appPlc?.Ob_Estado_Automatico) return;
@@ -1796,7 +1818,14 @@ function App() {
                     <Play size={20} className="text-white ml-1" />
                   )}
                 </button>
-                <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Iniciar<br />Secuencia</span>
+                <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">
+                  {t('iniciar_secuencia_sim').split('\n').map((line, idx) => (
+                    <React.Fragment key={idx}>
+                      {idx > 0 && <br />}
+                      {line}
+                    </React.Fragment>
+                  ))}
+                </span>
               </div>
 
               <div className="flex flex-col items-center">
@@ -1816,7 +1845,14 @@ function App() {
                     <CheckCircle2 size={24} className="text-white" />
                   )}
                 </button>
-                <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Pegatina<br />Colocada</span>
+                <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">
+                  {t('pegatina_colocada_sim').split('\n').map((line, idx) => (
+                    <React.Fragment key={idx}>
+                      {idx > 0 && <br />}
+                      {line}
+                    </React.Fragment>
+                  ))}
+                </span>
               </div>
 
               <div className="flex flex-col items-center border-r border-gray-700 pr-3 mr-1">
@@ -1836,12 +1872,19 @@ function App() {
                     <PowerOff size={20} className="text-white" />
                   )}
                 </button>
-                <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">Abortar<br />Secuencia</span>
+                <span className="mt-2 text-[9px] font-black uppercase text-gray-400 tracking-wider text-center">
+                  {t('abortar_secuencia_sim').split('\n').map((line, idx) => (
+                    <React.Fragment key={idx}>
+                      {idx > 0 && <br />}
+                      {line}
+                    </React.Fragment>
+                  ))}
+                </span>
               </div>
 
               {/* Control de Vallas Simuladas */}
               <div className="flex flex-col gap-1 items-center justify-center border-r border-gray-700 pr-3 mr-1">
-                <span className="text-[9px] font-black uppercase text-gray-500 tracking-wider mb-1">Jaula</span>
+                <span className="text-[9px] font-black uppercase text-gray-500 tracking-wider mb-1">{t('jaula_label')}</span>
                 <div className="flex gap-2">
                   <button
                     onClick={async () => {
@@ -1858,7 +1901,7 @@ function App() {
                       ? 'bg-indigo-500 border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.6)] text-white scale-105'
                       : 'bg-[#1d2930] border-[#2e404a] text-gray-400 hover:bg-indigo-900/50 hover:text-indigo-300'
                       } border-2`}
-                    title="Subir Vallas"
+                    title={t('subir_vallas_title')}
                   >
                     <span className="text-sm font-black">↑</span>
                   </button>
@@ -1877,7 +1920,7 @@ function App() {
                       ? 'bg-orange-500 border-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.6)] text-white scale-105'
                       : 'bg-[#1d2930] border-[#2e404a] text-gray-400 hover:bg-orange-900/50 hover:text-orange-300'
                       } border-2`}
-                    title="Bajar Vallas"
+                    title={t('bajar_vallas_title')}
                   >
                     <span className="text-sm font-black">↓</span>
                   </button>
@@ -1940,7 +1983,7 @@ function App() {
                     +
                   </button>
                 </div>
-                <span className="mt-1 text-[9px] font-black uppercase text-gray-400 tracking-wider">Pallets Sim.</span>
+                <span className="mt-1 text-[9px] font-black uppercase text-gray-400 tracking-wider">{t('pallets_sim_label')}</span>
               </div>
             </div>
           )}

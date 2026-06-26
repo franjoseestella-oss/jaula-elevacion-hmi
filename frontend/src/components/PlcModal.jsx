@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useLanguage } from "../LanguageContext";
 import {
   X,
   Cpu,
@@ -113,6 +114,7 @@ const PlcModal = ({
   setIsSimulation,
   pulsePlc,
 }) => {
+  const { t } = useLanguage();
   const [outputs, setOutputs] = useState({
     Ib_LUZ_VERDE: false,
     Ib_LUZ_AZUL: false,
@@ -493,14 +495,14 @@ const PlcModal = ({
             }
             className="w-full bg-[#1d2930] border border-[#2e404a] text-white rounded p-1 text-[10px] outline-none focus:border-blue-500"
           >
-            <option value="IN">IN (Lectura)</option>
-            <option value="OUT">OUT (Escritura)</option>
+            <option value="IN">{t("in_lectura_option")}</option>
+            <option value="OUT">{t("out_escritura_option")}</option>
           </select>
         </td>
 
         <td className="p-2">
           <span className="font-bold uppercase tracking-wide text-[10px] text-white">
-            {PROJECT_VAR_LABELS[appVar]}
+            {t(appVar)}
           </span>
         </td>
 
@@ -516,7 +518,7 @@ const PlcModal = ({
             }
             className="w-full bg-[#1d2930] border border-[#2e404a] text-white rounded p-1 text-[10px] outline-none focus:border-blue-500 transition-colors"
           >
-            <option value="">-- Ninguna --</option>
+            <option value="">{t("ninguna_option")}</option>
             {plcKeys.map((k) => (
               <option key={k} value={k}>
                 {k}
@@ -525,7 +527,7 @@ const PlcModal = ({
           </select>
           {plcKeys.length === 0 && (
             <span className="text-[9px] text-gray-600 italic block mt-1">
-              Sin conexión OPC UA
+              {t("sin_conexion_opcua")}
             </span>
           )}
         </td>
@@ -538,7 +540,7 @@ const PlcModal = ({
                 onClick={() => {
                   if (isAnalog) {
                     const newVal = prompt(
-                      `Ingrese valor para ${appVar}`,
+                      t("ingrese_valor_para").replace("{varName}", appVar),
                       value !== null ? value : 0,
                     );
                     if (newVal !== null && !isNaN(newVal)) {
@@ -569,7 +571,7 @@ const PlcModal = ({
                     : "bg-[#1d2930] border-[#2e404a] text-white hover:border-yellow-500 hover:text-yellow-400"
                 }`}
               >
-                {isAnalog ? "Fijar" : "Toggle"}
+                {isAnalog ? t("fijar_btn") : t("toggle_btn")}
               </button>
             )}
           </td>
@@ -620,8 +622,8 @@ const PlcModal = ({
                   <Database size={16} className="text-blue-400" />
                 )}
                 {scanModal.type === "IP"
-                  ? "Dispositivos Encontrados"
-                  : "Data Blocks Disponibles"}
+                  ? t("dispositivos_encontrados")
+                  : t("data_blocks_disponibles")}
               </h3>
               <button
                 onClick={() =>
@@ -637,7 +639,7 @@ const PlcModal = ({
                 <div className="text-red-400 text-sm text-center py-6 flex flex-col items-center justify-center gap-2">
                   <AlertTriangle size={24} className="opacity-80" />
                   <span className="font-bold uppercase tracking-widest text-[10px]">
-                    Error de Conexión
+                    {t("error_conexion")}
                   </span>
                   <span className="text-[10px] opacity-80 break-words w-full text-center">
                     {scanModal.error}
@@ -646,7 +648,7 @@ const PlcModal = ({
               ) : scanModal.data.length === 0 ? (
                 <div className="text-gray-500 italic text-sm text-center py-6 flex flex-col items-center justify-center gap-2">
                   <AlertTriangle size={24} className="opacity-50" />
-                  <span>No se encontraron resultados.</span>
+                  <span>{t("no_resultados")}</span>
                 </div>
               ) : (
                 scanModal.data.map((item, idx) => (
@@ -692,10 +694,10 @@ const PlcModal = ({
             </div>
             <div>
               <h2 className="text-white font-black text-sm uppercase tracking-widest">
-                Diagnóstico & Configuración PLC
+                {t("diag_config_plc")}
               </h2>
               <span className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
-                Monitorización, Control y OPC UA
+                {t("monitor_control_opcua")}
               </span>
             </div>
           </div>
@@ -712,11 +714,11 @@ const PlcModal = ({
             >
               {isSimulation ? (
                 <>
-                  <TestTube size={16} /> Modo Simulación
+                  <TestTube size={16} /> {t("modo_simulacion_btn")}
                 </>
               ) : (
                 <>
-                  <Network size={16} /> Conectado a PLC
+                  <Network size={16} /> {t("conectado_plc_btn")}
                 </>
               )}
             </button>
@@ -736,14 +738,14 @@ const PlcModal = ({
             <div className="col-span-3 flex flex-col gap-4">
               <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-[#2e404a] pb-2 flex items-center gap-2">
                 <Settings size={16} className="text-gray-400" />
-                Configuración OPC UA
+                {t("configuracion_opc_ua")}
               </h3>
 
               <div className="flex flex-col gap-4 bg-[#0a0f12]/60 border border-[#2e404a] rounded-xl p-5">
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center justify-between">
                     <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
-                      IP del Servidor (PLC)
+                      {t("ip_servidor_plc")}
                     </label>
                     <button
                       onClick={scanIPs}
@@ -754,7 +756,7 @@ const PlcModal = ({
                         size={10}
                         className={isScanningIPs ? "animate-spin" : ""}
                       />{" "}
-                      {isScanningIPs ? "Buscando..." : "Escanear Red"}
+                      {isScanningIPs ? t("buscando_dots") : t("escanear_red")}
                     </button>
                   </div>
                   <div className="relative">
@@ -775,7 +777,7 @@ const PlcModal = ({
 
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
-                    Puerto OPC UA
+                    {t("puerto_opc_ua")}
                   </label>
                   <input
                     type="text"
@@ -790,10 +792,10 @@ const PlcModal = ({
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center justify-between">
                     <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
-                      Nombre DB
+                      {t("nombre_db")}
                     </label>
                     <button onClick={scanDBs} disabled={isScanningDBs} className="text-[9px] text-blue-400 hover:text-blue-300 font-bold uppercase tracking-widest flex items-center gap-1">
-                      <RefreshCw size={10} className={isScanningDBs ? "animate-spin" : ""} /> {isScanningDBs ? "Consultando..." : "Buscar en PLC"}
+                      <RefreshCw size={10} className={isScanningDBs ? "animate-spin" : ""} /> {isScanningDBs ? t("consultando_dots") : t("buscar_en_plc")}
                     </button>
                   </div>
                   <div className="relative">
@@ -809,7 +811,7 @@ const PlcModal = ({
 
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
-                    Velocidad de Escaneo (Hz)
+                    {t("velocidad_escaneo_hz")}
                   </label>
                   <div className="relative">
                     <Timer className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={14} />
@@ -826,7 +828,7 @@ const PlcModal = ({
 
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
-                    Namespace (ns)
+                    {t("namespace_ns")}
                   </label>
                   <input
                     type="text"
@@ -843,7 +845,7 @@ const PlcModal = ({
                     onClick={() => saveConfig(isSimulation)}
                     className="w-full py-2 bg-[#1d2930] hover:bg-[#2e404a] text-white rounded-lg text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-colors border border-[#2e404a]"
                   >
-                    <Save size={14} /> Guardar Configuración
+                    <Save size={14} /> {t("guardar_configuracion")}
                   </button>
 
                   {isSimulation ? (
@@ -855,7 +857,7 @@ const PlcModal = ({
                       }}
                       className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-[0_0_15px_rgba(37,99,235,0.4)] mt-2"
                     >
-                      <LinkIcon size={16} /> Conectar al PLC
+                      <LinkIcon size={16} /> {t("conectado_plc_btn")}
                     </button>
                   ) : (
                     <button
@@ -866,15 +868,13 @@ const PlcModal = ({
                       }}
                       className="w-full py-3 bg-red-600/80 hover:bg-red-500 text-white rounded-lg text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-colors mt-2"
                     >
-                      <PowerOff size={16} /> Desconectar (Modo Simulación)
+                      <PowerOff size={16} /> {t("desconectar_simulacion")}
                     </button>
                   )}
                 </div>
 
                 <div className="mt-2 p-3 bg-gray-500/10 border border-gray-500/20 rounded-lg text-[10px] text-gray-400 leading-relaxed">
-                  Esta configuración indica a la aplicación Python dónde
-                  encontrar el Servidor OPC UA y en qué DB de Siemens se exponen
-                  las variables de la máquina.
+                  {t("config_plc_nota")}
                 </div>
 
                 {!isSimulation && (
@@ -897,10 +897,10 @@ const PlcModal = ({
                       )}
 
                       {telemetry?.opcua_connected
-                        ? "OPC UA Conectado"
+                        ? t("opcua_conectado")
                         : !telemetry?.opcua_error
-                          ? "Diagnosticando Conexión..."
-                          : "OPC UA Desconectado"}
+                          ? t("diagnosticando_conexion_dots")
+                          : t("opcua_desconectado")}
                     </div>
                     {telemetry?.opcua_error && (
                       <>
@@ -910,10 +910,8 @@ const PlcModal = ({
                         {telemetry.opcua_error
                           .toLowerCase()
                           .includes("securit") && (
-                          <div className="text-[9px] text-yellow-500/90 mt-1">
-                            ⚠️ Recuerda aprobar el certificado en TIA Portal
-                            (Security &gt; Certificate manager) para permitir la
-                            conexión.
+                          <div className="text-[9px] text-yellow-500/90 mt-1 font-bold">
+                            {t("tia_portal_cert_warn")}
                           </div>
                         )}
                       </>
@@ -928,7 +926,7 @@ const PlcModal = ({
               <h3 className="text-sm text-white font-bold uppercase tracking-widest border-b border-[#2e404a] pb-2 flex items-center justify-between">
                 <span className="flex items-center gap-2">
                   <Network size={16} className="text-blue-400" />
-                  Topología y Estado de Conexión
+                  {t("topologia_estado_conexion")}
                 </span>
               </h3>
 
@@ -948,7 +946,7 @@ const PlcModal = ({
                         </div>
                         <div className="text-center">
                           <div className="text-xs font-black text-white uppercase tracking-widest">
-                            HMI App
+                            {t("hmi_app_label")}
                           </div>
                           <div className="text-[10px] text-gray-400 font-mono">
                             localhost
@@ -967,8 +965,8 @@ const PlcModal = ({
                           className={`absolute -top-4 px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-widest transition-all ${telemetry?.opcua_connected ? "bg-green-500/20 text-green-400 border border-green-500/30 shadow-[0_0_15px_rgba(34,197,94,0.2)]" : "bg-red-500/20 text-red-400 border border-red-500/30"}`}
                         >
                           {telemetry?.opcua_connected
-                            ? "OPC UA CONNECTED"
-                            : "DISCONNECTED"}
+                            ? t("opcua_connected_uppercase")
+                            : t("disconnected_uppercase")}
                         </div>
                       </div>
 
@@ -1001,7 +999,7 @@ const PlcModal = ({
                   {/* Gráfico de Latencia */}
                   <div className="w-1/3 bg-[#0a0f12]/60 border border-[#2e404a] rounded-xl p-4 flex flex-col justify-between relative overflow-hidden">
                     <h4 className="text-[10px] text-gray-500 font-bold uppercase tracking-widest z-10 flex justify-between items-center">
-                      <span className="flex items-center gap-2"><Activity size={12}/> Latencia</span>
+                      <span className="flex items-center gap-2"><Activity size={12}/> {t("latencia")}</span>
                       <span className={telemetry?.opcua_connected ? "text-green-400" : "text-gray-600"}>
                         {telemetry?.opcua_connected ? `${telemetry.opcua_latency_ms || "< 1"} ms` : "---"}
                       </span>
@@ -1049,11 +1047,11 @@ const PlcModal = ({
                 <div className="w-full flex-1 flex flex-col bg-[#0a0f12]/60 border border-[#2e404a] rounded-xl overflow-hidden min-h-[200px]">
                   <div className="p-3 border-b border-[#2e404a] bg-[#1d2930]/40 flex items-center justify-between">
                     <h4 className="text-[11px] text-gray-400 font-bold uppercase tracking-widest flex items-center gap-2">
-                      <Database size={14} /> Listado de Variables del PLC (DB)
+                      <Database size={14} /> {t("listado_variables_plc_db")}
                     </h4>
                     <span className="bg-[#2e404a] px-3 py-1 rounded text-white text-[10px] font-mono">
                       {telemetry?.plc ? Object.keys(telemetry.plc).length : 0}{" "}
-                      ITEMS
+                      {t("items_uppercase")}
                     </span>
                   </div>
                   <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
@@ -1103,9 +1101,9 @@ const PlcModal = ({
                       <div className="h-full flex flex-col items-center justify-center text-center gap-3 opacity-50">
                         <Database size={32} className="text-gray-500" />
                         <span className="text-[12px] text-gray-400 italic">
-                          Sin variables detectadas.
+                          {t("sin_variables_detectadas")}
                           <br />
-                          Verifique la conexión.
+                          {t("verifique_conexion")}
                         </span>
                       </div>
                     )}
@@ -1121,18 +1119,18 @@ const PlcModal = ({
                 <h4 className="text-[11px] text-gray-400 font-bold uppercase tracking-widest flex items-center gap-3">
                   <Database size={16} className="text-green-400" />
                   <span>
-                    Configuración de Variables — Asignar PLC a Proyecto
+                    {t("config_vars_asignar_plc")}
                   </span>
                   <span className="bg-[#2e404a]/50 px-2 py-0.5 rounded text-white text-[9px] ml-2 font-mono">
                     {Object.values(varMapping).filter((m) => m.appVar).length}/
-                    {PROJECT_VARS.length} MAPEADAS
+                    {PROJECT_VARS.length} {t("mapeadas_uppercase")}
                   </span>
                 </h4>
 
                 <div className="flex items-center gap-4">
                   {isSimulation ? (
                     <div className="px-4 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-[10px] text-yellow-300 font-bold uppercase tracking-widest flex items-center gap-2">
-                      <TestTube size={14} /> Modo Simulación: Forzado Activado
+                      <TestTube size={14} /> {t("modo_sim_forzado_activado")}
                     </div>
                   ) : (
                     <button
@@ -1148,8 +1146,8 @@ const PlcModal = ({
                         className={forceMode ? "animate-pulse" : ""}
                       />
                       {forceMode
-                        ? "Deshabilitar Forzado Manual"
-                        : "Habilitar Forzado Manual"}
+                        ? t("deshabilitar_forzado_manual")
+                        : t("habilitar_forzado_manual")}
                     </button>
                   )}
                 </div>
@@ -1159,23 +1157,23 @@ const PlcModal = ({
                 {/* Tabla IN */}
                 <div className="bg-[#0a0f12] rounded-xl border border-[#2e404a] flex flex-col shadow-inner overflow-hidden">
                   <h4 className="bg-[#1d2930] p-2 text-center text-xs font-black tracking-widest uppercase text-blue-400 border-b border-[#2e404a]">
-                    IN (Lectura PLC → APP)
+                    {t("in_lectura_plc_app")}
                   </h4>
                   <div className="flex-1 overflow-y-auto custom-scrollbar">
                     <table className="w-full text-left text-[10px] text-gray-300">
                       <thead className="bg-[#1d2930] sticky top-0 border-b border-[#2e404a] z-10 shadow-md">
                         <tr>
-                          <th className="p-2 px-3 font-bold uppercase tracking-wider w-[20%]">Dirección</th>
-                          <th className="p-2 px-3 font-bold uppercase tracking-wider w-[35%]">Proyecto</th>
-                          <th className="p-2 px-3 font-bold uppercase tracking-wider w-[30%]">PLC DB</th>
-                          <th className="p-2 px-3 font-bold uppercase tracking-wider text-right w-[15%]">Valor</th>
+                          <th className="p-2 px-3 font-bold uppercase tracking-wider w-[20%]">{t("direccion")}</th>
+                          <th className="p-2 px-3 font-bold uppercase tracking-wider w-[35%]">{t("proyecto")}</th>
+                          <th className="p-2 px-3 font-bold uppercase tracking-wider w-[30%]">{t("plc_db")}</th>
+                          <th className="p-2 px-3 font-bold uppercase tracking-wider text-right w-[15%]">{t("valor")}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#2e404a]/50">
                         {inVars.map((appVar) => renderVarRow(appVar, false))}
                         {inVars.length === 0 && (
                           <tr>
-                            <td colSpan="4" className="text-center p-4 text-gray-500 italic">No hay variables IN mapeadas.</td>
+                            <td colSpan="4" className="text-center p-4 text-gray-500 italic">{t("no_vars_in_mapeadas")}</td>
                           </tr>
                         )}
                       </tbody>
@@ -1186,24 +1184,24 @@ const PlcModal = ({
                 {/* Tabla OUT */}
                 <div className="bg-[#0a0f12] rounded-xl border border-[#2e404a] flex flex-col shadow-inner overflow-hidden">
                   <h4 className="bg-[#1d2930] p-2 text-center text-xs font-black tracking-widest uppercase text-green-400 border-b border-[#2e404a]">
-                    OUT (Escritura APP → PLC)
+                    {t("out_escritura_app_plc")}
                   </h4>
                   <div className="flex-1 overflow-y-auto custom-scrollbar">
                     <table className="w-full text-left text-[10px] text-gray-300">
                       <thead className="bg-[#1d2930] sticky top-0 border-b border-[#2e404a] z-10 shadow-md">
                         <tr>
-                          <th className="p-2 px-3 font-bold uppercase tracking-wider w-[15%]">Dirección</th>
-                          <th className="p-2 px-3 font-bold uppercase tracking-wider w-[30%]">Proyecto</th>
-                          <th className="p-2 px-3 font-bold uppercase tracking-wider w-[25%]">PLC DB</th>
-                          <th className="p-2 px-3 font-bold uppercase tracking-wider text-center w-[15%]">Forzar</th>
-                          <th className="p-2 px-3 font-bold uppercase tracking-wider text-right w-[15%]">Valor</th>
+                          <th className="p-2 px-3 font-bold uppercase tracking-wider w-[15%]">{t("direccion")}</th>
+                          <th className="p-2 px-3 font-bold uppercase tracking-wider w-[30%]">{t("proyecto")}</th>
+                          <th className="p-2 px-3 font-bold uppercase tracking-wider w-[25%]">{t("plc_db")}</th>
+                          <th className="p-2 px-3 font-bold uppercase tracking-wider text-center w-[15%]">{t("forzar")}</th>
+                          <th className="p-2 px-3 font-bold uppercase tracking-wider text-right w-[15%]">{t("valor")}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#2e404a]/50">
                         {outVars.map((appVar) => renderVarRow(appVar, true))}
                         {outVars.length === 0 && (
                           <tr>
-                            <td colSpan="5" className="text-center p-4 text-gray-500 italic">No hay variables OUT mapeadas.</td>
+                            <td colSpan="5" className="text-center p-4 text-gray-500 italic">{t("no_vars_out_mapeadas")}</td>
                           </tr>
                         )}
                       </tbody>
@@ -1217,7 +1215,7 @@ const PlcModal = ({
             <div className="flex items-center justify-between mb-3 border-b border-[#2e404a] pb-3">
               <h4 className="text-[11px] text-gray-400 font-bold uppercase tracking-widest flex items-center gap-3">
                 <AlertTriangle size={16} className="text-yellow-400" />
-                <span>Configuración de Alarmas</span>
+                <span>{t("configuracion_alarmas")}</span>
               </h4>
             </div>
 
@@ -1226,21 +1224,21 @@ const PlcModal = ({
               <div className="bg-[#0a0f12] rounded-xl border border-[#2e404a] flex flex-col shadow-inner overflow-hidden">
                 <div className="bg-[#1d2930] p-2 flex justify-between items-center border-b border-[#2e404a]">
                   <h4 className="text-xs font-black tracking-widest uppercase text-yellow-400">
-                    IN ALARMAS (Lectura PLC → APP)
+                    {t("in_alarmas_lectura_plc_app")}
                   </h4>
                   <button onClick={addInAlarm} className="bg-[#2e404a] hover:bg-yellow-500 hover:text-black text-white text-[9px] px-2 py-1 rounded font-bold uppercase transition-colors">
-                    + Añadir
+                    {t("btn_anadir")}
                   </button>
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                   <table className="w-full text-left text-[10px] text-gray-300">
                     <thead className="bg-[#1d2930] sticky top-0 border-b border-[#2e404a] z-10 shadow-md">
                       <tr>
-                        <th className="p-2 px-3 font-bold uppercase tracking-wider w-[20%]">PLC DB</th>
-                        <th className="p-2 px-3 font-bold uppercase tracking-wider w-[15%]">Tipología</th>
-                        <th className="p-2 px-3 font-bold uppercase tracking-wider w-[25%]">Causa</th>
-                        <th className="p-2 px-3 font-bold uppercase tracking-wider w-[20%]">Remedio</th>
-                        <th className="p-2 px-3 font-bold uppercase tracking-wider text-center w-[10%]">Estado</th>
+                        <th className="p-2 px-3 font-bold uppercase tracking-wider w-[20%]">{t("plc_db")}</th>
+                        <th className="p-2 px-3 font-bold uppercase tracking-wider w-[15%]">{t("tipologia")}</th>
+                        <th className="p-2 px-3 font-bold uppercase tracking-wider w-[25%]">{t("causa")}</th>
+                        <th className="p-2 px-3 font-bold uppercase tracking-wider w-[20%]">{t("remedio")}</th>
+                        <th className="p-2 px-3 font-bold uppercase tracking-wider text-center w-[10%]">{t("estado")}</th>
                         <th className="p-2 px-3 font-bold uppercase tracking-wider text-center w-[10%]"></th>
                       </tr>
                     </thead>
@@ -1256,7 +1254,7 @@ const PlcModal = ({
                               onChange={(e) => saveAlarmConfig({ ...alarmConfig, in: alarmConfig.in.map(a => a.id === alarm.id ? { ...a, plcVar: e.target.value } : a) })}
                               className="w-full bg-[#1d2930] border border-[#2e404a] text-white rounded p-1 text-[10px] outline-none focus:border-yellow-500"
                             >
-                              <option value="">-- Seleccionar --</option>
+                              <option value="">{t("select_option")}</option>
                               {plcKeys.map((k) => <option key={k} value={k}>{k}</option>)}
                             </select>
                           </td>
@@ -1266,8 +1264,8 @@ const PlcModal = ({
                               onChange={(e) => saveAlarmConfig({ ...alarmConfig, in: alarmConfig.in.map(a => a.id === alarm.id ? { ...a, type: e.target.value } : a) })}
                               className={`w-full bg-[#1d2930] border border-[#2e404a] rounded p-1 text-[10px] outline-none font-bold ${alarm.type === 'Alarma' ? 'text-red-400 focus:border-red-500' : 'text-yellow-400 focus:border-yellow-500'}`}
                             >
-                              <option value="Advertencia">Advertencia</option>
-                              <option value="Alarma">Alarma</option>
+                              <option value="Advertencia">{t("advertencia")}</option>
+                              <option value="Alarma">{t("error")}</option>
                             </select>
                           </td>
                           <td className="p-2">
@@ -1275,7 +1273,7 @@ const PlcModal = ({
                               type="text"
                               value={alarm.desc}
                               onChange={(e) => saveAlarmConfig({ ...alarmConfig, in: alarmConfig.in.map(a => a.id === alarm.id ? { ...a, desc: e.target.value } : a) })}
-                              placeholder="Descripción"
+                              placeholder={t("descripcion")}
                               className="w-full bg-[#1d2930] border border-[#2e404a] text-white rounded p-1 text-[10px] outline-none focus:border-yellow-500"
                             />
                           </td>
@@ -1284,7 +1282,7 @@ const PlcModal = ({
                               type="text"
                               value={alarm.remedy}
                               onChange={(e) => saveAlarmConfig({ ...alarmConfig, in: alarmConfig.in.map(a => a.id === alarm.id ? { ...a, remedy: e.target.value } : a) })}
-                              placeholder="Remedio"
+                              placeholder={t("remedio")}
                               className="w-full bg-[#1d2930] border border-[#2e404a] text-white rounded p-1 text-[10px] outline-none focus:border-yellow-500"
                             />
                           </td>
@@ -1305,7 +1303,7 @@ const PlcModal = ({
                       )})}
                       {(!alarmConfig?.in || alarmConfig.in.length === 0) && (
                         <tr>
-                          <td colSpan="5" className="text-center p-4 text-gray-500 italic">No hay alarmas configuradas.</td>
+                          <td colSpan="6" className="text-center p-4 text-gray-500 italic">{t("no_alarmas_configuradas")}</td>
                         </tr>
                       )}
                     </tbody>
@@ -1317,21 +1315,21 @@ const PlcModal = ({
               <div className="bg-[#0a0f12] rounded-xl border border-[#2e404a] flex flex-col shadow-inner overflow-hidden">
                 <div className="bg-[#1d2930] p-2 flex justify-between items-center border-b border-[#2e404a]">
                   <h4 className="text-xs font-black tracking-widest uppercase text-red-400">
-                    OUT ALARMAS (Escritura APP → PLC)
+                    {t("out_alarmas_escritura_app_plc")}
                   </h4>
                   <button onClick={addOutAlarm} className="bg-[#2e404a] hover:bg-red-500 hover:text-white text-white text-[9px] px-2 py-1 rounded font-bold uppercase transition-colors">
-                    + Añadir
+                    {t("btn_anadir")}
                   </button>
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                   <table className="w-full text-left text-[10px] text-gray-300">
                     <thead className="bg-[#1d2930] sticky top-0 border-b border-[#2e404a] z-10 shadow-md">
                       <tr>
-                        <th className="p-2 px-3 font-bold uppercase tracking-wider w-[15%]">Dirección</th>
-                        <th className="p-2 px-3 font-bold uppercase tracking-wider w-[30%]">Proyecto</th>
-                        <th className="p-2 px-3 font-bold uppercase tracking-wider w-[25%]">PLC DB</th>
-                        <th className="p-2 px-3 font-bold uppercase tracking-wider text-center w-[15%]">Forzar</th>
-                        <th className="p-2 px-3 font-bold uppercase tracking-wider text-right w-[10%]">Valor</th>
+                        <th className="p-2 px-3 font-bold uppercase tracking-wider w-[15%]">{t("direccion")}</th>
+                        <th className="p-2 px-3 font-bold uppercase tracking-wider w-[30%]">{t("proyecto")}</th>
+                        <th className="p-2 px-3 font-bold uppercase tracking-wider w-[25%]">{t("plc_db")}</th>
+                        <th className="p-2 px-3 font-bold uppercase tracking-wider text-center w-[15%]">{t("forzar")}</th>
+                        <th className="p-2 px-3 font-bold uppercase tracking-wider text-right w-[10%]">{t("valor")}</th>
                         <th className="p-2 px-3 font-bold uppercase tracking-wider text-center w-[5%]"></th>
                       </tr>
                     </thead>
@@ -1347,7 +1345,7 @@ const PlcModal = ({
                               disabled
                               className="w-full bg-[#1d2930] border border-[#2e404a] text-gray-400 rounded p-1 text-[10px] outline-none"
                             >
-                              <option value="OUT">OUT (Escritura)</option>
+                              <option value="OUT">{t("out_escritura_option")}</option>
                             </select>
                           </td>
                           <td className="p-2">
@@ -1355,7 +1353,7 @@ const PlcModal = ({
                               type="text"
                               value={alarm.projectVar}
                               onChange={(e) => saveAlarmConfig({ ...alarmConfig, out: alarmConfig.out.map(a => a.id === alarm.id ? { ...a, projectVar: e.target.value } : a) })}
-                              placeholder="Nombre de la acción"
+                              placeholder={t("nombre_accion_placeholder")}
                               className="w-full bg-[#1d2930] border border-[#2e404a] text-white rounded p-1 text-[10px] outline-none focus:border-red-500 font-bold uppercase tracking-wide"
                             />
                           </td>
@@ -1365,7 +1363,7 @@ const PlcModal = ({
                               onChange={(e) => saveAlarmConfig({ ...alarmConfig, out: alarmConfig.out.map(a => a.id === alarm.id ? { ...a, plcVar: e.target.value } : a) })}
                               className="w-full bg-[#1d2930] border border-[#2e404a] text-white rounded p-1 text-[10px] outline-none focus:border-red-500"
                             >
-                              <option value="">-- Seleccionar --</option>
+                              <option value="">{t("select_option")}</option>
                               {plcKeys.map((k) => <option key={k} value={k}>{k}</option>)}
                             </select>
                           </td>
@@ -1377,7 +1375,7 @@ const PlcModal = ({
                                   value
                                     ? "bg-red-500/20 border-red-500 text-red-400 hover:bg-red-500/30"
                                     : "bg-[#1d2930] border-[#2e404a] text-white hover:border-red-500 hover:text-red-400"
-                                }`}
+                                  }`}
                               >
                                 Toggle
                               </button>
@@ -1400,7 +1398,7 @@ const PlcModal = ({
                       )})}
                       {(!alarmConfig?.out || alarmConfig.out.length === 0) && (
                         <tr>
-                          <td colSpan="6" className="text-center p-4 text-gray-500 italic">No hay comandos OUT de alarma configurados.</td>
+                          <td colSpan="6" className="text-center p-4 text-gray-500 italic">{t("no_comandos_out_alarmas")}</td>
                         </tr>
                       )}
                     </tbody>

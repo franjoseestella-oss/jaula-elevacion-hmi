@@ -1,8 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { User, Search, AlertTriangle, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { useLanguage } from '../LanguageContext';
+
 const API_BASE = 'http://127.0.0.1:8001';
 
 const OperatorLoginModal = ({ onLogin }) => {
+  const { t } = useLanguage();
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -25,10 +28,10 @@ const OperatorLoginModal = ({ onLogin }) => {
       if (res.ok) {
         setResults(data);
       } else {
-        setError(data.detail || 'Operario no encontrado');
+        setError(data.detail || t('operario_no_encontrado'));
       }
     } catch (err) {
-      setError('Error de conexión con el servidor ERP.');
+      setError(t('error_conexion_erp'));
     } finally {
       setLoading(false);
     }
@@ -48,8 +51,8 @@ const OperatorLoginModal = ({ onLogin }) => {
             <User size={24} className="text-logisnext-magenta" />
           </div>
           <div>
-            <h2 className="text-white font-black uppercase tracking-widest text-lg">Identificación</h2>
-            <p className="text-logisnext-slate text-xs uppercase tracking-wider font-bold">Introduzca su código o apellidos</p>
+            <h2 className="text-white font-black uppercase tracking-widest text-lg">{t('identificacion')}</h2>
+            <p className="text-logisnext-slate text-xs uppercase tracking-wider font-bold">{t('introduzca_codigo')}</p>
           </div>
         </div>
 
@@ -63,7 +66,7 @@ const OperatorLoginModal = ({ onLogin }) => {
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Ej. 00000764 o URBICAIN"
+                placeholder={t('ej_operario')}
                 className="w-full pl-10 pr-4 py-3 bg-[#0a0f12] border border-[#2e404a] text-white text-sm rounded-lg focus:border-logisnext-magenta focus:ring-1 focus:ring-logisnext-magenta outline-none transition-all placeholder:text-logisnext-slate/50 font-mono"
               />
             </div>
@@ -72,7 +75,7 @@ const OperatorLoginModal = ({ onLogin }) => {
               disabled={!query.trim() || loading}
               className="px-6 bg-logisnext-magenta hover:bg-logisnext-magenta/80 text-white font-black uppercase tracking-widest text-xs rounded-lg transition-colors disabled:opacity-50"
             >
-              Buscar
+              {t('buscar')}
             </button>
           </form>
 
@@ -96,7 +99,7 @@ const OperatorLoginModal = ({ onLogin }) => {
                       {op.APELLIDOS}
                     </div>
                     <div className="text-logisnext-slate text-[10px] font-mono tracking-widest mt-1">
-                      CÓDIGO: {op.CODIGO}
+                      {t('codigo_label')} {op.CODIGO}
                     </div>
                   </div>
                   <CheckCircle2 size={18} className="text-logisnext-slate group-hover:text-logisnext-magenta opacity-0 group-hover:opacity-100 transition-all translate-x-2 group-hover:translate-x-0" />
