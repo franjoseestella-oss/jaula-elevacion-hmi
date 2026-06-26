@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Grid, Environment, RoundedBox, Text } from '@react-three/drei';
+import { OrbitControls, Grid, Environment, RoundedBox, Text, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 
 // Constantes físicas simuladas
@@ -481,6 +481,7 @@ const Sticker2D = ({ pointsRight }) => (
 );
 
 const ForkliftAssembly = ({ currentStep, erpData, distance, palletState, onPalletAnimComplete, showStickers, zoomToStickers }) => {
+  const logoTex = useTexture('/IMAGE/LOGO_WHITE.PNG');
   const forkliftRef = useRef();
   const carriageRef = useRef();
   const middleMastRef = useRef();
@@ -601,9 +602,7 @@ const ForkliftAssembly = ({ currentStep, erpData, distance, palletState, onPalle
         {/* Tire Main */}
         <mesh><cylinderGeometry args={[tireRadius, tireRadius, tireWidth, 32]} />{blackMat}</mesh>
         
-        {/* Tire Rounded Edges */}
-        <mesh position={[0, tireWidth/2, 0]}><torusGeometry args={[tireRadius-0.02, 0.02, 16, 32]} rotation={[Math.PI/2, 0, 0]} />{blackMat}</mesh>
-        <mesh position={[0, -tireWidth/2, 0]}><torusGeometry args={[tireRadius-0.02, 0.02, 16, 32]} rotation={[Math.PI/2, 0, 0]} />{blackMat}</mesh>
+
         
         {/* Outer Rim */}
         <mesh position={[0, yOffset, 0]}><cylinderGeometry args={[rimRadius, rimRadius, 0.06, 32]} />{steelMat}</mesh>
@@ -654,6 +653,24 @@ const ForkliftAssembly = ({ currentStep, erpData, distance, palletState, onPalle
         {/* Taillights */}
         <mesh position={[-0.4, 0.9, -1.56]}><boxGeometry args={[0.15, 0.05, 0.02]} /><meshStandardMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={0.5} /></mesh>
         <mesh position={[0.4, 0.9, -1.56]}><boxGeometry args={[0.15, 0.05, 0.02]} /><meshStandardMaterial color="#ff0000" emissive="#ff0000" emissiveIntensity={0.5} /></mesh>
+
+        {/* Logo Logisnext Trasero */}
+        <mesh position={[0, 0.75, -1.562]} rotation={[0, Math.PI, 0]}>
+          <planeGeometry args={[0.5, 0.15]} />
+          <meshBasicMaterial map={logoTex} transparent={true} depthWrite={true} />
+        </mesh>
+
+        {/* Logo Logisnext Lateral Izquierdo */}
+        <mesh position={[-0.517, 0.65, -0.6]} rotation={[0, -Math.PI / 2, 0]}>
+          <planeGeometry args={[0.45, 0.15]} />
+          <meshBasicMaterial map={logoTex} transparent={true} depthWrite={true} />
+        </mesh>
+
+        {/* Logo Logisnext Lateral Derecho */}
+        <mesh position={[0.517, 0.65, -0.6]} rotation={[0, Math.PI / 2, 0]}>
+          <planeGeometry args={[0.45, 0.15]} />
+          <meshBasicMaterial map={logoTex} transparent={true} depthWrite={true} />
+        </mesh>
       </group>
 
       {/* --- WHEELS --- */}
@@ -903,34 +920,36 @@ const DigitalTwin = ({ currentStep, distance, plcState, palletState, erpData, on
   return (
     <div className="w-full h-full bg-gradient-to-b from-[#1d2930] to-[#0f171e]">
       <Canvas camera={{ position: [4, 3, 5], fov: 50 }}>
-        <ambientLight intensity={0.5} />
-        <directionalLight position={[10, 10, 5]} intensity={1} castShadow />
-        <pointLight position={[-10, -10, -10]} intensity={0.5} />
-        <Environment preset="warehouse" blur={0.8} />
-        
-        <CageAssembly plcState={plcState} currentStep={currentStep} erpData={erpData} />
-        <ForkliftAssembly distance={distance} palletState={palletState} erpData={erpData} currentStep={currentStep} onPalletAnimComplete={onPalletAnimComplete} showStickers={showStickers} zoomToStickers={zoomToStickers} />
-        <CameraAnimator zoomToStickers={zoomToStickers} zoomOutMultiload={zoomOutMultiload} currentStep={currentStep} />
-        
-        {/* Suelo Industrial */}
-        <Grid 
-          infiniteGrid 
-          fadeDistance={20} 
-          sectionColor="#dd2876" 
-          cellColor="#5d7a8a" 
-          cellSize={0.5} 
-          sectionSize={2.5} 
-          position={[0, 0, 0]} 
-        />
-        <OrbitControls 
-          makeDefault
-          target={[0, 2.5, 0]} 
-          maxPolarAngle={Math.PI / 2 - 0.05} // Evitar ir por debajo del suelo
-          minDistance={3}
-          maxDistance={15}
-          enableDamping
-          onStart={() => { window.cancelCameraAnim = true; }}
-        />
+        <React.Suspense fallback={null}>
+          <ambientLight intensity={0.5} />
+          <directionalLight position={[10, 10, 5]} intensity={1} castShadow />
+          <pointLight position={[-10, -10, -10]} intensity={0.5} />
+          <Environment preset="warehouse" blur={0.8} />
+          
+          <CageAssembly plcState={plcState} currentStep={currentStep} erpData={erpData} />
+          <ForkliftAssembly distance={distance} palletState={palletState} erpData={erpData} currentStep={currentStep} onPalletAnimComplete={onPalletAnimComplete} showStickers={showStickers} zoomToStickers={zoomToStickers} />
+          <CameraAnimator zoomToStickers={zoomToStickers} zoomOutMultiload={zoomOutMultiload} currentStep={currentStep} />
+          
+          {/* Suelo Industrial */}
+          <Grid 
+            infiniteGrid 
+            fadeDistance={20} 
+            sectionColor="#dd2876" 
+            cellColor="#5d7a8a" 
+            cellSize={0.5} 
+            sectionSize={2.5} 
+            position={[0, 0, 0]} 
+          />
+          <OrbitControls 
+            makeDefault
+            target={[0, 2.5, 0]} 
+            maxPolarAngle={Math.PI / 2 - 0.05} // Evitar ir por debajo del suelo
+            minDistance={3}
+            maxDistance={15}
+            enableDamping
+            onStart={() => { window.cancelCameraAnim = true; }}
+          />
+        </React.Suspense>
       </Canvas>
     </div>
   );

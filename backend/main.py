@@ -20,6 +20,14 @@ from opcua_client import opcua_manager
 from fastapi.responses import Response
 import basler_camera
 
+try:
+    from jaula_publisher import JaulaPublisher
+    mqtt_publisher = None
+except Exception as e:
+    print(f"[WARN] No se pudo importar JaulaPublisher: {e}")
+    mqtt_publisher = None
+
+
 # ─────────────────────────────────────────────────────────────
 # Resolución de rutas (compatible con PyInstaller --onefile)
 # ─────────────────────────────────────────────────────────────
@@ -117,6 +125,27 @@ def on_startup():
         print(f"[OK] Configuración PLC cargada y conectada al PLC: {ip}:{port}, DB={db_name}, sim=False")
     except Exception as e:
         print(f"[WARN] No se pudo cargar o iniciar la configuración del PLC: {e}")
+
+    # ─── Inicialización de MQTT ──────────────────────────────────────
+    global mqtt_publisher
+    try:
+        mqtt_publisher = JaulaPublisher()
+        mqtt_publisher.conectar()
+        # Estado inicial al arrancar: en espera
+        mqtt_publisher.en_espera()
+        print("[OK] Publicador MQTT inicializado y conectado.")
+    except Exception as e:
+        print(f"[WARN] No se pudo inicializar o conectar el publicador MQTT: {e}")
+
+@app.on_event("shutdown")
+def on_shutdown():
+    global mqtt_publisher
+    if mqtt_publisher:
+        try:
+            mqtt_publisher.desconectar()
+            print("[OK] Publicador MQTT desconectado limpiamente.")
+        except Exception as e:
+            print(f"[WARN] Error al desconectar el publicador MQTT: {e}")
 
 app.add_middleware(
     CORSMiddleware,
@@ -1157,6 +1186,36 @@ def start_cycle(params: CycleStartParams, db: Session = Depends(get_local_db)):
 
         db.commit()
         db.refresh(ref)
+
+        # ─── Publicar en MQTT ────────────────────────────────────────
+        if mqtt_publisher:
+            try:
+                # Calcular tiempo teórico de la secuencia consultando la BD
+                tiempo_teorico_s = None
+                if params.nbastidor:
+                    erp = db.query(ErpCarretilla).filter(
+                        ErpCarretilla.bastidor == params.nbastidor
+                    ).first()
+                    if erp:
+                        t_elev_sc = getattr(erp, "tpo_elev_max_scarga", 0.0) or 0.0
+                        t_desc_sc = getattr(erp, "tpo_desc_max_scarga", 0.0) or 0.0
+                        t_elev_c = getattr(erp, "tpo_elevac_max", 0.0) or 0.0
+                        t_desc_c = getattr(erp, "tpo_descenso_max", 0.0) or 0.0
+                        
+                        # Sumar tiempos teóricos máximos (en centésimas de segundo)
+                        t_total_s = (t_elev_sc + t_desc_sc + t_elev_c + t_desc_c) / 100.0
+                        tiempo_teorico_s = t_total_s + 300.0 + 120.0
+
+                # 1. SECUENCIA_INICIADA (inicio_secuencia)
+                mqtt_publisher.inicio_secuencia(
+                    secuencia_id=params.nsecuencia,
+                    tiempo_teorico_s=int(tiempo_teorico_s) if tiempo_teorico_s is not None else None
+                )
+                # 2. EN_PROCESO (ejecucion)
+                mqtt_publisher.en_proceso(secuencia_id=params.nsecuencia)
+            except Exception as mqtt_err:
+                print(f"[WARN] Error al publicar inicio de ciclo en MQTT: {mqtt_err}")
+
         return {
             "status": "success",
             "referencia": ref.REFERENCIA_ACTUAL,
@@ -1250,6 +1309,14 @@ def reset_cycle(db: Session = Depends(get_local_db)):
         
         db.commit()
         db.refresh(ref)
+
+        # ─── Publicar en MQTT ────────────────────────────────────────
+        if mqtt_publisher:
+            try:
+                mqtt_publisher.en_espera()
+            except Exception as mqtt_err:
+                print(f"[WARN] Error al publicar reset/en_espera en MQTT: {mqtt_err}")
+
         return {
             "status": "success",
             "referencia": ref.REFERENCIA_ACTUAL,
@@ -1282,6 +1349,48 @@ def get_cycle_status(db: Session = Depends(get_local_db)):
 def save_log(log_data: dict, db: Session = Depends(get_local_db)):
     try:
         log = create_log(db, log_data)
+
+        # ─── Publicar en MQTT ────────────────────────────────────────
+        if mqtt_publisher:
+            try:
+                from datetime import datetime
+                # Calcular duración real
+                duracion_real_s = None
+                inicio_str = getattr(log, "FECHA_HORA_INICIO_SEC", None)
+                fin_str = getattr(log, "FECHA_HORA_FIN_SEC", None)
+                if inicio_str and fin_str and inicio_str != "0" and fin_str != "0":
+                    def parse_iso(dt_str):
+                        if not dt_str:
+                            return None
+                        if dt_str.endswith('Z'):
+                            dt_str = dt_str[:-1] + '+00:00'
+                        try:
+                            return datetime.fromisoformat(dt_str)
+                        except Exception:
+                            return None
+                    
+                    t_ini = parse_iso(inicio_str)
+                    t_fin = parse_iso(fin_str)
+                    if t_ini and t_fin:
+                        duracion_real_s = int((t_fin - t_ini).total_seconds())
+
+                # Determinar si quedó dentro del tiempo teórico
+                ok_nok_val = getattr(log, "OK_NOK", None)
+                dentro_de_tiempo = (ok_nok_val == "OK")
+
+                secuencia_id = getattr(log, "NSECUENCIA", None) or "0"
+
+                # 1. fin_secuencia
+                mqtt_publisher.fin_secuencia(
+                    secuencia_id=secuencia_id,
+                    duracion_real_s=duracion_real_s,
+                    dentro_de_tiempo=dentro_de_tiempo
+                )
+                # 2. Transición automática a en_espera
+                mqtt_publisher.en_espera()
+            except Exception as mqtt_err:
+                print(f"[WARN] Error al publicar fin de ciclo/en_espera en MQTT: {mqtt_err}")
+
         return {"status": "success", "id": log.id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1372,6 +1481,32 @@ def save_alarm(alarm_data: AlarmCreate, db: Session = Depends(get_local_db)):
     try:
         from database.crud import create_alarm
         alarm = create_alarm(db, alarm_data.dict())
+
+        # ─── Publicar en MQTT ────────────────────────────────────────
+        if mqtt_publisher and alarm.DURACION == "Activa":
+            try:
+                # Determinar si hay secuencia en curso
+                secuencia_id = None
+                ref = db.query(ReferenciaEnCiclo).filter(ReferenciaEnCiclo.id == 1).first()
+                if ref and ref.NSECUENCIA and ref.NSECUENCIA != "0":
+                    secuencia_id = ref.NSECUENCIA
+
+                severity_map = {
+                    "alarma": "critico",
+                    "advertencia": "advertencia"
+                }
+                type_lower = (alarm.TIPO or "").lower()
+                severidad = severity_map.get(type_lower, "critico")
+
+                mqtt_publisher.error(
+                    secuencia_id=secuencia_id,
+                    codigo=alarm_data.plcVar or "UNKNOWN",
+                    descripcion=alarm.DESCRIPCION or "",
+                    severidad=severidad
+                )
+            except Exception as mqtt_err:
+                print(f"[WARN] Error al publicar alarma en MQTT: {mqtt_err}")
+
         return {"status": "success", "id": alarm.id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1388,6 +1523,17 @@ def update_alarm_resolved(resolve_data: AlarmResolve, db: Session = Depends(get_
         )
         if not alarm:
             return {"status": "not_found", "message": "No active alarm found to resolve"}
+
+        # Comprobar si quedan más alarmas activas en LOG_ALARMAS
+        from database.models import LogAlarma
+        active_alarms_count = db.query(LogAlarma).filter(LogAlarma.DURACION == "Activa").count()
+        if active_alarms_count == 0:
+            if mqtt_publisher:
+                try:
+                    mqtt_publisher.en_espera()
+                except Exception as mqtt_err:
+                    print(f"[WARN] Error al publicar en_espera tras resolver alarma en MQTT: {mqtt_err}")
+
         return {"status": "success", "id": alarm.id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
