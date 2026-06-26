@@ -414,7 +414,10 @@ const translations = {
     reiniciar_secuencia: "Reiniciar secuencia",
     baje_por_debajo_de_cota: "Baje por debajo de {cota} mm",
     restaurar_etapa: "Restaurar etapa",
-    deshabilitar_etapa: "Deshabilitar etapa"
+    deshabilitar_etapa: "Deshabilitar etapa",
+    vallas_no_en_posicion: "VALLAS NO EN POSICIÓN",
+    ready: "LISTO",
+    not_ready: "NO LISTO"
   },
   en: {
     // Generales
@@ -827,7 +830,10 @@ const translations = {
     reiniciar_secuencia: "Restart sequence",
     baje_por_debajo_de_cota: "Lower below {cota} mm",
     restaurar_etapa: "Restore step",
-    deshabilitar_etapa: "Disable step"
+    deshabilitar_etapa: "Disable step",
+    vallas_no_en_posicion: "GATES NOT IN POSITION",
+    ready: "READY",
+    not_ready: "NOT READY"
   },
   ja: {
     // Generales
@@ -1240,7 +1246,10 @@ const translations = {
     reiniciar_secuencia: "シーケンス再起動 / Restart sequence",
     baje_por_debajo_de_cota: "{cota} mm 未満に下げてください / Lower below {cota} mm",
     restaurar_etapa: "ステップを復元 / Restore step",
-    deshabilitar_etapa: "ステップを無効化 / Disable step"
+    deshabilitar_etapa: "ステップを無効化 / Disable step",
+    vallas_no_en_posicion: "安全柵位置異常 / GATES NOT IN POSITION",
+    ready: "準備完了 / READY",
+    not_ready: "未準備 / NOT READY"
   }
 };
 

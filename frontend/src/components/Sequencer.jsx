@@ -167,6 +167,8 @@ const STitle = ({ icon, label }) => (
 );
 
 const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime, error }) => {
+  const { t } = useLanguage();
+
   const handleTrigger = () => {
     if (iniciarPlcTime === null) {
       onConfirm();
@@ -186,7 +188,7 @@ const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime, error }) =>
             {data.bastidor}
           </div>
           <div className="text-3xl text-[#8ba8b8] font-bold tracking-widest uppercase">
-            {data.modelo} &nbsp;<span className="text-[#4a6b7c]">|</span>&nbsp; MÁSTIL {data.mastil}
+            {data.modelo} &nbsp;<span className="text-[#4a6b7c]">|</span>&nbsp; {t('mastil_header')} {data.mastil}
           </div>
         </div>
         <button onClick={onCancel} className="text-[#6b8fa3] hover:text-white transition-all p-4 rounded-xl hover:bg-white/10 active:scale-95 bg-black/20">
@@ -201,13 +203,13 @@ const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime, error }) =>
 
         {/* COL 1: Identificación */}
         <div className="pr-6 flex flex-col gap-8">
-          <STitle icon="⊟" label="Identificación" />
+          <STitle icon="⊟" label={t('identificacion')} />
           <div className="flex flex-col gap-7">
-            <MF label="Bastidor" value={data.bastidor} highlight size="lg" />
-            <MF label="Secuencia" value={data.secuencia} size="lg" />
-            <MF label="Modelo" value={data.modelo} size="lg" />
-            <MF label="Mástil REF" value={data.mastil} size="lg" />
-            <MF label="Fec. Montaje" value={data.fecha_montaje} size="lg" />
+            <MF label={t('bastidor')} value={data.bastidor} highlight size="lg" />
+            <MF label={t('secuencia')} value={data.secuencia} size="lg" />
+            <MF label={t('modelo')} value={data.modelo} size="lg" />
+            <MF label={t('mastil_ref')} value={data.mastil} size="lg" />
+            <MF label={t('fec_montaje')} value={data.fecha_montaje} size="lg" />
           </div>
         </div>
 
@@ -215,23 +217,23 @@ const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime, error }) =>
         <div className="px-8 flex flex-col gap-10">
           {data.altura_max_interm != null && (
             <div>
-              <STitle icon="⟋" label="Geometría" />
+              <STitle icon="⟋" label={t('geometria')} />
               <div className="mb-4">
-                <MF label="Altura máx. intermedia" value={data.altura_max_interm} unit="mm" size="lg" />
+                <MF label={t('alt_max_interm')} value={data.altura_max_interm} unit="mm" size="lg" />
               </div>
             </div>
           )}
           {(data.peso_pruebas != null || data.capac_interm_1 != null || data.capac_interm_2 != null) && (
             <div>
-              <STitle icon="⚖" label="Cargas y Capacidades" />
+              <STitle icon="⚖" label={t('cargas_y_capacidades')} />
               <div className="flex flex-col gap-7">
                 {data.peso_pruebas != null && (
-                  <MF label="Peso Pruebas" value={data.peso_pruebas} unit="kg" size="lg" highlight />
+                  <MF label={t('peso_pruebas')} value={data.peso_pruebas} unit="kg" size="lg" highlight />
                 )}
-                <MF label="Capac. Interm. 1" value={data.capac_interm_1 ?? 0} unit="kg" size="lg" />
-                <MF label="Capac. Interm. 2" value={data.capac_interm_2 ?? 0} unit="kg" size="lg" />
+                <MF label={t('capac_interm_1')} value={data.capac_interm_1 ?? 0} unit="kg" size="lg" />
+                <MF label={t('capac_interm_2')} value={data.capac_interm_2 ?? 0} unit="kg" size="lg" />
                 {data.capac_interm_3 != null && (
-                  <MF label="Capac. Interm. 3" value={data.capac_interm_3} unit="kg" size="lg" />
+                  <MF label={t('capac_interm_3')} value={data.capac_interm_3} unit="kg" size="lg" />
                 )}
               </div>
             </div>
@@ -242,12 +244,12 @@ const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime, error }) =>
         <div className="px-8 flex flex-col gap-8">
           {data.tpo_elevac_min != null && (
             <div>
-              <STitle icon="⏱" label="Tpo Con Carga" />
+              <STitle icon="⏱" label={t('tpo_con_carga')} />
               <div className="flex flex-col gap-7">
-                <MF label="Elevación mín" value={ds2sP(data.tpo_elevac_min)} size="lg" />
-                <MF label="Elevación máx" value={ds2sP(data.tpo_elevac_max)} size="lg" />
-                <MF label="Descenso mín" value={ds2sP(data.tpo_descenso_min)} size="lg" />
-                <MF label="Descenso máx" value={ds2sP(data.tpo_descenso_max)} size="lg" />
+                <MF label={t('elevacion_min')} value={ds2sP(data.tpo_elevac_min)} size="lg" />
+                <MF label={t('elevacion_max')} value={ds2sP(data.tpo_elevac_max)} size="lg" />
+                <MF label={t('descenso_min')} value={ds2sP(data.tpo_descenso_min)} size="lg" />
+                <MF label={t('descenso_max')} value={ds2sP(data.tpo_descenso_max)} size="lg" />
               </div>
             </div>
           )}
@@ -257,12 +259,12 @@ const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime, error }) =>
         <div className="pl-8 flex flex-col gap-8">
           {data.tpo_elev_min_scarga != null && (
             <div>
-              <STitle icon="↺" label="Tpo Sin Carga" />
+              <STitle icon="↺" label={t('tpo_sin_carga')} />
               <div className="flex flex-col gap-7">
-                <MF label="Elevación mín" value={ds2sP(data.tpo_elev_min_scarga)} size="lg" />
-                <MF label="Elevación máx" value={ds2sP(data.tpo_elev_max_scarga)} size="lg" />
-                <MF label="Descenso mín" value={ds2sP(data.tpo_desc_min_scarga)} size="lg" />
-                <MF label="Descenso máx" value={ds2sP(data.tpo_desc_max_scarga)} size="lg" />
+                <MF label={t('elevacion_min')} value={ds2sP(data.tpo_elev_min_scarga)} size="lg" />
+                <MF label={t('elevacion_max')} value={ds2sP(data.tpo_elev_max_scarga)} size="lg" />
+                <MF label={t('descenso_min')} value={ds2sP(data.tpo_desc_min_scarga)} size="lg" />
+                <MF label={t('descenso_max')} value={ds2sP(data.tpo_desc_max_scarga)} size="lg" />
               </div>
             </div>
           )}
@@ -275,7 +277,7 @@ const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime, error }) =>
           onClick={onCancel}
           className="text-2xl font-black uppercase tracking-[0.2em] text-[#6b8fa3] hover:text-white transition-all px-8 py-4 rounded-xl hover:bg-white/10 active:scale-95"
         >
-          Cancelar
+          {t('cancelar')}
         </button>
         {error && (
           <div className="text-red-500 font-black text-xl px-6 py-3 border-2 border-red-500/30 bg-red-500/10 rounded-xl flex items-center gap-2 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.15)] shrink-0">
@@ -295,10 +297,10 @@ const ErpPreviewCard = ({ data, onConfirm, onCancel, iniciarPlcTime, error }) =>
           {displayTime !== null && displayTime > 0 ? (
             <>
               <Timer size={32} className="animate-pulse" />
-              CARGAR SECUENCIA ({displayTime}s)
+              {t('cargar_secuencia_display').replace('{displayTime}', displayTime)}
             </>
           ) : (
-            <>Cargar Secuencia <span className="text-4xl translate-y-[-2px]">&gt;</span></>
+            <>{t('cargar_secuencia_btn')} <span className="text-4xl translate-y-[-2px]">&gt;</span></>
           )}
         </button>
       </div>
