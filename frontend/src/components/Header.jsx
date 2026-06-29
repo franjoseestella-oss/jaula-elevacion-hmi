@@ -15,12 +15,29 @@ const StatusLED = ({ active, label, icon: Icon, onClick }) => (
 );
 
 const Header = ({ status, isAuto, onErpClick, onSettingsClick, onLogsClick, onPlcClick, onBaslerClick, operario, onOperatorClick, canChangeOperator, hasAlarms, onAlarmsClick }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const isJapanese = language === 'ja';
 
   return (
-    <header className="h-20 bg-gradient-to-b from-[#151f25] to-[#11191e] border-b border-[#2e404a] flex items-center justify-between px-8 shrink-0 z-20 relative">
+    <header className="h-20 bg-gradient-to-b from-[#151f25] to-[#11191e] border-b border-[#2e404a] flex items-center justify-between px-8 shrink-0 z-20 relative overflow-hidden">
       {/* Accent Top Border */}
       <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-logisnext-magenta to-transparent opacity-50"></div>
+
+      {/* 日の丸 — Hi no Maru decorative glow, only in Japanese mode */}
+      {isJapanese && (
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            right: '-60px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: '140px',
+            height: '140px',
+            borderRadius: '50%',
+            background: 'radial-gradient(circle, rgba(188,0,45,0.18) 0%, rgba(188,0,45,0.06) 50%, transparent 70%)',
+          }}
+        />
+      )}
       
       <div className="flex items-center gap-6">
         {/* Corporate Logo */}
@@ -32,13 +49,21 @@ const Header = ({ status, isAuto, onErpClick, onSettingsClick, onLogsClick, onPl
           <h1 className="text-xl font-black tracking-widest text-white drop-shadow-md flex items-center gap-4">
             {t('pruebas_elevacion')} <span className="text-logisnext-lightslate font-light">| FORKLIFT</span>
             <div className={`px-3 py-1 rounded-md text-xs font-black tracking-widest uppercase border shadow-sm ${
-              isAuto 
-                ? 'bg-green-500/20 text-green-400 border-green-500/50 shadow-[0_0_10px_rgba(34,197,94,0.3)]' 
+              isAuto
+                ? 'bg-green-500/20 text-green-400 border-green-500/50 shadow-[0_0_10px_rgba(34,197,94,0.3)]'
                 : 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50 shadow-[0_0_10px_rgba(234,179,8,0.3)]'
             }`}>
               {isAuto ? t('automatico') : t('manual')}
             </div>
           </h1>
+          {isJapanese && (
+            <div className="flex items-center gap-2 mt-0.5">
+              <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: 'radial-gradient(circle, #BC002D 55%, transparent 56%)' }}></div>
+              <span className="text-[9px] font-light tracking-[0.35em]" style={{ color: '#BC002D', opacity: 0.75 }}>
+                物作り · 改善 · 精密
+              </span>
+            </div>
+          )}
         </div>
       </div>
 

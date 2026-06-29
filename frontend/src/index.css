@@ -48,6 +48,53 @@ body {
   }
 }
 
+/* ==========================================
+   日本語モード — Japanese Mode
+   美学: 物作り (Monozukuri) · 改善 (Kaizen) · 精密 (Precision)
+   ========================================== */
+
+/* Japanese Red (朱色 / Shu-iro) replaces magenta as accent */
+html[data-lang="ja"] {
+  --logisnext-magenta: #BC002D;
+}
+
+/* Background: Hi no Maru (日の丸) subtle glow — the rising sun from the flag */
+html[data-lang="ja"] body {
+  background-color: #0c1010;
+  background-image:
+    radial-gradient(ellipse 55% 55% at 88% 50%, rgba(188, 0, 45, 0.06) 0%, transparent 65%),
+    radial-gradient(ellipse 25% 25% at 12% 88%, rgba(188, 0, 45, 0.03) 0%, transparent 100%),
+    radial-gradient(circle, rgba(188, 0, 45, 0.038) 1px, transparent 1px);
+  background-size: auto, auto, 28px 28px;
+}
+
+/* Tailwind utility overrides: accent color → Japanese red */
+html[data-lang="ja"] .text-logisnext-magenta {
+  color: #BC002D !important;
+}
+html[data-lang="ja"] .border-logisnext-magenta {
+  border-color: #BC002D !important;
+}
+html[data-lang="ja"] .bg-logisnext-magenta {
+  background-color: #BC002D !important;
+}
+
+/* Glass panel with Japanese red border/glow */
+html[data-lang="ja"] .glass-panel-magenta {
+  border-color: rgba(188, 0, 45, 0.5) !important;
+  box-shadow: 0 0 20px rgba(188, 0, 45, 0.15) !important;
+}
+
+/* Text glow in Japanese red */
+html[data-lang="ja"] .text-glow-magenta {
+  text-shadow: 0 0 10px rgba(188, 0, 45, 0.75) !important;
+}
+
+/* Scrollbar accent in Japanese red */
+html[data-lang="ja"] .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #BC002D !important;
+}
+
 /* Subtle CRT/Scanline overlay for industrial feel */
 .scanlines {
   position: relative;

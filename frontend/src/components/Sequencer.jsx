@@ -1333,7 +1333,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         if (stepStatus[2] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
           // NOK: REPETIR / FORZAR
           if (cameraTestState === 'nok') {
-            if (window.confirm("La prueba de cámara sin carga ha resultado NOK. ¿Desea FORZAR el avance a la siguiente etapa? (Aceptar = Forzar avance, Cancelar = Repetir prueba)")) {
+            if (window.confirm(t('confirm_camera_sincarga_nok'))) {
               markOk(2);
             } else {
               resetStartsInPlc();
@@ -1369,7 +1369,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
           // NOK: REPETIR / FORZAR
           if (cameraTestState === 'nok') {
-            if (window.confirm("La prueba de cámara con carga ha resultado NOK. ¿Desea FORZAR el avance a la siguiente etapa? (Aceptar = Forzar avance, Cancelar = Repetir prueba)")) {
+            if (window.confirm(t('confirm_camera_concarga_nok'))) {
               markOk(3);
             } else {
               resetStartsInPlc();
@@ -1410,7 +1410,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           }
 
           if (test5mState === 'nok') {
-            if (window.confirm("La prueba de 5 minutos ha resultado NOK. ¿Desea FORZAR el avance y finalizar la secuencia? (Aceptar = Forzar avance, Cancelar = Repetir prueba)")) {
+            if (window.confirm(t('confirm_5min_nok'))) {
               markOk(4);
             } else {
               setTest5mState('esperando_elevacion');
@@ -2144,7 +2144,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     if (step >= 1 && step <= 4 && started[step]) {
       if (statuses[2] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') {
         if (cameraTestState === 'nok') {
-          if (window.confirm("La prueba de cámara sin carga ha resultado NOK. ¿Desea FORZAR el avance a la siguiente etapa? (Aceptar = Forzar avance, Cancelar = Repetir prueba)")) {
+          if (window.confirm(t('confirm_camera_sincarga_nok'))) {
             markOk(2);
           } else {
             resetStartsInPlc();
@@ -2177,7 +2177,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         }
 
         if (cameraTestState === 'nok') {
-          if (window.confirm("La prueba de cámara con carga ha resultado NOK. ¿Desea FORZAR el avance a la siguiente etapa? (Aceptar = Forzar avance, Cancelar = Repetir prueba)")) {
+          if (window.confirm(t('confirm_camera_concarga_nok'))) {
             markOk(3);
           } else {
             resetStartsInPlc();
@@ -2204,7 +2204,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
         } else if (cameraTestState === 'ok') markOk(3);
       } else if (statuses[4] === STEP_STATUS.ACTIVE) {
         if (test5mState === 'nok') {
-          if (window.confirm("La prueba de 5 minutos ha resultado NOK. ¿Desea FORZAR el avance y finalizar la secuencia? (Aceptar = Forzar avance, Cancelar = Repetir prueba)")) {
+          if (window.confirm(t('confirm_5min_nok'))) {
             markOk(4);
           } else {
             setTest5mState('esperando_elevacion');
@@ -2239,8 +2239,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     if (cameraTestState === 'nok') {
       const activeTestStep = statuses[2] === STEP_STATUS.ACTIVE ? 2 : statuses[3] === STEP_STATUS.ACTIVE ? 3 : null;
       if (activeTestStep !== null) {
-        const stepName = activeTestStep === 2 ? "sin carga" : "con carga";
-        if (window.confirm(`La prueba de cámara ${stepName} ha resultado NOK. ¿Desea FORZAR el avance a la siguiente etapa?`)) {
+        const confirmKey = activeTestStep === 2 ? 'confirm_camera_sincarga_nok_short' : 'confirm_camera_concarga_nok_short';
+        if (window.confirm(t(confirmKey))) {
           markOk(activeTestStep);
         }
       }
@@ -2764,8 +2764,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   };
 
   const handleContinuarCameraTest = (stepIdx) => {
-    const stepName = stepIdx === 2 ? "sin carga" : "con carga";
-    if (window.confirm(`La prueba de cámara ${stepName} ha resultado NOK. ¿Desea forzar el avance a la siguiente etapa?`)) {
+    const confirmKey = stepIdx === 2 ? 'confirm_camera_sincarga_nok_short' : 'confirm_camera_concarga_nok_short';
+    if (window.confirm(t(confirmKey))) {
       markOk(stepIdx);
     }
   };
@@ -2778,7 +2778,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
 
   const handleContinuar5m = () => {
     // Avanzar forzadamente a pesar del fallo con confirmación previa
-    if (window.confirm("La prueba de 5 minutos ha resultado NOK. ¿Desea forzar el avance y finalizar la secuencia?")) {
+    if (window.confirm(t('confirm_5min_nok_short'))) {
       markOk(4);
     }
   };

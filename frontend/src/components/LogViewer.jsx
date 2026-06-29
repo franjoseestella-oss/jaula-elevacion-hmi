@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, RefreshCw, FileText, Download, Activity, Clock, User, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { useLanguage } from '../LanguageContext';
 
 const API_BASE = 'http://127.0.0.1:8001';
 
@@ -21,6 +22,7 @@ const formatDateToLocalString = (dateStr) => {
 };
 
 const LogViewer = ({ isOpen, onClose }) => {
+  const { t } = useLanguage();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -164,7 +166,7 @@ const LogViewer = ({ isOpen, onClose }) => {
               <FileText size={20} className="text-logisnext-magenta" />
             </div>
             <h2 className="text-xl font-black tracking-widest text-white">
-              HISTÓRICO DE PRUEBAS
+              {t('logs_history_title')}
             </h2>
           </div>
 
@@ -173,14 +175,14 @@ const LogViewer = ({ isOpen, onClose }) => {
               onClick={() => { setFilterSec(''); setFilterBast(''); setFilterDateStart(''); setFilterDateEnd(''); setFilterStatus(''); }}
               className="px-4 py-2 bg-transparent hover:bg-[#1d2930] text-logisnext-lightslate text-sm font-bold rounded-lg transition-colors border border-transparent hover:border-[#2e404a]"
             >
-              LIMPIAR FILTROS
+              {t('clean_filters_btn')}
             </button>
             <button
               onClick={fetchLogs}
               className="flex items-center gap-2 px-4 py-2 bg-[#1d2930] hover:bg-[#2e404a] text-white text-sm font-bold rounded-lg transition-colors border border-[#2e404a]"
             >
               <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-              ACTUALIZAR
+              {t('refresh_btn')}
             </button>
             <button
               onClick={onClose}
@@ -194,28 +196,28 @@ const LogViewer = ({ isOpen, onClose }) => {
         {/* Filter Bar */}
         <div className="bg-[#11191e] border-b border-[#2e404a] p-4 flex flex-wrap gap-6 items-end shrink-0 shadow-inner">
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Secuencia</label>
-            <input type="text" placeholder="Ej: 0296" value={filterSec} onChange={e=>setFilterSec(e.target.value)} className="bg-[#0a0f12] text-sm border border-[#2e404a] text-white p-2 rounded focus:border-logisnext-magenta outline-none w-32" />
+            <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">{t('filter_secuencia')}</label>
+            <input type="text" placeholder={t('secuencia_placeholder')} value={filterSec} onChange={e=>setFilterSec(e.target.value)} className="bg-[#0a0f12] text-sm border border-[#2e404a] text-white p-2 rounded focus:border-logisnext-magenta outline-none w-32" />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Bastidor</label>
-            <input type="text" placeholder="Ej: SFB09..." value={filterBast} onChange={e=>setFilterBast(e.target.value)} className="bg-[#0a0f12] text-sm border border-[#2e404a] text-white p-2 rounded focus:border-logisnext-magenta outline-none w-48" />
+            <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">{t('filter_bastidor')}</label>
+            <input type="text" placeholder={t('bastidor_placeholder')} value={filterBast} onChange={e=>setFilterBast(e.target.value)} className="bg-[#0a0f12] text-sm border border-[#2e404a] text-white p-2 rounded focus:border-logisnext-magenta outline-none w-48" />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Creado (Desde)</label>
+            <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">{t('filter_date_start')}</label>
             <input type="date" style={{ colorScheme: 'dark' }} value={filterDateStart} onChange={e=>setFilterDateStart(e.target.value)} className="bg-[#0a0f12] text-sm border border-[#2e404a] text-logisnext-lightslate p-2 rounded focus:border-logisnext-magenta outline-none cursor-pointer w-36" />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Creado (Hasta)</label>
+            <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">{t('filter_date_end')}</label>
             <input type="date" style={{ colorScheme: 'dark' }} value={filterDateEnd} onChange={e=>setFilterDateEnd(e.target.value)} className="bg-[#0a0f12] text-sm border border-[#2e404a] text-logisnext-lightslate p-2 rounded focus:border-logisnext-magenta outline-none cursor-pointer w-36" />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">Estado Global</label>
+            <label className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">{t('filter_global_status')}</label>
             <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="bg-[#0a0f12] text-sm border border-[#2e404a] text-white p-2 rounded focus:border-logisnext-magenta outline-none cursor-pointer w-36">
-              <option value="">TODOS</option>
+              <option value="">{t('all_option')}</option>
               <option value="OK">OK</option>
               <option value="NOK">NOK</option>
-              <option value="ABORTADO">ABORTADO</option>
+              <option value="ABORTADO">{t('status_aborted')}</option>
             </select>
           </div>
         </div>
@@ -225,74 +227,74 @@ const LogViewer = ({ isOpen, onClose }) => {
           {loading ? (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-logisnext-lightslate">
               <RefreshCw size={48} className="animate-spin text-logisnext-magenta" />
-              <p className="font-bold tracking-widest animate-pulse">CARGANDO LOGS...</p>
+              <p className="font-bold tracking-widest animate-pulse">{t('loading_logs')}</p>
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-red-400">
               <AlertTriangle size={48} />
               <p className="font-bold">{error}</p>
-              <button onClick={fetchLogs} className="px-6 py-2 bg-red-900/30 border border-red-500/50 rounded hover:bg-red-900/50 text-white">REINTENTAR</button>
+              <button onClick={fetchLogs} className="px-6 py-2 bg-red-900/30 border border-red-500/50 rounded hover:bg-red-900/50 text-white">{t('retry_btn')}</button>
             </div>
           ) : logs.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-logisnext-lightslate">
               <FileText size={64} className="mb-4 opacity-20" />
-              <p className="text-xl font-bold tracking-widest opacity-50">NO HAY REGISTROS DISPONIBLES</p>
+              <p className="text-xl font-bold tracking-widest opacity-50">{t('no_records_available')}</p>
             </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-[#2e404a] custom-scrollbar pb-10">
               <table className="w-full text-left text-sm text-gray-300">
                 <thead className="text-[10px] uppercase bg-[#151f25] text-logisnext-lightslate font-black tracking-wider whitespace-nowrap select-none">
                   <tr>
-                    {renderTh("ID", "id")}
-                    {renderTh("Operario", "OPERARIO")}
-                    {renderTh("F. Montaje", "FECHA_MONTAJE")}
-                    {renderTh("Secuencia", "NSECUENCIA")}
-                    {renderTh("Modelo", "NMODELO")}
-                    {renderTh("Bastidor", "NBASTIDOR")}
-                    {renderTh("Mástil", "NMASTIL")}
-                    {renderTh("Alt. ERP", "ALTURA_MAX_INTERMEDIA")}
-                    {renderTh("Alt. Captada", "ALTURA_CAPTADA")}
-                    {renderTh("Ini Multiload", "FECHA_HORA_INICIO_MULTILOAD")}
-                    {renderTh("Fin Multiload", "FECHA_HORA_FIN_MULTILOAD")}
-                    {renderTh("Est. Multiload", "ESTADO_MULTILOAD")}
-                    {renderTh("Elev. Min SC", "TIEMPO_ELEVACION_MIN_SINCARGA")}
-                    {renderTh("Elev. Max SC", "TIEMPO_ELEVACION_MAX_SINCARGA")}
-                    {renderTh("Elev. Med SC", "TIEMPO_ELEVACION_MEDIDO_SINCARGA")}
-                    {renderTh("Elev. AVG SC", "AVG_ELEVACION_SINCARGA")}
-                    {renderTh("Desc. Min SC", "TIEMPO_DESCENSO_MIN_SINCARGA")}
-                    {renderTh("Desc. Max SC", "TIEMPO_DESCENSO_MAX_SINCARGA")}
-                    {renderTh("Desc. Med SC", "TIEMPO_DESCENSO_MEDIDO_SINCARGA")}
-                    {renderTh("Desc. AVG SC", "AVG_DESCENSO_SINCARGA")}
-                    {renderTh("Ini S/Carga", "FECHA_HORA_INICIO_SINCARGA")}
-                    {renderTh("Fin S/Carga", "FECHA_HORA_FIN_SINCARGA")}
-                    {renderTh("Est. S/Carga", "ESTADO_SINCARGA")}
-                    {renderTh("Elev. Min CC", "TIEMPO_ELEVACION_MIN_CARGA")}
-                    {renderTh("Elev. Max CC", "TIEMPO_ELEVACION_MAX_CARGA")}
-                    {renderTh("Elev. Med CC", "TIEMPO_ELEVACION_MEDIDO_CARGA")}
-                    {renderTh("Elev. AVG CC", "AVG_ELEVACION_CARGA")}
-                    {renderTh("Desc. Min CC", "TIEMPO_DESCENSO_MIN_CARGA")}
-                    {renderTh("Desc. Max CC", "TIEMPO_DESCENSO_MAX_CARGA")}
-                    {renderTh("Desc. Med CC", "TIEMPO_DESCENSO_MEDIDO_CARGA")}
-                    {renderTh("Desc. AVG CC", "AVG_DESCENSO_CARGA")}
-                    {renderTh("Ini C/Carga", "FECHA_HORA_INICIO_CARGA")}
-                    {renderTh("Fin C/Carga", "FECHA_HORA_FIN_CARGA")}
-                    {renderTh("Est. C/Carga", "ESTADO_CARGA")}
-                    {renderTh("Carga ERP", "CARGA_CONSIGNADA")}
-                    {renderTh("Carga Get", "CARGA_GET")}
-                    {renderTh("Peso Prueba", "PESO_PRUEBA")}
-                    {renderTh("Alt. Inicial 5M", "ALTURA_INICIAL")}
-                    {renderTh("Alt. Final 5M", "ALTURA_FINAL")}
-                    {renderTh("Caída 5M", "DIFERENCIA_ALTURAS")}
-                    {renderTh("Ini 5Min", "FECHA_HORA_INICIO_5MIN")}
-                    {renderTh("Fin 5Min", "FECHA_HORA_FIN_5MIN")}
-                    {renderTh("Est. 5Min", "ESTADO_CARGA_5_MIN")}
-                    {renderTh("Reps", "REPETICIONES_SECUENCIA")}
-                    {renderTh("Ini Sec.", "FECHA_HORA_INICIO_SEC")}
-                    {renderTh("Fin Sec.", "FECHA_HORA_FIN_SEC")}
-                    {renderTh("Duración Sec.", "DURACION_SEC", "text-logisnext-magenta")}
+                    {renderTh(t('col_id'), "id")}
+                    {renderTh(t('col_operator'), "OPERARIO")}
+                    {renderTh(t('col_assembly_date'), "FECHA_MONTAJE")}
+                    {renderTh(t('col_sequence'), "NSECUENCIA")}
+                    {renderTh(t('col_model'), "NMODELO")}
+                    {renderTh(t('col_chassis'), "NBASTIDOR")}
+                    {renderTh(t('col_mast'), "NMASTIL")}
+                    {renderTh(t('col_alt_erp'), "ALTURA_MAX_INTERMEDIA")}
+                    {renderTh(t('col_alt_captured'), "ALTURA_CAPTADA")}
+                    {renderTh(t('col_ini_multiload'), "FECHA_HORA_INICIO_MULTILOAD")}
+                    {renderTh(t('col_fin_multiload'), "FECHA_HORA_FIN_MULTILOAD")}
+                    {renderTh(t('col_est_multiload'), "ESTADO_MULTILOAD")}
+                    {renderTh(t('col_elev_min_sc'), "TIEMPO_ELEVACION_MIN_SINCARGA")}
+                    {renderTh(t('col_elev_max_sc'), "TIEMPO_ELEVACION_MAX_SINCARGA")}
+                    {renderTh(t('col_elev_med_sc'), "TIEMPO_ELEVACION_MEDIDO_SINCARGA")}
+                    {renderTh(t('col_elev_avg_sc'), "AVG_ELEVACION_SINCARGA")}
+                    {renderTh(t('col_desc_min_sc'), "TIEMPO_DESCENSO_MIN_SINCARGA")}
+                    {renderTh(t('col_desc_max_sc'), "TIEMPO_DESCENSO_MAX_SINCARGA")}
+                    {renderTh(t('col_desc_med_sc'), "TIEMPO_DESCENSO_MEDIDO_SINCARGA")}
+                    {renderTh(t('col_desc_avg_sc'), "AVG_DESCENSO_SINCARGA")}
+                    {renderTh(t('col_ini_sc'), "FECHA_HORA_INICIO_SINCARGA")}
+                    {renderTh(t('col_fin_sc'), "FECHA_HORA_FIN_SINCARGA")}
+                    {renderTh(t('col_est_sc'), "ESTADO_SINCARGA")}
+                    {renderTh(t('col_elev_min_cc'), "TIEMPO_ELEVACION_MIN_CARGA")}
+                    {renderTh(t('col_elev_max_cc'), "TIEMPO_ELEVACION_MAX_CARGA")}
+                    {renderTh(t('col_elev_med_cc'), "TIEMPO_ELEVACION_MEDIDO_CARGA")}
+                    {renderTh(t('col_elev_avg_cc'), "AVG_ELEVACION_CARGA")}
+                    {renderTh(t('col_desc_min_cc'), "TIEMPO_DESCENSO_MIN_CARGA")}
+                    {renderTh(t('col_desc_max_cc'), "TIEMPO_DESCENSO_MAX_CARGA")}
+                    {renderTh(t('col_desc_med_cc'), "TIEMPO_DESCENSO_MEDIDO_CARGA")}
+                    {renderTh(t('col_desc_avg_cc'), "AVG_DESCENSO_CARGA")}
+                    {renderTh(t('col_ini_cc'), "FECHA_HORA_INICIO_CARGA")}
+                    {renderTh(t('col_fin_cc'), "FECHA_HORA_FIN_CARGA")}
+                    {renderTh(t('col_est_cc'), "ESTADO_CARGA")}
+                    {renderTh(t('col_carga_erp'), "CARGA_CONSIGNADA")}
+                    {renderTh(t('col_carga_get'), "CARGA_GET")}
+                    {renderTh(t('col_test_weight'), "PESO_PRUEBA")}
+                    {renderTh(t('col_alt_ini_5m'), "ALTURA_INICIAL")}
+                    {renderTh(t('col_alt_fin_5m'), "ALTURA_FINAL")}
+                    {renderTh(t('col_drop_5m'), "DIFERENCIA_ALTURAS")}
+                    {renderTh(t('col_ini_5m'), "FECHA_HORA_INICIO_5MIN")}
+                    {renderTh(t('col_fin_5m'), "FECHA_HORA_FIN_5MIN")}
+                    {renderTh(t('col_est_5m'), "ESTADO_CARGA_5_MIN")}
+                    {renderTh(t('col_reps'), "REPETICIONES_SECUENCIA")}
+                    {renderTh(t('col_ini_sec'), "FECHA_HORA_INICIO_SEC")}
+                    {renderTh(t('col_fin_sec'), "FECHA_HORA_FIN_SEC")}
+                    {renderTh(t('col_dur_sec'), "DURACION_SEC", "text-logisnext-magenta")}
                     <th className="px-4 py-4 border-b border-[#2e404a] text-center sticky right-0 bg-[#151f25] shadow-[-5px_0_10px_rgba(0,0,0,0.5)] z-10 cursor-pointer hover:bg-[#1d2930] transition-colors" onClick={() => handleSort('OK_NOK')}>
                       <div className="flex items-center justify-center gap-2">
-                        <span>Estado Global</span>
+                        <span>{t('filter_global_status')}</span>
                         {sortConfig?.key === 'OK_NOK' ? (
                           <span className="ml-1 text-logisnext-magenta font-black">{sortConfig.direction === 'asc' ? '↑' : '↓'}</span>
                         ) : (
@@ -374,6 +376,7 @@ const LogViewer = ({ isOpen, onClose }) => {
 
 // Helper components para badges
 const StatusBadge = ({ status }) => {
+  const { t } = useLanguage();
   if (!status) return <span className="text-gray-500">-</span>;
   
   if (status === 'OK') {
@@ -383,17 +386,21 @@ const StatusBadge = ({ status }) => {
     return <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded bg-red-900/30 text-red-400 border border-red-500/30"><AlertTriangle size={12}/> NOK</span>;
   }
   if (status === 'NO APLICA') {
-    return <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded bg-gray-800 text-gray-400 border border-gray-600">N/A</span>;
+    return <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded bg-gray-800 text-gray-400 border border-gray-600">{t('status_na')}</span>;
   }
   return <span className="text-gray-400 text-[10px]">{status}</span>;
 };
 
 const GlobalStatusBadge = ({ status }) => {
+  const { t } = useLanguage();
   if (status === 'OK') {
     return <div className="px-3 py-1 bg-green-600/20 border border-green-500 rounded text-green-400 font-black text-xs tracking-wider shadow-[0_0_10px_rgba(34,197,94,0.2)]">PASS</div>;
   }
-  if (status === 'NOK' || status === 'ABORTADO') {
-    return <div className="px-3 py-1 bg-red-600/20 border border-red-500 rounded text-red-400 font-black text-xs tracking-wider shadow-[0_0_10px_rgba(239,68,68,0.2)]">{status}</div>;
+  if (status === 'NOK') {
+    return <div className="px-3 py-1 bg-red-600/20 border border-red-500 rounded text-red-400 font-black text-xs tracking-wider shadow-[0_0_10px_rgba(239,68,68,0.2)]">NOK</div>;
+  }
+  if (status === 'ABORTADO') {
+    return <div className="px-3 py-1 bg-red-600/20 border border-red-500 rounded text-red-400 font-black text-xs tracking-wider shadow-[0_0_10px_rgba(239,68,68,0.2)]">{t('status_aborted')}</div>;
   }
   return <div className="px-3 py-1 bg-gray-800 border border-gray-600 rounded text-gray-400 font-black text-xs tracking-wider">{status || 'UNK'}</div>;
 };

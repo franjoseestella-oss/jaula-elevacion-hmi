@@ -4,6 +4,7 @@ import {
   AlertTriangle, ChevronRight, Database, ChevronDown,
   Clock, Weight, Ruler, Calendar, ArrowUp, ArrowDown, RotateCcw, FileText
 } from 'lucide-react';
+import { useLanguage } from '../LanguageContext';
 
 const API_BASE = 'http://127.0.0.1:8001';
 
@@ -37,6 +38,7 @@ const SourceBadge = ({ fuente }) => {
 
 // ── Modal principal ───────────────────────────────────────────────────────────
 const ErpListModal = ({ open, onClose, onSelect }) => {
+  const { t } = useLanguage();
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [fuente, setFuente] = useState('');
@@ -148,11 +150,11 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
               </div>
               <div>
                 <h2 className="text-white font-black text-sm uppercase tracking-widest">
-                  Listado ERP — JAULA_ERP
+                  {t('erp_list_title')}
                 </h2>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-[10px] text-logisnext-lightslate font-bold uppercase tracking-widest">
-                    {total} carretillas
+                    {t('total_carretillas').replace('{total}', total)}
                   </span>
                   {fuente && <SourceBadge fuente={fuente} />}
                 </div>
@@ -171,7 +173,7 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
                 type="text"
                 value={filter}
                 onChange={e => setFilter(e.target.value)}
-                placeholder="Filtrar por bastidor, secuencia, modelo, mástil…"
+                placeholder={t('filter_placeholder')}
                 className="flex-1 bg-transparent text-white text-xs font-mono placeholder-[#3a5060] outline-none"
               />
               {filter && (
@@ -184,14 +186,14 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
               onClick={handleSync}
               disabled={syncLoading}
               className="flex items-center gap-2 px-5 py-2 bg-logisnext-magenta hover:bg-logisnext-magenta/80 border border-logisnext-magenta/60 text-white rounded-lg text-xs font-black uppercase tracking-wider transition-all disabled:opacity-50 shadow-[0_0_18px_rgba(221,40,118,0.35)] hover:shadow-[0_0_28px_rgba(221,40,118,0.55)] active:scale-95"
-              title="Lee el fichero DAT del ERP e importa los datos a la base de datos local"
+              title={t('read_erp_tooltip')}
             >
               {syncLoading
                 ? <Loader2 size={14} className="animate-spin" />
                 : <FileText size={14} />}
-              {syncLoading ? 'Leyendo ERP…' : 'Leer ERP'}
+              {syncLoading ? t('reading_erp') : t('read_erp')}
             </button>
-            <button onClick={fetchList} disabled={loading} className="p-2 bg-[#1d2930] hover:bg-[#2e404a] border border-[#2e404a] rounded-lg text-logisnext-lightslate hover:text-white transition-all disabled:opacity-50" title="Recargar tabla">
+            <button onClick={fetchList} disabled={loading} className="p-2 bg-[#1d2930] hover:bg-[#2e404a] border border-[#2e404a] rounded-lg text-logisnext-lightslate hover:text-white transition-all disabled:opacity-50" title={t('reload_table_tooltip')}>
               {loading ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
             </button>
           </div>
@@ -209,19 +211,19 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
             {/* Cabecera */}
             <div className="sticky top-0 z-10 grid gap-4 px-6 py-4 bg-[#0a0f12] border-b border-[#2e404a] items-center"
               style={{ gridTemplateColumns: '1.6fr 0.8fr 0.7fr 1.2fr 0.9fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 0.9fr 40px' }}>
-              <ColHeader label="Bastidor" field="bastidor" />
-              <ColHeader label="F.montaje" field="fecha_montaje" />
-              <ColHeader label="Sec." field="secuencia" />
-              <ColHeader label="Modelo" field="descripcion" />
-              <ColHeader label="Mástil" field="referencia" />
-              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">Alt.máx mm</span>
-              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">C1 kg</span>
-              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">C2 kg</span>
-              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">↑min c</span>
-              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">↑max c</span>
-              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">↓min c</span>
-              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">↓max c</span>
-              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">P.Pruebas</span>
+              <ColHeader label={t('col_chassis')} field="bastidor" />
+              <ColHeader label={t('col_assembly_date')} field="fecha_montaje" />
+              <ColHeader label={t('col_sequence')} field="secuencia" />
+              <ColHeader label={t('col_model')} field="descripcion" />
+              <ColHeader label={t('col_mast')} field="referencia" />
+              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">{t('col_max_height_mm')}</span>
+              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">{t('col_c1_kg')}</span>
+              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">{t('col_c2_kg')}</span>
+              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">{t('col_lift_min')}</span>
+              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">{t('col_lift_max')}</span>
+              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">{t('col_desc_min')}</span>
+              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">{t('col_desc_max')}</span>
+              <span className="text-xs text-logisnext-slate font-black uppercase tracking-[0.15em]">{t('col_test_weight')}</span>
               <span />
             </div>
  
@@ -229,13 +231,13 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
             {loading ? (
               <div className="flex flex-col items-center justify-center py-20 gap-3 text-logisnext-slate">
                 <Loader2 size={32} className="animate-spin opacity-40" />
-                <span className="text-xs font-bold uppercase tracking-widest opacity-40">Cargando…</span>
+                <span className="text-xs font-bold uppercase tracking-widest opacity-40">{t('cargando')}</span>
               </div>
             ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 gap-3 text-logisnext-slate">
                 <AlertTriangle size={32} className="opacity-30" />
                 <span className="text-xs font-bold uppercase tracking-widest opacity-40">
-                  {filter ? 'Sin resultados para ese filtro' : 'No hay datos — pulsa LEER ERP para importar el fichero DAT'}
+                  {filter ? t('no_filter_results') : t('no_data_press_read_erp')}
                 </span>
               </div>
             ) : (
@@ -316,18 +318,20 @@ const ErpListModal = ({ open, onClose, onSelect }) => {
           <div className="flex items-center justify-between px-6 py-3 border-t border-[#2e404a] bg-[#0a0f12]/60 shrink-0">
             <div className="flex items-center gap-3">
               <span className="text-[10px] text-logisnext-slate font-mono">
-                {filter ? `${filtered.length} de ${total} resultados` : `${total} registros`}
+                {filter
+                  ? t('filtered_results').replace('{filtered}', filtered.length).replace('{total}', total)
+                  : t('total_records').replace('{total}', total)}
               </span>
               <span className="text-[10px] text-logisnext-slate/50">·</span>
               <span className="text-[10px] text-logisnext-slate/50 font-mono">
-                Clic en fila para previsualizar secuencia
+                {t('click_to_preview_seq')}
               </span>
             </div>
             <button
               onClick={onClose}
               className="px-4 py-1.5 bg-[#1d2930] hover:bg-[#2e404a] border border-[#2e404a] text-logisnext-lightslate text-xs font-bold uppercase tracking-wider rounded-lg transition-colors"
             >
-              Cerrar
+              {t('cerrar')}
             </button>
           </div>
         </div>

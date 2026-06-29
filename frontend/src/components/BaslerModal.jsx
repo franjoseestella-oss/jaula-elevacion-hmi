@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera, X, RefreshCw, AlertTriangle, Maximize2, Minimize2, Settings, CheckCircle2 } from 'lucide-react';
+import { useLanguage } from '../LanguageContext';
 
 const BaslerModal = ({ isOpen, open, onClose, serverUrl = "http://localhost:8001" }) => {
+  const { t } = useLanguage();
   const isModalOpen = isOpen || open;
   const [imageSrc, setImageSrc] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -25,7 +27,7 @@ const BaslerModal = ({ isOpen, open, onClose, serverUrl = "http://localhost:8001
       const response = await fetch(`${serverUrl}/api/basler/capture`);
       
       if (!response.ok) {
-        throw new Error('Error al capturar la imagen de la cámara Basler');
+        throw new Error(t('capture_error_details'));
       }
       
       const data = await response.json();
@@ -33,7 +35,7 @@ const BaslerModal = ({ isOpen, open, onClose, serverUrl = "http://localhost:8001
       setDiagResult(null); // Clear errors if image fetched successfully
     } catch (err) {
       console.error(err);
-      setError(err.message || 'Error de conexión con la cámara');
+      setError(err.message || t('connection_error_details'));
     } finally {
       setLoading(false);
     }
@@ -60,13 +62,13 @@ const BaslerModal = ({ isOpen, open, onClose, serverUrl = "http://localhost:8001
       const data = await res.json();
       
       if (data.connected) {
-        setDiagResult({ status: 'ok', message: data.message || 'Cámara Basler detectada y conectada.' });
+        setDiagResult({ status: 'ok', message: data.message || t('camera_status_connected') });
         fetchImage(); // auto-fetch image
       } else {
-        setDiagResult({ status: 'error', message: data.message || 'No se ha detectado la cámara.' });
+        setDiagResult({ status: 'error', message: data.message || t('camera_status_not_detected') });
       }
     } catch (err) {
-      setDiagResult({ status: 'error', message: 'Error de diagnóstico: ' + err.message });
+      setDiagResult({ status: 'error', message: t('camera_diag_error').replace('{message}', err.message) });
     } finally {
       setIsTesting(false);
     }
@@ -115,9 +117,9 @@ const BaslerModal = ({ isOpen, open, onClose, serverUrl = "http://localhost:8001
             </div>
             <div>
               <h2 className="text-xl font-black text-white tracking-widest">
-                VISOR <span className="text-logisnext-magenta">BASLER</span>
+                {t('basler_viewer_title').split(' ')[0]} <span className="text-logisnext-magenta">{t('basler_viewer_title').split(' ').slice(1).join(' ')}</span>
               </h2>
-              <p className="text-xs text-logisnext-slate">Configuración y Monitorización</p>
+              <p className="text-xs text-logisnext-slate">{t('basler_config_monitor')}</p>
             </div>
           </div>
           
@@ -125,7 +127,7 @@ const BaslerModal = ({ isOpen, open, onClose, serverUrl = "http://localhost:8001
             <div className="flex items-center bg-[#050a0e] rounded-lg border border-[#2e404a] p-1">
               <input 
                 type="text" 
-                placeholder="IP de la Cámara"
+                placeholder={t('camera_ip_placeholder')}
                 value={ipAddress}
                 onChange={(e) => setIpAddress(e.target.value)}
                 className="bg-transparent text-white px-3 py-1 text-sm outline-none w-36 font-mono placeholder-logisnext-slate/50"
@@ -136,7 +138,7 @@ const BaslerModal = ({ isOpen, open, onClose, serverUrl = "http://localhost:8001
                 className="flex items-center gap-2 px-3 py-1 bg-logisnext-magenta/20 text-logisnext-magenta rounded hover:bg-logisnext-magenta/40 transition-colors text-xs font-bold whitespace-nowrap disabled:opacity-50"
               >
                 {isTesting ? <RefreshCw size={14} className="animate-spin" /> : <Settings size={14} />}
-                DIAGNÓSTICO
+                {t('diagnostic_btn')}
               </button>
             </div>
             
@@ -150,14 +152,14 @@ const BaslerModal = ({ isOpen, open, onClose, serverUrl = "http://localhost:8001
               }`}
             >
               <RefreshCw size={14} className={autoRefresh ? 'animate-spin' : ''} />
-              {autoRefresh ? 'LIVE' : 'ACTUALIZAR AUTO'}
+              {autoRefresh ? t('auto_refresh_live') : t('auto_refresh_btn')}
             </button>
             
             <button
               onClick={fetchImage}
               disabled={loading || autoRefresh}
               className="p-2 rounded-lg bg-[#1d2930] border border-[#2e404a] text-white hover:bg-logisnext-magenta hover:border-logisnext-magenta transition-colors disabled:opacity-50"
-              title="Capturar un frame"
+              title={t('capture_frame_tooltip')}
             >
               <Camera size={20} />
             </button>
@@ -170,7 +172,7 @@ const BaslerModal = ({ isOpen, open, onClose, serverUrl = "http://localhost:8001
             >
               {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
             </button>
-
+ 
             <button 
               onClick={onClose}
               className="p-2 rounded-lg text-logisnext-slate hover:text-red-400 hover:bg-red-400/10 transition-colors"
@@ -185,20 +187,20 @@ const BaslerModal = ({ isOpen, open, onClose, serverUrl = "http://localhost:8001
           {loading && !imageSrc && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm">
               <RefreshCw size={48} className="text-logisnext-magenta animate-spin mb-4" />
-              <p className="text-white font-mono tracking-widest animate-pulse">CONECTANDO A CÁMARA BASLER...</p>
+              <p className="text-white font-mono tracking-widest animate-pulse">{t('connecting_basler')}</p>
             </div>
           )}
 
           {error && !diagResult && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/80">
               <AlertTriangle size={64} className="text-red-500 mb-4" />
-              <p className="text-xl font-bold text-white mb-2">ERROR DE CONEXIÓN</p>
+              <p className="text-xl font-bold text-white mb-2">{t('connection_error_title')}</p>
               <p className="text-red-400 font-mono text-center max-w-md">{error}</p>
               <button 
                 onClick={fetchImage}
                 className="mt-6 px-6 py-2 bg-[#1d2930] border border-[#2e404a] text-white rounded-lg hover:bg-[#2e404a] transition-colors font-bold"
               >
-                REINTENTAR CAPTURA
+                {t('retry_capture_btn')}
               </button>
             </div>
           )}
@@ -223,7 +225,7 @@ const BaslerModal = ({ isOpen, open, onClose, serverUrl = "http://localhost:8001
           {!imageSrc && !loading && !error && (
             <div className="text-logisnext-slate flex flex-col items-center">
               <Camera size={64} className="opacity-20 mb-4" />
-              <p className="font-mono tracking-widest opacity-50">NO HAY IMAGEN DISPONIBLE</p>
+              <p className="font-mono tracking-widest opacity-50">{t('no_image_available')}</p>
             </div>
           )}
         </div>
@@ -235,7 +237,7 @@ const BaslerModal = ({ isOpen, open, onClose, serverUrl = "http://localhost:8001
             <span className="font-mono">Pypylon SDK Active</span>
           </div>
           <div className="font-mono">
-            {imageSrc ? 'FRAME RECIBIDO' : 'ESPERANDO...'}
+            {imageSrc ? t('frame_received') : t('waiting_dots')}
           </div>
         </div>
       </div>
