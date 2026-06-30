@@ -11,7 +11,7 @@ const DataRow = ({ label, value, highlight = false }) => (
   </div>
 );
 
-const cs2s = (v) => (v != null ? (v / 100).toFixed(3).replace('.', ',') : null);
+const cs2s = (v) => (v != null ? (v / 100).toFixed(1).replace('.', ',') : null);
 
 const LeftPanel = ({ data, onErpData }) => {
   const { t } = useLanguage();

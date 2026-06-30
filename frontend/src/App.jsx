@@ -917,7 +917,7 @@ function App() {
               // DOM directo para el display del láser (sin pasar por React)
               const laserSpan = document.getElementById('laser-distance-display');
               if (laserSpan && mappedPlc.OR_Altura_Carretilla !== undefined) {
-                laserSpan.innerText = Number(mappedPlc.OR_Altura_Carretilla).toFixed(2);
+                laserSpan.innerText = Number(mappedPlc.OR_Altura_Carretilla).toFixed(0);
               }
 
               // ── Actualización de React con THROTTLE 200ms (5 Hz) ───────
@@ -1035,7 +1035,7 @@ function App() {
                   {step2Overlay.isOk ? <CheckCircle2 size={64} className="text-white drop-shadow-lg" /> : <AlertTriangle size={64} className="text-blue-400 drop-shadow-lg" />}
                   <div className="flex flex-col gap-2">
                     <span className="text-3xl font-black tracking-widest text-white drop-shadow-md">
-                      {t('altura_actual')}: <span className={step2Overlay.isOk ? "text-white" : "text-blue-400"}>{step2Overlay.actual.toFixed(2)} mm</span>
+                      {t('altura_actual')}: <span className={step2Overlay.isOk ? "text-white" : "text-blue-400"}>{step2Overlay.actual.toFixed(0)} mm</span>
                     </span>
                     <div className="flex gap-4 items-center">
                       <span className="text-lg font-bold tracking-widest text-gray-300">{t('objetivo')}:</span>
@@ -1099,7 +1099,7 @@ function App() {
                           <div className="flex justify-around items-center w-full mt-3">
                             <div className={`flex flex-col items-center px-6 py-2 rounded-lg border-2 ${step2Overlay.cameraTestState === 'ascenso' ? 'border-blue-400 bg-blue-900/40 animate-pulse shadow-[0_0_20px_rgba(59,130,246,0.3)]' : 'border-gray-600 bg-gray-800/50 opacity-80'}`}>
                               <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">{t('ascenso_up')}</span>
-                              <span className={`text-4xl font-mono font-black ${step2Overlay.cameraTestState === 'ascenso' ? 'text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]' : 'text-gray-300'}`}>{testHUDOverlay.realElev ?? '0.00'}s</span>
+                              <span className={`text-4xl font-mono font-black ${step2Overlay.cameraTestState === 'ascenso' ? 'text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]' : 'text-gray-300'}`}>{testHUDOverlay.realElev ?? '0,0'}s</span>
                               {testHUDOverlay._rawElev > 0 && testHUDOverlay.testDist && (
                                 <span className="text-sm font-mono font-bold text-gray-400 mt-1">
                                   {t('avg_velocidad').replace('{velocidad}', ((testHUDOverlay.testDist * 100000) / testHUDOverlay._rawElev).toFixed(0))}
@@ -1122,7 +1122,7 @@ function App() {
 
                             <div className={`flex flex-col items-center px-6 py-2 rounded-lg border-2 ${step2Overlay.cameraTestState === 'descenso' ? 'border-blue-400 bg-blue-900/40 animate-pulse shadow-[0_0_20px_rgba(59,130,246,0.3)]' : 'border-gray-600 bg-gray-800/50 opacity-80'}`}>
                               <span className="text-sm font-bold text-gray-400 uppercase tracking-widest">{t('descenso_down')}</span>
-                              <span className={`text-4xl font-mono font-black ${step2Overlay.cameraTestState === 'descenso' ? 'text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]' : 'text-gray-300'}`}>{testHUDOverlay.realDesc ?? '0.00'}s</span>
+                              <span className={`text-4xl font-mono font-black ${step2Overlay.cameraTestState === 'descenso' ? 'text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)]' : 'text-gray-300'}`}>{testHUDOverlay.realDesc ?? '0,0'}s</span>
                               {testHUDOverlay._rawDesc > 0 && testHUDOverlay.testDist && (
                                 <span className="text-sm font-mono font-bold text-gray-400 mt-1">
                                   {t('avg_velocidad').replace('{velocidad}', ((testHUDOverlay.testDist * 100000) / testHUDOverlay._rawDesc).toFixed(0))}

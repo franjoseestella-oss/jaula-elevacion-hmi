@@ -19,8 +19,8 @@ const fmtDate = (s) => {
   return s;
 };
 
-// Convierte el valor del ERP (centésimas) a "s" con 3 decimales
-const cs2s = (v) => (v !== null && v !== undefined ? `${(v / 100).toFixed(3).replace('.', ',')} s` : '—');
+// Convierte el valor del ERP (centésimas) a "s" con 1 decimal
+const cs2s = (v) => (v !== null && v !== undefined ? `${(v / 100).toFixed(1).replace('.', ',')} s` : '—');
 
 // ── Badge de fuente ───────────────────────────────────────────────────────────
 const SourceBadge = ({ fuente }) => {

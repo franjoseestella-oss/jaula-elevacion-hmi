@@ -8,7 +8,7 @@ const TelemetryHUD = ({ telemetry, cycleTimer = 0, isSimulation, distance = 0 })
 
   // Formatear como MM:SS.d si >= 60s, si no como SS.dd s
   const formatCycleTime = (secs) => {
-    if (secs < 60) return secs.toFixed(2).padStart(5, '0');
+    if (secs < 60) return secs.toFixed(1).padStart(4, '0');
     const m = Math.floor(secs / 60);
     const s = (secs % 60).toFixed(1);
     return `${String(m).padStart(2, '0')}:${s.padStart(4, '0')}`;
@@ -31,7 +31,7 @@ const TelemetryHUD = ({ telemetry, cycleTimer = 0, isSimulation, distance = 0 })
 
         <div className="flex items-baseline gap-2">
           <span id="laser-distance-display" className="text-5xl font-mono font-black text-white tracking-tighter drop-shadow-md">
-            {distance.toFixed(2)}
+            {distance.toFixed(0)}
           </span>
           <span className="text-logisnext-magenta font-bold text-lg">mm</span>
         </div>

@@ -12,7 +12,7 @@ const API_BASE = 'http://127.0.0.1:8001';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const ds2s = (v) => (v != null ? `${(v / 100).toFixed(3).replace('.', ',')} s` : '—');
+const ds2s = (v) => (v != null ? `${(v / 100).toFixed(1).replace('.', ',')} s` : '—');
 const formatDuration = (secs) => {
   if (secs == null) return '—';
   if (secs < 60) return `${secs} s`;
@@ -144,7 +144,7 @@ const DataLine = ({ label, value, highlight = false }) => (
 );
 
 // ─── Modal de previsualización ERP (pantalla completa horizontal) ────────────
-const ds2sP = (v) => v != null ? `${(v / 100).toFixed(3).replace('.', ',')} s` : '—';
+const ds2sP = (v) => v != null ? `${(v / 100).toFixed(1).replace('.', ',')} s` : '—';
 
 const MF = ({ label, value, unit, highlight, size = 'xl' }) => (
   <div className="flex flex-col gap-1.5">
@@ -2671,8 +2671,8 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     let reqId;
     const loop = () => {
       const currentHeight = isSimulation 
-        ? parseFloat(((window.__carriageY || 0) * 1000).toFixed(2))
-        : parseFloat(Number(plcStateRef.current?.OR_Altura_Carretilla || 0).toFixed(2));
+        ? parseFloat(((window.__carriageY || 0) * 1000).toFixed(0))
+        : parseFloat(Number(plcStateRef.current?.OR_Altura_Carretilla || 0).toFixed(0));
 
       const currentPallets = plcStateRef.current?.OW_Numero_Pallets || 0;
       const targetLoad = erpDataRef.current?.peso_pruebas || 0;
@@ -2719,7 +2719,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           // Comprobar variación > tolerancia requerida (test5mConfig.tolerancia) en mm
           if (Math.abs(currentHeight - stage5InitialHeightRef.current) > test5mConfig.tolerancia) {
             nextState = 'nok';
-            setTestAlarm(`Caída de cota excedida. Variación: ${Math.abs(currentHeight - stage5InitialHeightRef.current).toFixed(2)} mm (> ${test5mConfig.tolerancia} mm)`);
+            setTestAlarm(`Caída de cota excedida. Variación: ${Math.abs(currentHeight - stage5InitialHeightRef.current).toFixed(0)} mm (> ${test5mConfig.tolerancia} mm)`);
             stageDataRef.current[5] = {
               ...stageDataRef.current[5],
               altura_final: currentHeight,

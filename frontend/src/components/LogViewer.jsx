@@ -11,7 +11,7 @@ const formatNumber = (val) => {
 
 const formatTime = (val) => {
   if (val === null || val === undefined || val === '') return '-';
-  return Number(val).toFixed(3).replace('.', ',');
+  return Number(val).toFixed(1).replace('.', ',');
 };
 
 const formatDateToLocalString = (dateStr) => {
