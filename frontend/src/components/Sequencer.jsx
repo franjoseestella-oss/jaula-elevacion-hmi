@@ -1331,20 +1331,16 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
       // Si ya estaba desbloqueado → ejecutar acción de avance
       if (currentStep >= 1 && currentStep <= 4 && stepStarted[currentStep]) {
         if (stepStatus[2] === STEP_STATUS.ACTIVE && palletState !== 'animating') {
-          // NOK: REPETIR / FORZAR
+          // NOK: REPETIR AUTOMÁTICAMENTE
           if (cameraTestState === 'nok') {
-            if (window.confirm(t('confirm_camera_sincarga_nok'))) {
-              markOk(2);
-            } else {
-              resetStartsInPlc();
-              setCameraTestState('standby');
-              setTestAlarm(null);
-              setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
-              setWaitCountdown(null);
-              setTimeout(() => {
-                setCameraTestState('esperando_1500');
-              }, 500);
-            }
+            resetStartsInPlc();
+            setCameraTestState('standby');
+            setTestAlarm(null);
+            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
+            setWaitCountdown(null);
+            setTimeout(() => {
+              setCameraTestState('esperando_1500');
+            }, 500);
             return;
           }
           if (cameraTestState === 'standby') {
@@ -1367,20 +1363,16 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             setTestAlarm(null);
           }
 
-          // NOK: REPETIR / FORZAR
+          // NOK: REPETIR AUTOMÁTICAMENTE
           if (cameraTestState === 'nok') {
-            if (window.confirm(t('confirm_camera_concarga_nok'))) {
-              markOk(3);
-            } else {
-              resetStartsInPlc();
-              setCameraTestState('standby');
-              setTestAlarm(null);
-              setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
-              setWaitCountdown(null);
-              setTimeout(() => {
-                setCameraTestState('esperando_1500');
-              }, 500);
-            }
+            resetStartsInPlc();
+            setCameraTestState('standby');
+            setTestAlarm(null);
+            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
+            setWaitCountdown(null);
+            setTimeout(() => {
+              setCameraTestState('esperando_1500');
+            }, 500);
             return;
           }
           if (cameraTestState === 'standby') {
@@ -1409,14 +1401,11 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
             setTestAlarm(null);
           }
 
+          // NOK: REPETIR AUTOMÁTICAMENTE
           if (test5mState === 'nok') {
-            if (window.confirm(t('confirm_5min_nok'))) {
-              markOk(4);
-            } else {
-              setTest5mState('esperando_elevacion');
-              setTimer5min(null);
-              setTestAlarm(null);
-            }
+            setTest5mState('esperando_elevacion');
+            setTimer5min(null);
+            setTestAlarm(null);
             return;
           }
           if (test5mState === 'ok') {
@@ -2143,19 +2132,16 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     // Ya desbloqueada — avanzar
     if (step >= 1 && step <= 4 && started[step]) {
       if (statuses[2] === STEP_STATUS.ACTIVE && pState?.palletState !== 'animating') {
+        // NOK: REPETIR AUTOMÁTICAMENTE
         if (cameraTestState === 'nok') {
-          if (window.confirm(t('confirm_camera_sincarga_nok'))) {
-            markOk(2);
-          } else {
-            resetStartsInPlc();
-            setCameraTestState('standby');
-            setTestAlarm(null);
-            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
-            setWaitCountdown(null);
-            setTimeout(() => {
-              setCameraTestState('esperando_1500');
-            }, 500);
-          }
+          resetStartsInPlc();
+          setCameraTestState('standby');
+          setTestAlarm(null);
+          setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
+          setWaitCountdown(null);
+          setTimeout(() => {
+            setCameraTestState('esperando_1500');
+          }, 500);
           return;
         }
         if (cameraTestState === 'standby') {
@@ -2176,19 +2162,16 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           setTestAlarm(null);
         }
 
+        // NOK: REPETIR AUTOMÁTICAMENTE
         if (cameraTestState === 'nok') {
-          if (window.confirm(t('confirm_camera_concarga_nok'))) {
-            markOk(3);
-          } else {
-            resetStartsInPlc();
-            setCameraTestState('standby');
-            setTestAlarm(null);
-            setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
-            setWaitCountdown(null);
-            setTimeout(() => {
-              setCameraTestState('esperando_1500');
-            }, 500);
-          }
+          resetStartsInPlc();
+          setCameraTestState('standby');
+          setTestAlarm(null);
+          setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
+          setWaitCountdown(null);
+          setTimeout(() => {
+            setCameraTestState('esperando_1500');
+          }, 500);
           return;
         }
         if (cameraTestState === 'standby') {
@@ -2203,14 +2186,11 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
           setSimTimers({ elev: null, desc: null, finishedElev: false, finishedDesc: false, pendingReadDesc: false });
         } else if (cameraTestState === 'ok') markOk(3);
       } else if (statuses[4] === STEP_STATUS.ACTIVE) {
+        // NOK: REPETIR AUTOMÁTICAMENTE
         if (test5mState === 'nok') {
-          if (window.confirm(t('confirm_5min_nok'))) {
-            markOk(4);
-          } else {
-            setTest5mState('esperando_elevacion');
-            setTestAlarm(null);
-            setTimer5min(null);
-          }
+          setTest5mState('esperando_elevacion');
+          setTestAlarm(null);
+          setTimer5min(null);
           return;
         }
         if (test5mState === 'ok') {
@@ -2236,13 +2216,11 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
     const tols = toleranciasRef.current;
     const pState = plcStateRef.current;
 
+    // NOK: FORZAR DIRECTAMENTE SIN CONFIRMACIÓN
     if (cameraTestState === 'nok') {
       const activeTestStep = statuses[2] === STEP_STATUS.ACTIVE ? 2 : statuses[3] === STEP_STATUS.ACTIVE ? 3 : null;
       if (activeTestStep !== null) {
-        const confirmKey = activeTestStep === 2 ? 'confirm_camera_sincarga_nok_short' : 'confirm_camera_concarga_nok_short';
-        if (window.confirm(t(confirmKey))) {
-          markOk(activeTestStep);
-        }
+        markOk(activeTestStep);
       }
       return;
     }
@@ -2764,10 +2742,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   };
 
   const handleContinuarCameraTest = (stepIdx) => {
-    const confirmKey = stepIdx === 2 ? 'confirm_camera_sincarga_nok_short' : 'confirm_camera_concarga_nok_short';
-    if (window.confirm(t(confirmKey))) {
-      markOk(stepIdx);
-    }
+    markOk(stepIdx);
   };
 
   const handleRepetir5m = () => {
@@ -2777,10 +2752,7 @@ const Sequencer = ({ erpData, onErpData, onOpenErp, palletState, setPalletState,
   };
 
   const handleContinuar5m = () => {
-    // Avanzar forzadamente a pesar del fallo con confirmación previa
-    if (window.confirm(t('confirm_5min_nok_short'))) {
-      markOk(4);
-    }
+    markOk(4);
   };
 
 
